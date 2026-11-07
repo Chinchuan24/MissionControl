@@ -285,7 +285,7 @@ const ER2_LINES = ['hi, choom.', 'hi.', 'just me, choom.', 'bye-bye, choomba!']
 const er2RoamFor = (ctxPct: number) => (windowStart: number) => roamPlan('er2', windowStart, { chance: er2Chance(false)(ctxPct), takeoverEveryMin: 30, lines: ER2_LINES })
 const er2Theme = (sec: boolean): ThemeEggs => ({
   mode: sec ? 'capri' : 'd',
-  ticker: er2EpisodeAt,
+  ticker: at => er2EpisodeAt(at, sec),
   css: ER2_CSS,
   readout: { w: 0, draw: () => '' },
   chip: (x, y, ctxPct, _t, _f, W) => er2Chip(x, y, ctxPct, sec, W),

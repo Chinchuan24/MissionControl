@@ -374,9 +374,11 @@ export const BUST_H = 48
 // --- the episodes (titles only, never synopses) ---------------------------------------
 export const ER2_EPISODES = ['Last Chance for a Slow Dance', 'Give Me Another Day', '0+2=1', 'Someone That I Used to Know', 'Fades (Pass the Distance)', 'Everything Hate', 'To the Depths with You', 'Serce', 'Strictly Reserved for You', 'Then Everyone Went Home']
 /** The hour's episode: "EP 03 0+2=1". */
-export const er2EpisodeAt = (at: number): string => {
+export const er2EpisodeAt = (at: number, capri = false): string => {
+  // Episode 3's title is the secret skin's key, so the ticker passes over it.
   const i = Math.floor(at / 3_600_000) % 10
-  return `EP ${String(i + 1).padStart(2, '0')} ${ER2_EPISODES[i]}`
+  const j = i === 2 && !capri ? 3 : i
+  return `EP ${String(j + 1).padStart(2, '0')} ${ER2_EPISODES[j]}`
 }
 
 export const ER2_GREETING = 'No signal, no survival. Wake up, choom.'

@@ -3,7 +3,7 @@
 // and the closed cases in a cocobolo tray) and the boot strip. Pure SVG strings, no state. A fan homage to AMC / Sony
 // Pictures Television; the props keep their own colours (paper, wood, brass): they are objects, not UI.
 
-import { BADGES, levelOf, xpFor } from './extras'
+import { BADGES, levelOf, nextOf, veil, xpFor } from './extras'
 import type { Badge, Beat, Cred, CredWords } from './extras'
 import type { Legend } from './eggs'
 import {
@@ -11,7 +11,7 @@ import {
 } from './bettercallsaul'
 
 /** The ranks, by level. The ladder ends where the show does: the top tier is Gene's name tag. */
-export const RANKS: [number, string][] = [[20, 'Saul Gone'], [12, 'Gene Takavic'], [10, 'Friend of the Cartel'], [9, 'Criminal Lawyer'], [8, '& Associates'], [7, 'Saul Goodman'], [6, 'Wexler McGill'], [5, 'Davis & Main'], [4, 'Elder Law'], [3, 'Public Defender'], [2, 'The Mailroom'], [1, "Slippin' Jimmy"]]
+export const RANKS: [number, string][] = [[20, 'Saul Gone'], [12, 'Omaha Manager'], [10, 'Friend of the Cartel'], [9, 'Criminal Lawyer'], [8, '& Associates'], [7, 'Saul Goodman'], [6, 'Wexler McGill'], [5, 'Davis & Main'], [4, 'Elder Law'], [3, 'Public Defender'], [2, 'The Mailroom'], [1, "Slippin' Jimmy"]]
 export const bcsRankOf = (level: number): string => (RANKS.find(([from]) => level >= from) ?? (RANKS[RANKS.length - 1] as [number, string]))[1]
 const nextRank = (level: number): [string, number] | null => {
   const cur = bcsRankOf(level)
@@ -19,7 +19,7 @@ const nextRank = (level: number): [string, number] | null => {
   return null
 }
 export const tierOf = (level: number): 1 | 2 | 3 | 4 => (level >= 12 ? 4 : level >= 7 ? 3 : level >= 4 ? 2 : 1)
-const TIER_NAMES = ['', 'the McGill card', 'the Wexler McGill card', 'the Saul Goodman card', "Gene's name tag"]
+const TIER_NAMES = ['', 'the McGill card', 'the Wexler McGill card', 'the Saul Goodman card', 'the name tag']
 export const bcsToast = (level: number): string => `LEVEL ${level} · ${bcsRankOf(level).toUpperCase()}`
 
 /** The nine matchbooks: the same ids and progress as `extras.BADGES`, so the store is unchanged. */
@@ -30,9 +30,9 @@ const BCS_NAMES: Record<string, [string, string, string]> = {
   legend: ['SANDPIPER', '♛', '10 long matters (3+ minutes each)'],
   netrunner: ['& ASSOCIATES', '⚖', 'Call 100 sub-agents'],
   crewboss: ['FILM CREW', '⚑', 'Run a job with 5+ sub-agents'],
-  chromed: ['CHICANERY', '!', 'Push the context past 90%'],
+  chromed: ['OBJECTION', '!', 'Push the context past 90%'],
   owl: ['LANTERN', '☾', 'Finish a job after midnight'],
-  samurai: ['NIPPY', '▣', 'Find the secret skin'],
+  samurai: ['NIPPY', '▣', 'Keep exploring.'],
 }
 export const BCS_BADGES: Badge[] = BADGES.map(b => {
   const e = BCS_NAMES[b.id]
@@ -182,12 +182,13 @@ export const attorneyCard = (W: number, c: Cred, gene: boolean, o: { fresh?: boo
   s.push(T(W - 16, my, 'one per client won', 11, 400, P.muted, 'text-anchor="end" font-style="italic"'))
   const per = attorneyPer(W)
   const gap = per > 1 ? (W - 32 - per * 58) / (per - 1) : 0
-  BCS_BADGES.forEach((b, i) => {
+  const books = BCS_BADGES.map(b => veil(b, c.badges.includes(b.id)))
+  books.forEach((b, i) => {
     const col = i % per
     const row = Math.floor(i / per)
     s.push(matchbook(16 + col * (58 + gap), my + 10 + row * 46, b, i, c.badges.includes(b.id), b.progress(c), gene, o.freshBadge === b.id))
   })
-  const next = BCS_BADGES.find(b => !c.badges.includes(b.id))
+  const next = nextOf(books, c)
   s.push(T(16, H - 12, next ? clipBy(sansW, `Next: ${next.name} · ${next.how} · ${Math.round(next.progress(c) * 100)}%`, 11.5, W - 32) : gene ? 'Every matchbook struck. It was just a name.' : "Every matchbook struck. S'all good, man!", 11.5, 400, P.sub, 'font-style="italic"'))
   if (gene) s.push(vignette(W, H) + grain(W, H))
   return `${s.join('\n')}</svg>`

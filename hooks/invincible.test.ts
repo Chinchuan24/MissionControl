@@ -126,7 +126,7 @@ test('invincible: Allen goes wide at 96%', async ($, on) => {
   const b = await bandAt($, 1250)
   expect(b).toContain('class="inv-wide"')
 })
-for (const [pct, ctx, word] of [[88, 880_000, 'THAT ACTUALLY HURT'], [96, 960_000, 'THINK, MARK!']] as const) {
+for (const [pct, ctx, word] of [[88, 880_000, 'THAT ACTUALLY HURT'], [96, 960_000, 'HOLD THE LINE']] as const) {
   test(`invincible: the ${pct}% chip says ${word}`, async ($, on) => {
     base(on, ctx, quietAt())
     await start($, 'invincible')
@@ -182,6 +182,17 @@ test('eras: the codes, as whole words in any case', () => {
   expect(THINK_RE.test('thinkmark')).toBe(false)
   expect(GUARDIANS_RE.test('call the Guardians')).toBe(true)
   expect(GUARDIANS_RE.test('guardianship')).toBe(false)
+})
+test('eras: the pane hides the era button until the new suit has been found, then switches both ways', async ($, on) => {
+  base(on, 100_000, quietAt())
+  await start($, 'invincible')
+  const ui = await $.ui.mount({ plugin: 'crab-progress', surface: 'desktop', component: 'Pane', requestId: 'crab-agents', props: pane })
+  expect(await ui.find({ key: 'inv-era' })).toBeUndefined()
+  await $.prompt.submit({ text: 'new suit', cursor: 0 } as never)
+  expect(await ui.find({ key: 'inv-era' })).toBeDefined()
+  await ui.press({ key: 'inv-era' })
+  expect(await ui.find({ key: 'inv-era' })).toBeDefined() // found once, it stays
+  await ui.unmount()
 })
 test('eras: "new suit" puts on the blue-and-black suit with the swap, "classic suit" goes back; the prompt goes on unchanged; saved across restarts', async ($, on) => {
   const clock = base(on, 100_000, quietAt())

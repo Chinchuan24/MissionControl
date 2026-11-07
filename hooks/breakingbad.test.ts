@@ -118,12 +118,12 @@ test('breaking-bad: the context chip and the hidden hat come with a full context
   expect(bandSvg).not.toContain('€$')
 })
 
-test('breaking-bad: past 95% context it says SAY MY NAME in the alert colour, with a faint hat', async ($, on) => {
+test('breaking-bad: past 95% context it says TREAD LIGHTLY in the alert colour, with a faint hat', async ($, on) => {
   base(on, 960_000)
   await start($, 'breaking-bad')
   await $.prompt.submit({ text: 'Fix it', cursor: 0 } as never)
   const bandSvg = (await svgs($, 'AbovePrompt')).join('')
-  expect(bandSvg).toContain('SAY MY NAME')
+  expect(bandSvg).toContain('TREAD LIGHTLY')
   expect(bandSvg).toContain('#E0605A')
   expect(bandSvg).toContain('class="bbhat"')
   expect(bandSvg).not.toContain('MAXTAC')
@@ -196,9 +196,9 @@ test('default and crab-classic stay clean of the Breaking Bad eggs', async ($, o
 })
 
 test('breaking bad tables: 35 verified titles, purity, notes, the ladder and the cards', () => {
-  expect(BB_EPISODES.length).toBe(35)
-  expect(new Set(BB_EPISODES).size).toBe(35)
-  expect(BB_EPISODES).toContain('S5E7 Say My Name')
+  expect(BB_EPISODES.length).toBe(34)
+  expect(new Set(BB_EPISODES).size).toBe(34)
+  expect(BB_EPISODES.join('|')).not.toMatch(/say my name/i)
   expect(bbEpisodeAt(0)).toBe('S1E1 Pilot')
   expect(purityOf(0, 0)).toBe(96.2)
   expect(purityOf(3, 3)).toBe(99.1)
@@ -212,7 +212,7 @@ test('breaking bad tables: 35 verified titles, purity, notes, the ladder and the
   expect(empireToast(5)).toBe('LEVEL 5 · BORON · The Professor')
   expect(bbChip(0, 10, 80, TH, 'sans-serif').w).toBe(0)
   expect(bbChip(0, 10, 90, TH, 'sans-serif').svg).toContain('NO HALF MEASURES')
-  expect(bbChip(0, 10, 96, TH, 'sans-serif').svg).toContain('SAY MY NAME')
+  expect(bbChip(0, 10, 96, TH, 'sans-serif').svg).toContain('TREAD LIGHTLY')
   expect(sansW('MISSION CONTROL', 9.5, 1.6, true)).toBeGreaterThan(90)
   expect(SAY_MY_NAME_RE.test('Say my name')).toBe(true)
   expect(SAY_MY_NAME_RE.test('say your name')).toBe(false)

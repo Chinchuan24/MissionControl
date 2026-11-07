@@ -148,8 +148,8 @@ export const swap = (W: any, H: any, surface: any, toEra: any, tm: any = {}) => 
   const cap = caption(0, 0, sub, band ? 9.5 : 8.5, NU.hero, { ink: NU.heroInk })
   s += `<g ${S(`${id}sb`, 'steps(1)')}><g transform="translate(${r1(cx - cap.w / 2)} ${r1(cy + size * 0.32 + 8)})">${cap.svg}</g></g></g></g>`
   const note = toEra === 2 ? 'NEW SUIT · S3+' : 'CLASSIC SUIT · S1–S2'
-  const nc = caption(0, 0, note, 9.5, NU.hero, { ink: NU.heroInk })
-  s += `<g class="sw-still"><g transform="translate(${r1(cx - nc.w / 2)} ${r1(cy - 8)})">${nc.svg}</g></g></g>`
+  const noteCap = caption(0, 0, note, 9.5, NU.hero, { ink: NU.heroInk })
+  s += `<g class="sw-still"><g transform="translate(${r1(cx - noteCap.w / 2)} ${r1(cy - 8)})">${noteCap.svg}</g></g></g>`
   // the slice keyframes were added after the style was emitted: put the final css in
   return s.replace(/<style>[\s\S]*?<\/style>/, `<style>${css}</style>`)
 }

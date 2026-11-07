@@ -1813,7 +1813,7 @@ const INVINCIBLE_SKIN: Skin = {
   id: 'invincible',
   cast: 'invincible',
   name: 'Invincible',
-  description: 'Fan homage: the comic page that became the show. Mark and Omni-Man fight across the panels; a second era hides behind "new suit".',
+  description: 'Fan homage: the comic page that became the show. Mark and Omni-Man fight across the panels.',
   font: "-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',Ubuntu,Cantarell,'Noto Sans','Liberation Sans',sans-serif",
   corners: 'round',
   dark: true,
@@ -7832,8 +7832,8 @@ export const register: Register = (on, options) => {
                   source={th ? paneFinish(((src: string) => (th.roamer ? overlayInto(src, th, { at: clockNow, ctxPct: info.contextPct, party: (boss.celebrateUntil ?? 0) > clockNow }) : src))(th.cred.card ? th.cred.card(W, streetCred, SKIN.colors, FONT, cardShape) : credCard(W, streetCred, SKIN.colors, FONT, cardShape, th.cred.title, '', th.cred.ranks, th.cred.words)), th, 'cred', clockNow, info.contextPct, (boss.celebrateUntil ?? 0) > clockNow, boss.isWorking) : credCard(W, streetCred, SKIN.colors, FONT, cardShape, egg === 'samurai' ? 'ROCKERBOY CRED' : 'STREET CRED', 'ストリートクレッド', egg === 'samurai' ? rockerRankOf : rankOf)}
                   alt={`Level ${levelOf(streetCred.xp)} ${(th ? th.cred.ranks : egg === 'samurai' ? rockerRankOf : rankOf)(levelOf(streetCred.xp))}, ${streetCred.xp} XP, ${streetCred.badges.length} badges`}
                 />
-                {th?.era ? <Button key="inv-era" label={th.era === 2 ? '⇄\uFE0E CLASSIC SUIT' : '⇄\uFE0E NEW SUIT'} plain onPress={async () => { await setInvEra($, th.era === 2 ? 1 : 2) }} /> : null}
-                {th?.mode ? <Button key="er2-mode" label={th.mode === 'capri' ? '⇄\uFE0E Back to D' : '⇄\uFE0E Let Capri in'} plain onPress={async () => { await setEr2Mode($, th.mode === 'capri' ? 'd' : 'capri', false) }} /> : null}
+                {th?.era && (streetCred.samurai || th.era === 2) ? <Button key="inv-era" label={th.era === 2 ? '⇄\uFE0E CLASSIC SUIT' : '⇄\uFE0E NEW SUIT'} plain onPress={async () => { await setInvEra($, th.era === 2 ? 1 : 2) }} /> : null}
+                {th?.mode && (streetCred.samurai || th.mode === 'capri') ? <Button key="er2-mode" label={th.mode === 'capri' ? '⇄\uFE0E Back to D' : '⇄\uFE0E Let Capri in'} plain onPress={async () => { await setEr2Mode($, th.mode === 'capri' ? 'd' : 'capri', false) }} /> : null}
               </Box>
             ) : null}
             <Box key="workflow" marginBottom={1}>

@@ -9,7 +9,7 @@ import { camExtras } from './invincible-cameos'
 import { FIGHT_PANE_RESERVE } from './invincible-fight'
 import type { ThemeEggs } from './themes'
 
-export const BOOT: [string, string] = ['GDA FEED COMING ONLINE…', 'THINK, MARK']
+export const BOOT: [string, string] = ['GDA FEED COMING ONLINE…', 'GDA FEED ONLINE']
 
 export const invTheme = (era: Era): ThemeEggs => {
   const P = pal(era)

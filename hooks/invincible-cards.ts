@@ -3,6 +3,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { C, CSS, FONT, M, PROPS, SP, T, caption, clamp, clip, clipC, clipM, condW, durOf, esc, hhmm, halftoneDefs, impact, money, pal, px, r1, sansW, speedLines, sfx, spH, spW, star, unit, uniq } from './invincible'
 import { flightBar, monitor, pip } from './invincible'
+import { nextOf, veil } from './extras'
 
 export const svgOpen = (W: any, H: any) => `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="font-variant-numeric:tabular-nums"><style>${CSS}</style>`
 export const frame = (W: any, H: any, P: any) => `<rect x=".5" y=".5" width="${W - 1}" height="${H - 1}" rx="10" fill="${P.tile}" stroke="${P.line}"/>`
@@ -28,7 +29,7 @@ export const BADGES = [
   { id: 'crewboss', name: 'DUPLI-KATE', how: 'A mission with 5+ agents', icon: '⁂', progress: (c: any) => share(c.crewJobs, 1) },
   { id: 'chromed', name: 'THAT HURT', how: 'Context past 90%', icon: '!', progress: (c: any) => (c.chromed ? 1 : 0) },
   { id: 'owl', name: 'NIGHT PATROL', how: 'A mission after midnight', icon: '☾', progress: (c: any) => share(c.nightJobs, 1) },
-  { id: 'samurai', name: 'NEW SUIT', how: 'Find the other era', icon: '◈', progress: (c: any) => (c.samurai ? 1 : 0) },
+  { id: 'samurai', name: 'NEW SUIT', how: 'Keep exploring.', icon: '◈', progress: (c: any) => (c.samurai ? 1 : 0) },
 ]
 export const WORDS = { cases: 'MISSIONS', long: 'LONG MISSIONS', all: 'EVERY PATCH STITCHED. INVINCIBLE.' }
 export const PATCH_COLORS = [[PROPS.captionYellow, '#1E4FB8'], ['#1E4FB8', PROPS.captionYellow], [PROPS.red, '#FFFFFF'], ['#2F8F5B', '#FFFFFF'], ['#E5E4E2', PROPS.ink]]
@@ -148,7 +149,7 @@ export const coverCard = (W: any, c: any, o: any = {}) => {
   s.push(Lb(16, py + 10, `MISSION PATCHES  ${earnedN} of 9`))
   s.push(T(W - 16, py + 10, 'stitched one per mission', 11, 400, P.muted, 'text-anchor="end" font-style="italic"'))
   const gap = per > 1 ? (W - 32 - per * 58) / (per - 1) : 0
-  BADGES.forEach((b, i) => {
+  BADGES.map(b => veil(b, c.badges.includes(b.id))).forEach((b, i) => {
     const col = i % per
     const row = Math.floor(i / per)
     const x = 16 + col * (58 + gap)
@@ -156,7 +157,7 @@ export const coverCard = (W: any, c: any, o: any = {}) => {
     const earned = c.badges.includes(b.id)
     s.push(patch(x, y, b, i, earned, earned ? 1 : b.progress(c), era, o.freshBadge === b.id))
   })
-  const nextB = BADGES.find(b => !c.badges.includes(b.id))
+  const nextB = nextOf(BADGES.map(b => veil(b, c.badges.includes(b.id))), c)
   const foot = nextB ? `Next: ${nextB.name} · ${nextB.how} · ${Math.round(nextB.progress(c) * 100)}%` : WORDS.all
   s.push(T(16, H - 10, clip(foot, 11, W - 32), 11, 400, P.muted, 'font-style="italic"'))
   return `${s.join('\n')}</svg>`
@@ -306,7 +307,7 @@ export const wallCard = (W: any, task: any, isWorking: any, done: any, total: an
 export const wallAlt = (task: any, isWorking: any, done: any, total: any, legends: any) => `GDA wall: ${task || 'no feed'}, ${isWorking ? 'live' : 'standby'}, ${done} of ${total} objectives, ${legends.length} archived feeds`
 
 // ---------------------------------------------------------------- boot, words
-export const BOOT = ['GDA FEED COMING ONLINE…', 'THINK, MARK']
+export const BOOT = ['GDA FEED COMING ONLINE…', 'GDA FEED ONLINE']
 export const bootLine = (W: any, era: any, done: any = false) => {
   const P = pal(era)
   const sp = era === 2 ? SP.INV_MARK_S3_FLY : SP.INV_MARK_FLY
