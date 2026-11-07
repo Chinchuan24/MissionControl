@@ -9,6 +9,8 @@ import { TYGER_RE } from './mentalist'
 import { BB_REVEAL_MS, BB_RIGHT, BB_SKIN_WORDS, BB_TOOLS, SAY_MY_NAME_RE } from './breakingbad'
 import { bbRightLine } from './breakingbad-cards'
 import { THEMES, themeKeyOf } from './themes'
+import { calPal } from './caliper'
+import { setCalModeWord } from './caliper-theme'
 import { BCS_SKIN_WORDS, BCS_TOOLS, SAUL_GOODMAN_RE, TAKAVIC_RE } from './bettercallsaul'
 import { TOASTS, bashToast, cmdKind, fxOf, mcgillNow, resultFailed, toastDue } from './bettercallsaul-fx'
 import type { BashState, Fx, ToastKey } from './bettercallsaul-fx'
@@ -1899,7 +1901,39 @@ const CAPRICORN_SKIN: Skin = {
   tabs: { mission: '◈\uFE0E Mission Control', skins: '◈\uFE0E Skins' },
 }
 
-const BUILT_IN_SKINS: Skin[] = [DEFAULT_SKIN, CRAB_SKIN, MENTALIST_SKIN, BREAKING_BAD_SKIN, CYBER_SKIN, ARASAKA_SKIN, LUCY_SKIN, SAMURAI_SKIN, RED_JOHN_SKIN, HEISENBERG_SKIN, BETTER_CALL_SAUL_SKIN, GENE_SKIN, INVINCIBLE_SKIN, EDGERUNNERS2_SKIN, CAPRICORN_SKIN]
+// Caliper (an original design): graphite and ice, a dial, a ruler, one blue. One skin, two faces (dark, light) and an `auto` setting
+// that follows the app's theme. `dark: true` so the skin's own colours always paint (Caliper swaps the palette itself, it does not
+// lean on the engine's prefers-color-scheme rule). Every face colour comes from calPal in caliper.ts; applySkin puts the worn face on.
+type CalMode = 'dark' | 'light' | 'auto'
+const calColors = (face: 'dark' | 'light'): SkinColors => {
+  const P = calPal(face)
+  return { accent: P.accent, accent2: P.subtext, done: P.done, warn: P.warn, alert: P.alert, meter: P.meter, text: P.text, subtext: P.subtext, muted: P.muted, tile: P.tile, track: P.track, line: P.line, grid: P.tile2 }
+}
+const CALIPER_SKIN: Skin = {
+  id: 'caliper',
+  cast: 'caliper',
+  name: 'Caliper',
+  description: 'Graphite and ice: a dial, a ruler, one blue. Dark, light, or follows the app.',
+  font: "-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',Ubuntu,Cantarell,'Noto Sans','Liberation Sans',sans-serif",
+  corners: 'round',
+  dark: true,
+  colors: calColors('dark'),
+  boss: calPal('dark').boss,
+  roles: calPal('dark').roles,
+  effects: { scanlines: false, glitch: false },
+  backdrop: { fill: calPal('dark').bg, pattern: 'none', ink: '' },
+  chat: true,
+  words: ['Measuring', 'Zeroing', 'Squaring up', 'Taking a reading', 'Within tolerance'],
+  toolWords: { Read: 'Read', Grep: 'Scan', Glob: 'Index', LS: 'Index', Edit: 'Adjust', MultiEdit: 'Adjust', NotebookEdit: 'Adjust', Write: 'Mark', Bash: 'Run', PowerShell: 'Run', Agent: 'Delegate', ToolSearch: 'Look up', WebFetch: 'Fetch', WebSearch: 'Search' },
+  tabs: { mission: 'Mission Control', skins: 'Skins' },
+}
+/** Caliper in a face: the colours, the cast key and the backdrop of the palette; layout never reads the face. */
+const calFaceOf = (k: Skin, face: 'dark' | 'light'): Skin => {
+  const P = calPal(face)
+  return { ...k, cast: face === 'light' ? 'caliperlight' : 'caliper', colors: calColors(face), boss: [...P.boss], roles: [...P.roles], backdrop: { fill: P.bg, pattern: 'none', ink: '' } }
+}
+
+const BUILT_IN_SKINS: Skin[] = [DEFAULT_SKIN, CRAB_SKIN, CALIPER_SKIN, MENTALIST_SKIN, BREAKING_BAD_SKIN, CYBER_SKIN, ARASAKA_SKIN, LUCY_SKIN, SAMURAI_SKIN, RED_JOHN_SKIN, HEISENBERG_SKIN, BETTER_CALL_SAUL_SKIN, GENE_SKIN, INVINCIBLE_SKIN, EDGERUNNERS2_SKIN, CAPRICORN_SKIN]
 
 // Only plain colour and font values reach the drawings: a skin file cannot
 // smuggle markup into an Svg.
@@ -1973,6 +2007,23 @@ const invUnpack = (v: string): { era: 1 | 2; since: number } => {
   return { era: era === '2' ? 2 : 1, since: Number(since) || 0 }
 }
 let INV_ERA: { era: 1 | 2; since: number } = { era: 1, since: 0 }
+// Caliper's setting (dark, light, auto; only this is stored) and the app's theme from /config (for auto). The atom packs
+// `mode|since|appIsLight` for the drawers; `since` is 0 after a restart. The resolved face is never stored.
+const calMode = atom({ plugin: 'crab-progress', key: 'calMode' } as const, 'auto|0|0')
+const calPack = (m: { mode: CalMode; since: number }, light: boolean): string => `${m.mode}|${m.since}|${light ? 1 : 0}`
+const calUnpack = (v: string): { mode: CalMode; since: number; light: boolean } => {
+  const [mode, since, light] = v.split('|')
+  return { mode: mode === 'dark' || mode === 'light' ? mode : 'auto', since: Number(since) || 0, light: light === '1' }
+}
+let CAL_MODE: { mode: CalMode; since: number } = { mode: 'auto', since: 0 }
+let APP_LIGHT = false
+// Auto follows the app: the `theme` row of /config is a choice among dark, light and their daltonized and ansi variants.
+const readAppLight = async ($: EngineInterface): Promise<boolean> => {
+  const row = (await $.config.list().catch(() => [])).find(r => r.key === 'theme')
+  return typeof row?.value === 'string' && row.value.startsWith('light')
+}
+const calFace = (): 'dark' | 'light' => (CAL_MODE.mode === 'auto' ? (APP_LIGHT ? 'light' : 'dark') : CAL_MODE.mode)
+const calNext = (): CalMode => (CAL_MODE.mode === 'dark' ? 'light' : CAL_MODE.mode === 'light' ? 'auto' : 'dark')
 // The last typed Invincible word that draws something (`think, mark`, `guardians`), and the context last seen (THINK, MARK plays by itself when it first passes 95%).
 let INV_FX: { kind: string; at: number } | undefined
 let INV_CTX = 0
@@ -2327,6 +2378,11 @@ function applySkin(k: Skin): void {
   if (k.id === 'invincible') {
     k = INV_ERA.era === 2 ? { ...k, cast: 'invincible2', colors: invColors(2) } : { ...k, cast: 'invincible', colors: invColors(1) }
   }
+  // Caliper's face: dark, light, or the app's (auto).
+  if (k.id === 'caliper') {
+    k = calFaceOf(k, calFace())
+    setCalModeWord(CAL_MODE.mode)
+  }
   SKIN = k
   ACCENT = k.colors.accent
   DONE = k.colors.done
@@ -2405,9 +2461,12 @@ async function useSkin($: EngineInterface): Promise<Skin> {
   }
   const m = er2Unpack(await read($, er2Mode))
   const mi = invUnpack(await read($, invEra))
-  if (id !== SKIN.id || m.mode !== ER2.mode || m.since !== ER2.since || mi.era !== INV_ERA.era || mi.since !== INV_ERA.since) {
+  const mc = calUnpack(await read($, calMode))
+  if (id !== SKIN.id || m.mode !== ER2.mode || m.since !== ER2.since || mi.era !== INV_ERA.era || mi.since !== INV_ERA.since || mc.mode !== CAL_MODE.mode || mc.since !== CAL_MODE.since || mc.light !== APP_LIGHT) {
     ER2 = m
     INV_ERA = mi
+    CAL_MODE = { mode: mc.mode, since: mc.since }
+    APP_LIGHT = mc.light
     applySkin(SKINS.get(id) ?? CRAB_SKIN)
   }
   return SKIN
@@ -2440,6 +2499,17 @@ async function setInvEra($: EngineInterface, era: 1 | 2): Promise<boolean> {
   await update($, invEra, () => invPack(INV_ERA))
   if (SKIN.id === 'invincible') applySkin(SKINS.get('invincible') ?? INVINCIBLE_SKIN)
   if (era === 2) await bumpCred($, c => (c.samurai ? c : { ...c, samurai: true, xp: c.xp + 50 }), true).catch(() => false)
+  return true
+}
+
+// Caliper's setting: writes it (the store keeps only the setting), redraws in the face it resolves to. Returns false if unchanged.
+async function setCalMode($: EngineInterface, mode: CalMode): Promise<boolean> {
+  if (CAL_MODE.mode === mode) return false
+  const now = await $.clock.now().catch(() => Date.now())
+  CAL_MODE = { mode, since: now }
+  await $.store.set('calMode', mode).catch(() => undefined)
+  await update($, calMode, () => calPack(CAL_MODE, APP_LIGHT))
+  if (SKIN.id === 'caliper') applySkin(SKINS.get('caliper') ?? CALIPER_SKIN)
   return true
 }
 
@@ -4745,6 +4815,9 @@ const orgMarks = (): string =>
 <g id="bno"><circle r="6" fill="#D0453F"/><path d="M-2.5 -2.5l5 5M2.5 -2.5l-5 5" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/></g>`
 
 const orgSvg = (W: number, root: OrgNode, isLight = false): string => {
+  // A theme may draw the hierarchy in its own hand (Caliper: pins and a spine).
+  const own = themeOf()?.org
+  if (own) return own(W, root)
   const isParty = Boolean(root.party)
   const slot = orgLayout(root, W)
   const H = orgHeight(root)
@@ -5691,7 +5764,7 @@ const slimBandSvg = (OW: number, d: HudData): string => {
   // A theme that draws its own edge (a chamfered glass tile) leaves out the engine's rounded one.
   if (!sl?.ownEdge) s.push(`<rect x=".5" y=".5" width="${W - 1}" height="${H - 1}" rx="10" class="tile"/><rect x=".5" y=".5" width="${W - 1}" height="${H - 1}" rx="10" fill="none" stroke="${edge}" stroke-opacity=".5"${d.isWorking ? ' class="hedge"' : ''}/>`)
   const overBudget = Boolean(d.budget && d.budget.usedMs > d.budget.min * 60_000)
-  const tctx: ThemeCtx = { ctxPct: d.ctxPct, overBudget, isWorking: d.isWorking, capri: roamOnBand(th, d.at, d.ctxPct), totalUsd: d.session.total, at: d.at }
+  const tctx: ThemeCtx = { ctxPct: d.ctxPct, overBudget, isWorking: d.isWorking, capri: roamOnBand(th, d.at, d.ctxPct), totalUsd: d.session.total, at: d.at, party: d.isParty, ...(d.partyAt === undefined ? {} : { partyAt: d.partyAt }) }
   if (sl) s.push(sl.foot(W, H, c, tctx))
   if (!sl?.ownEdge) s.push(`<rect x=".5" y="14" width="3" height="${H - 28}" rx="1.5" fill="${edge}"/>`)
   // ---- header (baseline 22)
@@ -5758,7 +5831,7 @@ const slimBandSvg = (OW: number, d: HudData): string => {
   if (cold && crRight - baseEnd > 220) s.push(`<text x="${r2(crRight)}" y="${y}" text-anchor="end" font-family="${FONT}" font-size="11.5" font-style="italic" fill="${c.muted}">${xml(serifClip(`“${cold}”`, 11.5, crRight - baseEnd))}</text>`)
   s.push(`<line x1="14" y1="32.5" x2="${W - 14}" y2="32.5" stroke="${c.line}"/>`)
   // ---- task row
-  const fig = sl ? sl.figure({ at: d.at, ctxPct: d.ctxPct, party: d.isParty, ...(activeFx() && th.extras ? { fx: activeFx() as { kind: string; at: number } } : {}) }) : `${crab(14, 38, 'boss', false, d.isWorking, 1.05)}${crown(14, 38, 1.05)}`
+  const fig = sl ? sl.figure({ at: d.at, ctxPct: d.ctxPct, party: d.isParty, working: d.isWorking, ...(d.progress === null ? {} : { progress: Math.round(d.progress * 100) }), ...(activeFx() && th.extras ? { fx: activeFx() as { kind: string; at: number } } : {}) }) : `${crab(14, 38, 'boss', false, d.isWorking, 1.05)}${crown(14, 38, 1.05)}`
   s.push(dancing(fig, d.isParty))
   const tx = 64
   // Below 1100 px the three readouts shrink to short labels and values (no bars), so they stay on screen.
@@ -5772,7 +5845,7 @@ const slimBandSvg = (OW: number, d: HudData): string => {
   const leftRoom = (hasReadouts ? r0 - 18 : W - 14) - 20 - tx
   const titleW = Math.min(300, natTitle, Math.max(90, Math.floor((leftRoom - pillW - 24) * (compact ? 0.55 : 1))))
   // The plain title, always: a glitch on the band once hid it (a ☺ stayed, the title never came back).
-  s.push(`<text x="${tx}" y="54" font-family="${FONT}" font-size="15" font-weight="700" fill="${lift(c.accent)}">${xml(fitW(d.title, 15, titleW))}</text>`)
+  s.push(`<text x="${tx}" y="54" font-family="${FONT}" font-size="15" font-weight="700" fill="${th.face ? c.text : lift(c.accent)}">${xml(fitW(d.title, 15, titleW))}</text>`)
   const px = tx + titleW + 12
   const statusOn = d.isWorking || d.isParty
   const pillFill = d.isParty ? c.done : d.isWorking ? c.accent : c.muted
@@ -5846,7 +5919,7 @@ const slimBandSvg = (OW: number, d: HudData): string => {
     const shown = d.crew.slice(0, room)
     shown.forEach((m, i) => {
       const fx = cx - (shown.length - i) * pitch
-      if (sl && !d.lite) s.push(sl.crew(fx, ya - 14, m.color))
+      if (sl && !d.lite) s.push(sl.crew(fx, ya - 14, m.color, m.status === 'running' && !m.isQuiet))
       else if (d.lite) s.push(`<circle cx="${fx + 9}" cy="${ya - 4}" r="4.5" fill="${m.color}" fill-opacity="${m.status === 'running' ? 1 : 0.4}"/>`)
       else s.push(crab(fx, ya - 23, m.costume, m.status !== 'running', m.status === 'running' && !m.isQuiet, 0.75) + (m.isQuiet ? `<circle cx="${fx + 11}" cy="${ya - 9.5}" r="10.5" fill="none" stroke="${c.alert}" stroke-width="1.3"/>` : ''))
     })
@@ -6856,6 +6929,10 @@ export const register: Register = (on, options) => {
     clearThinkMarkTimers()
     INV_CTX = 0
     await update($, invEra, () => invPack(INV_ERA))
+    const savedCal = await $.store.get('calMode').catch(() => undefined)
+    CAL_MODE = { mode: savedCal === 'dark' || savedCal === 'light' ? savedCal : 'auto', since: 0 }
+    APP_LIGHT = await readAppLight($)
+    await update($, calMode, () => calPack(CAL_MODE, APP_LIGHT))
     const worn = typeof chosen === 'string' ? SKINS.get(chosen === 'capricorn' ? 'edgerunners-2' : chosen) : undefined
     // A cyberpunk skin saved before the add-on was removed falls back to the classic.
     if (worn && canWear(worn)) {
@@ -7667,6 +7744,7 @@ export const register: Register = (on, options) => {
                   alt={`Level ${levelOf(streetCred.xp)} ${(th ? th.cred.ranks : egg === 'samurai' ? rockerRankOf : rankOf)(levelOf(streetCred.xp))}, ${streetCred.xp} XP, ${streetCred.badges.length} badges`}
                 />
                 {th?.era && (streetCred.samurai || th.era === 2) ? <Button key="inv-era" label={th.era === 2 ? '⇄\uFE0E CLASSIC SUIT' : '⇄\uFE0E NEW SUIT'} plain onPress={async () => { await setInvEra($, th.era === 2 ? 1 : 2) }} /> : null}
+                {th?.face && SKIN.id === 'caliper' ? <Button key="cal-mode" label={`⇄\uFE0E ${calNext().toUpperCase()}`} plain onPress={async () => { await setCalMode($, calNext()) }} /> : null}
                 {th?.mode && (streetCred.samurai || th.mode === 'capri') ? <Button key="er2-mode" label={th.mode === 'capri' ? '⇄\uFE0E Back to D' : '⇄\uFE0E Let Capri in'} plain onPress={async () => { await setEr2Mode($, th.mode === 'capri' ? 'd' : 'capri', false) }} /> : null}
               </Box>
             ) : null}
@@ -7688,7 +7766,7 @@ export const register: Register = (on, options) => {
             {egg ? (
               <Box key="breach" marginBottom={1}>
                 <Svg
-                  source={th ? paneCard(th.card.draw(W, boss.task, boss.isWorking, steps.filter(st => st.state === 'done').length, steps.length, SKIN.colors, FONT, cardShape, legends), th, 'task', clockNow, info.contextPct, (boss.celebrateUntil ?? 0) > clockNow, boss.isWorking) : breachCard(W, steps.filter(st => st.state === 'done').length, steps.length, boss.isWorking, egg, FONT, cardShape)}
+                  source={th ? paneCard(th.card.draw(W, boss.task, boss.isWorking, steps.filter(st => st.state === 'done').length, steps.length, SKIN.colors, FONT, cardShape, legends, steps.map(st => ({ title: st.title, state: st.state, note: st.note }))), th, 'task', clockNow, info.contextPct, (boss.celebrateUntil ?? 0) > clockNow, boss.isWorking) : breachCard(W, steps.filter(st => st.state === 'done').length, steps.length, boss.isWorking, egg, FONT, cardShape)}
                   alt={th ? th.card.alt(boss.isWorking, steps.filter(st => st.state === 'done').length, steps.length) : `Breach Protocol: ${steps.filter(st => st.state === 'done').length} of ${steps.length} steps`}
                 />
               </Box>
@@ -8649,10 +8727,25 @@ export const register: Register = (on, options) => {
     }
   })
 
+  // Caliper in auto follows the app's theme: a change in /config redraws it in the new face (in dark or light it does not).
+  on('config.set', { key: 'theme' }, async ($, e, next) => {
+    const r = await next(e)
+    if (r.deny === undefined) {
+      APP_LIGHT = String(r.value ?? e.value ?? '').startsWith('light')
+      if (CAL_MODE.mode === 'auto' && SKIN.id === 'caliper') applySkin(SKINS.get('caliper') ?? CALIPER_SKIN)
+      // Always: useSkin copies the atom back, so a stale `appIsLight` there would undo a later switch to auto.
+      await update($, calMode, () => calPack(CAL_MODE, APP_LIGHT))
+    }
+    return r
+  })
+
   on('command.run', { command: 'skin' }, async ($, e) => {
     const arg = (e.args ?? '').trim().toLowerCase()
+    // Caliper's setting rides on the skin word: `/skin caliper light|dark|auto`.
+    const calArg = /^caliper\s+(dark|light|auto)$/.exec(arg)
+    const calNote = (): string => (CAL_MODE.mode === 'auto' ? `auto → ${calFace()}` : CAL_MODE.mode)
     const listing = () =>
-      [...SKINS.values()].filter(k => canWear(k) && (!k.hidden || k.id === SKIN.id)).map(k => `${k.id === SKIN.id ? '▸' : ' '} ${k.id}  ${k.name}${k.description ? ` · ${k.description}` : ''}`).join('\n')
+      [...SKINS.values()].filter(k => canWear(k) && (!k.hidden || k.id === SKIN.id)).map(k => `${k.id === SKIN.id ? '▸' : ' '} ${k.id}  ${k.name}${k.id === 'caliper' ? ` (${calNote()})` : ''}${k.description ? ` · ${k.description}` : ''}`).join('\n')
     if (arg === 'reload') {
       const { folder, loaded, skipped } = await loadSkins($)
       await checkAddon($)
@@ -8678,12 +8771,18 @@ export const register: Register = (on, options) => {
       return { text: typeof folder === 'string' ? `Skins folder: ${folder}` : `No "${SKINS_FOLDER}" folder found yet.` }
     }
     if (!arg || arg === 'list') return { text: `Skins (▸ is on):\n${listing()}\nSwitch with /skin <id or name>.${HAS_CYBER ? '' : `\n\n${ADDON_PITCH}`}` }
-    const k = arg === 'off' || arg === 'none' ? SKINS.get(DEFAULT_SKIN.id) : skinByWord(arg)
+    const k = arg === 'off' || arg === 'none' ? SKINS.get(DEFAULT_SKIN.id) : skinByWord(calArg ? 'caliper' : arg)
     if (!k) return { text: `No skin "${arg}".\n${listing()}` }
     if (!canWear(k)) return { text: `${k.hidden ? `No skin "${arg}".` : `${k.name} comes with the Cyberpunk Skins add-on.`}\n${ADDON_PITCH}` }
     // CAPRICORN is Edgerunners 2 in CAPRI mode: wear the one skin and let her in (the possession transition plays).
     const isCapricorn = k.id === 'capricorn'
     const worn = isCapricorn ? (SKINS.get('edgerunners-2') as Skin) : k
+    if (worn.id === 'caliper') {
+      // The setting first (the skin is not worn yet, so nothing draws twice), and the app's theme as it is now.
+      if (calArg) await setCalMode($, calArg[1] as CalMode)
+      APP_LIGHT = await readAppLight($)
+      await update($, calMode, () => calPack(CAL_MODE, APP_LIGHT))
+    }
     applySkin(worn)
     await $.store.set('skin', worn.id)
     await update($, skin, () => worn.id)
@@ -8694,7 +8793,7 @@ export const register: Register = (on, options) => {
       return { text: `Skin: ${worn.name} (CAPRI mode).` }
     }
     if (k.hidden) await foundSecret($, k)
-    return { text: `Skin: ${k.name}.` }
+    return { text: `Skin: ${k.name}${k.id === 'caliper' ? ` (${calNote()})` : ''}.` }
   })
 
   on('command.run', { command: 'autocrew' }, async ($, e) => {

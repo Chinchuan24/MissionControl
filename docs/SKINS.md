@@ -57,6 +57,17 @@ Short version:
 
 Colors are hex (`#FCEE0A`) or `rgb()` / `rgba()`. Anything else is replaced by a default, which `/skin check` reports.
 
+## Caliper: dark, light, auto
+
+Caliper is an original design that ships with the mod (a dial, a ruler, one blue; listed under Classics). It has two faces and a setting that picks between them:
+
+| Command | What it does |
+|---|---|
+| `/skin caliper` | Wear it, with the setting you saved |
+| `/skin caliper dark` · `light` · `auto` | Pick the face and wear it. `auto` (the default) follows the app's theme from `/config`, and changes with it |
+
+The CALIBRATION card has a `⇄` button that cycles dark → light → auto. Only the setting is saved; the face it resolves to never is. The layout is the same in both faces: only colours change.
+
 ## Names and logos
 
 Make it your own. A skin must not use another brand's name or logo: no company, product, game or film names. `/skin new` tells the model so, and both `/skin new` and `/skin check` refuse ids and names containing `anthropic`, `claude`, `aws`, `amazon`, `cyberpunk`, `arasaka` or `cd projekt`. The `cast` field (characters in place of the crabs) picks the mod's own pixel characters (The Mentalist's, or the Cyberpunk Skins add-on's), so leave it out.
