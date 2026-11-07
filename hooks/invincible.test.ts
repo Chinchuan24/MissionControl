@@ -10,6 +10,7 @@ import type { CamPlan } from './invincible-cameos'
 import { AHEAD_MS, CLASSIC_RE, DUEL_MS, GUARDIANS_RE, NEW_SUIT_RE, SHOWDOWN_MS, THINK_RE, duelPlan, showdown, showdownPlan, slotPlan } from './invincible-eggs'
 import { CSS, EPISODES, ERA1, ERA2, PROPS, SP, TITLE_WORDS, condW, contrast, episodeAt, monoW, sansW, unit as unitOf } from './invincible'
 import { THEMES } from './themes'
+import { thinkMarkRedraws } from './invincible-thinkmark'
 
 const pane = { title: '', isFocused: false, bodyColumns: 100, placement: 'dock', scroll: { offset: 0, bodyRows: 60 }, view: {} } as const
 const NOW = Date.parse('2026-10-20T10:00:00Z')
@@ -942,7 +943,7 @@ test('replay: every egg draws now, with no job working', async ($, on) => {
   let now = calmAt(NOW)
   const clock = base(on, 100_000, now)
   await start($, 'invincible')
-  const marks: Record<string, string> = { fight: 'dl-c', showdown: 'sd-anim', think: 'class="inv-think"', eve: 'data-cam="eve"', oliver: 'data-cam="oliver"', cecil: 'data-cam="cecil"' }
+  const marks: Record<string, string> = { fight: 'dl-c', showdown: 'sd-anim', think: 'NOW PLAYING', eve: 'data-cam="eve"', oliver: 'data-cam="oliver"', cecil: 'data-cam="cecil"' }
   for (const [egg, mark] of Object.entries(marks)) {
     const next = calmAt(now + 10 * 60_000)
     await clock.advance(next - now)
@@ -968,4 +969,26 @@ test('replay: a fight replay draws in its own time and ends on its own', async (
   expect((await allSvg($)).includes('dl-c')).toBe(true)
   await clock.advance(FIGHT_MS + 5000)
   expect((await bandAt($, 1250, false)).includes('dl-c')).toBe(false)
+})
+
+test('replay: play think starts the full THINK, MARK cutscene and schedules its cut redraws', async ($, on) => {
+  const t0 = calmAt(NOW)
+  const writes: number[] = []
+  const clock = base(on, 100_000, t0)
+  on('state.set', async (_$, e, next) => {
+    const w = e as { key?: string; value?: unknown }
+    if (w.key === 'paneTick' && typeof w.value === 'number') writes.push(w.value)
+    return next(e as never)
+  })
+  await start($, 'invincible')
+  expect(await bandAt($, 1250, false)).not.toContain('NOW PLAYING')
+  expect(await play($, 'think')).toBe('▶ think')
+  expect(await bandAt($, 1250, false)).toContain('NOW PLAYING')
+  const cuts = thinkMarkRedraws(t0)
+  await clock.advance(20_000)
+  for (const c of cuts.filter(c => c <= t0 + 20_000)) expect(writes).toContain(c)
+  // another replay ends the cutscene's redraws
+  await play($, 'fight')
+  await clock.advance(50_000)
+  expect(writes).not.toContain(cuts[cuts.length - 1])
 })

@@ -2447,6 +2447,10 @@ async function invReplay($: EngineInterface, egg: string): Promise<string> {
   const at = await $.clock.now().catch(() => Date.now())
   if (egg === 'newsuit' || egg === 'classic') {
     if (!(await setInvEra($, egg === 'newsuit' ? 2 : 1).catch(() => false))) return `Already in the ${egg === 'newsuit' ? 'new' : 'classic'} suit.`
+  } else if (egg === 'think') {
+    // The whole THINK, MARK cutscene, as when it is typed (the 95% context path keeps the 3 s drop-in).
+    INV_FX = thinkMarkFx(at)
+    scheduleThinkMark((ms, fn) => $.clock.after(ms, fn), at, at, t => { void update($, paneTick, () => t).catch(() => undefined) })
   } else INV_FX = { kind: egg, at }
   await update($, bandTick, () => at)
   await update($, paneTick, () => at)
