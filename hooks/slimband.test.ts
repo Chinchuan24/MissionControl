@@ -34,7 +34,7 @@ const base = (on: On, skin: string) => {
 }
 const band = async ($: Engine, skin: string, W: number): Promise<string> => {
   await $.session.start({ source: 'startup', cwd: '/repo', surface: 'desktop', isInteractive: true } as never)
-  if (skin === 'heisenberg' || skin === 'capricorn' || skin === 'edgerunners-2' || skin === 'better-call-saul' || skin === 'gene' || skin === 'invincible') await $.command.run({ command: 'skin', args: skin } as never)
+  if (skin === 'heisenberg' || skin === 'capricorn' || skin === 'edgerunners-2' || skin === 'better-call-saul' || skin === 'gene' || skin === 'invincible' || skin === 'caliper') await $.command.run({ command: 'skin', args: skin } as never)
   await $.prompt.submit({ text: 'crack the case', cursor: 0 } as never)
   // @ts-ignore TS2589: the plugin's tool-name types are deep; the same call is already ignored in the other tests' budget
   await $.tool.call({ tool: 'mcp__crab-progress__progress', title: 'Red-herring audit', total: 5, done: 1, phase: 'delegate', tasks: [{ title: 'Lead: run the case', tier: 'fable' }, { title: 'Researcher: map the API', tier: 'medium' }, { title: 'Engineer: wire the parser', tier: 'careful' }] } as never)
@@ -133,4 +133,13 @@ for (const skin of ['better-call-saul', 'gene', 'invincible']) {
       expect(svg.match(/\$7\.89/g)?.length).toBe(1) // the figure appears once
     })
   }
+}
+
+for (const W of [750, 900, 1250]) {
+  test(`slim band caliper at ${W}: the session total shows`, async ($, on) => {
+    base(on, 'caliper')
+    const svg = await band($, 'caliper', W)
+    expect(svg).toContain('Tasks 1/5')
+    expect((svg.match(/7\.89/g)?.length ?? 0) >= 1).toBe(true)
+  })
 }
