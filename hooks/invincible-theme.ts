@@ -5,6 +5,7 @@ import { BADGES, GREETING, VERBS, WORDS, bootLine, coverCard, coverToast, pageAl
 import { BAND_H, CSS, TITLE_WORDS, WARNING, cheer, chip, corner, crew, ep, epW, episodeAt, figure, flightBar, foot, gauge, mug, name, pal, pip, sansW, PROPS } from './invincible'
 import type { Era } from './invincible'
 import { invExtras, invShake } from './invincible-eggs'
+import { camExtras } from './invincible-cameos'
 import { FIGHT_PANE_RESERVE } from './invincible-fight'
 import type { ThemeEggs } from './themes'
 
@@ -12,6 +13,8 @@ export const BOOT: [string, string] = ['GDA FEED COMING ONLINE…', 'THINK, MARK
 
 export const invTheme = (era: Era): ThemeEggs => {
   const P = pal(era)
+  const eggs = invExtras(era, P.tile as string)
+  const cameos = camExtras(era)
   return {
     era,
     ticker: at => (episodeAt(at) ?? []).join(' '),
@@ -49,7 +52,8 @@ export const invTheme = (era: Era): ThemeEggs => {
     greeting: GREETING,
     words: TITLE_WORDS,
     tools: VERBS,
-    extras: invExtras(era, P.tile as string),
+    // The big eggs, then the cameos (Atom Eve, Oliver, Cecil), which are skipped in the fight's and the showdown's windows.
+    extras: o => `${eggs(o)}${cameos(o)}`,
     shake: invShake(era),
     paneReserve: FIGHT_PANE_RESERVE,
   }
