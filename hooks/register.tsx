@@ -11,7 +11,7 @@ import { bbRightLine } from './breakingbad-cards'
 import { THEMES, themeKeyOf } from './themes'
 import { ramStatus, settingsTagline, settingsTones } from './settingslook'
 import type { SettingsSection } from './settingslook'
-import { GROUP_TAGLINE, GROUP_TITLE, SECRET_PARENT, SKIN_GROUPS, groupOf, secretHint, skinTagline, skinsSummary } from './skinslook'
+import { GROUP_TAGLINE, GROUP_TITLE, SKIN_GROUPS, groupOf, skinTagline, skinsSummary } from './skinslook'
 import type { SkinGroup } from './skinslook'
 import { BCS_SKIN_WORDS, BCS_TOOLS, SAUL_GOODMAN_RE, TAKAVIC_RE } from './bettercallsaul'
 import { TOASTS, bashToast, cmdKind, fxOf, mcgillNow, resultFailed, toastDue } from './bettercallsaul-fx'
@@ -5312,13 +5312,12 @@ const activityOf = (e: Record<string, unknown>): string => {
 // The panel's own wrapper for a crab that dances while the crew celebrates.
 const dancing = (drawn: string, isOn: boolean): string => (isOn ? `<g class="dance">${drawn}</g>` : drawn)
 
-// --- the skin picker: a banner (the worn skin's crew, "Skins", the counts and the skin worn),
+// --- the skin picker: a banner (the worn skin's crew, "Skins", the count and the skin worn),
 // then one card per skin under its group (skinslook.ts): a still picture, a mini pane in the
 // skin's own colours and shape with its mascot standing in it, the name in bold, a tagline, a
-// WEARING or SECRET badge, beside a native Wear button (the desktop draws a Button's label and
-// nothing inside it, so every visual lives in the picture). A secret still locked is a dimmed
-// silhouette of the skin it hides behind, with a hint of where to look and never the phrase.
-// The pictures read nothing that moves: no redraw while Claude works.
+// WEARING badge, beside a native Wear button (the desktop draws a Button's label and nothing
+// inside it, so every visual lives in the picture). Only skins that can be worn are listed, as
+// in /skin and the picker; nothing hints at anything else. No redraw while Claude works.
 
 const SKINS_PANE = 'crab-skins'
 // Settings and billing live in a pane of their own: the main pane redraws many times a
@@ -5340,8 +5339,7 @@ const shapeOf =
   }
 
 // The skin's mascot standing still in a crab box (30 wide, feet at 27) scaled by `scale`: its
-// cast's boss, or the crab. Given `col` it is a flat silhouette in that colour, with no rim and
-// no face: the shape of the skin a secret hides behind, and nothing of the secret itself.
+// cast's boss, or the crab. Given `col` it is a flat shape in that colour, with no rim and no face.
 const mascotOf = (k: Skin, x: number, y: number, scale: number, col?: string): string => {
   const cast = k.cast ? CASTS[k.cast] : undefined
   const at = `transform="translate(${r2(x)},${r2(y)}) scale(${scale})" shape-rendering="crispEdges"`
@@ -5355,7 +5353,7 @@ const mascotOf = (k: Skin, x: number, y: number, scale: number, col?: string): s
   return `<g ${at}>${rects.join('')}</g>`
 }
 
-// A small badge at the card's top right: "WEARING" in the accent, "SECRET" in the second accent.
+// A small badge at the card's top right: "WEARING" in the accent.
 const cardBadge = (shape: ReturnType<typeof shapeOf>, right: number, text: string, fill: string, font: string): { markup: string; w: number } => {
   const w = Math.ceil(textWidth(text, 10) * 1.12) + 16
   const x = right - w
@@ -5365,7 +5363,7 @@ const cardBadge = (shape: ReturnType<typeof shapeOf>, right: number, text: strin
   }
 }
 
-type SkinCardFlags = { isOn: boolean; isSecret: boolean; mode?: string }
+type SkinCardFlags = { isOn: boolean; mode?: string }
 // One skin's card, in that skin's own colours, font and shape: its mini pane (backdrop, a band
 // in the accent, two lines, a meter, the mascot), the name in bold, a tagline, six swatches of
 // its palette, and the badges. The card paints its own tile, so the text is the skin's own.
@@ -5376,7 +5374,7 @@ const skinCardSvg = (W: number, k: Skin, tagline: string, flags: SkinCardFlags):
   const m = MINI
   const badges: string[] = []
   let right = W - 10
-  for (const b of [flags.isOn ? { text: flags.mode ? `WEARING · ${flags.mode}` : 'WEARING', fill: c.accent } : null, flags.isSecret ? { text: '🔓 SECRET', fill: c.accent2 } : null]) {
+  for (const b of [flags.isOn ? { text: flags.mode ? `WEARING · ${flags.mode}` : 'WEARING', fill: c.accent } : null]) {
     if (!b) continue
     const drawn = cardBadge(shape, right, b.text, b.fill, k.font)
     badges.push(drawn.markup)
@@ -5405,29 +5403,6 @@ ${swatches}
 ${badges.join('')}
 ${scan}
 </svg>`
-}
-
-// A secret still locked, drawn in the worn skin: a dashed frame, the silhouette of the skin it
-// hides behind (a "?" when there is none), "???" and a hint of where to look.
-const secretCardSvg = (W: number, parent: Skin | undefined, hint: string): string => {
-  const c = SKIN.colors
-  const H = SKIN_CARD_H
-  const m = MINI
-  const figure = parent
-    ? mascotOf(parent, m.x + (m.w - 45) / 2, m.y + m.h - 3 - 27 * 1.5, 1.5, c.muted)
-    : `<text x="${m.x + m.w / 2}" y="${m.y + m.h / 2 + 10}" text-anchor="middle" font-family="${FONT}" font-size="28" font-weight="800" fill="${c.muted}">?</text>`
-  const word = '🔒 SECRET'
-  const pillW = Math.ceil(textWidth(word, 10) * 1.12) + 16
-  return stillSvg(
-    W,
-    H,
-    `${cardShape(0.5, 0.5, W - 1, H - 1, `class="tile" stroke="${c.muted}" stroke-opacity=".6" stroke-dasharray="4 3"`, 12)}
-${cardShape(m.x, m.y, m.w, m.h, `fill="${c.muted}" fill-opacity=".12"`, 8)}
-<g opacity=".55">${figure}</g>
-<text class="t" x="${CARD_TX}" y="28" font-family="${FONT}" font-size="14" font-weight="700" opacity=".8">???</text>
-<text class="s" x="${CARD_TX}" y="46" font-family="${FONT}" font-size="11.5">${xml(fitText(`secret skin · ${hint}`, 11.5, W - CARD_TX - 12))}</text>
-${cardShape(W - 10 - pillW, 10, pillW, 18, `fill="none" stroke="${c.muted}" stroke-opacity=".8"`, 9)}<text class="s" x="${r2(W - 10 - pillW / 2)}" y="23" text-anchor="middle" font-family="${FONT}" font-size="10" font-weight="800" letter-spacing=".4">${word}</text>`,
-  )
 }
 
 // The Settings pane's banner: the skin's own crew standing small at the left (the boss
@@ -8435,22 +8410,12 @@ export const register: Register = (on, options) => {
     const isDark = SKIN.dark
     const tones = settingsTones(c, SKIN.roles, SKIN.boss)
     const isCapri = SKIN.cast === 'capricorn'
-    // What the picker offers, as before: the skins that can be worn, a hidden one only while it is worn.
+    // What the picker offers, as /skin does: the skins that can be worn, a hidden one only while it is worn.
     const shown = [...SKINS.values()].filter(k => canWear(k) && (!k.hidden || k.id === active.id))
-    // The secrets still locked, shown as silhouettes and never by name. CAPRICORN has no entry of its own
-    // once found (it is Edgerunners 2 in CAPRI mode); an add-on's secret stays unmentioned without the add-on.
-    const locked = [...SKINS.values()].filter(k => k.hidden && canWear(k) && k.id !== active.id && !(k.id === 'capricorn' && isCapri))
-    const found = (active.hidden ? 1 : 0) + (isCapri ? 1 : 0)
     const builtIn = new Set(BUILT_IN_SKINS.map(k => k.id))
-    type Entry = { k: Skin; isLocked: boolean }
+    type Entry = { k: Skin }
     const groups: Record<SkinGroup, Entry[]> = { classics: [], tv: [], city: [], yours: [] }
-    for (const k of shown) groups[groupOf(k.cast, builtIn.has(k.id))].push({ k, isLocked: false })
-    // A locked secret sits right after the skin it hides behind.
-    for (const k of locked) {
-      const g = groups[groupOf(k.cast, builtIn.has(k.id))]
-      const at = g.findIndex(x => x.k.id === SECRET_PARENT[k.id])
-      g.splice(at < 0 ? g.length : at + 1, 0, { k, isLocked: true })
-    }
+    for (const k of shown) groups[groupOf(k.cast, builtIn.has(k.id))].push({ k })
     const groupTone: Record<SkinGroup, string> = { classics: tones.look, tv: tones.crew, city: tones.money, yours: tones.guard }
     const Svg = e.surface !== 'terminal' && 'Svg' in ui ? ui.Svg : null
     const Field = 'Input' in ui ? ui.Input : null
@@ -8462,8 +8427,8 @@ export const register: Register = (on, options) => {
       isDark ? <Text key={key} color={c.muted} size="footnote" wrap="wrap">{text}</Text> : <Text key={key} dimColor size="footnote" wrap="wrap">{text}</Text>
     const strong = (key: string, text: string) => <Text key={key} bold {...(isDark ? { color: c.text } : {})}>{text}</Text>
     const chip = (key: string, text: string, fill: string) => <Text key={key} backgroundColor={fill} color={inkOn(fill)} bold>{` ${text} `}</Text>
-    // The banner: the counts (skins, secrets found, secrets hidden) and the skin worn, in the groups' colours.
-    const chips = [...skinsSummary(shown.length, found, locked.length).map((text, i) => ({ text, tone: i === 0 ? tones.crew : tones.money })), { text: `Wearing ${SKIN.name}`, tone: tones.look }]
+    // The banner: how many skins, and the skin worn, in the groups' colours.
+    const chips = [...skinsSummary(shown.length).map(text => ({ text, tone: tones.crew })), { text: `Wearing ${SKIN.name}`, tone: tones.look }]
     const banner = Svg ? (
       <Svg key="skins-banner" source={settingsBannerSvg(W, chips, 'Skins')} alt={`Skins: ${chips.map(ch => ch.text).join(', ')}`} />
     ) : (
@@ -8475,32 +8440,19 @@ export const register: Register = (on, options) => {
     // One skin: its picture (or, on the terminal, its name, badges and tagline) and the Wear button beside it.
     const cardRow = (en: Entry) => {
       const k = en.k
-      if (en.isLocked) {
-        const parent = SKINS.get(SECRET_PARENT[k.id] ?? '')
-        const hint = secretHint(k.id, parent?.name)
-        return Svg ? (
-          <Box key={`secret-${k.id}`} flexDirection="row">
-            <Svg key={`secret-${k.id}-art`} source={secretCardSvg(cardW, parent, hint)} alt={`Secret skin, locked: ${hint}`} width={cardW} height={SKIN_CARD_H} />
-          </Box>
-        ) : (
-          muted(`secret-${k.id}`, `  ??? secret skin · ${hint}`)
-        )
-      }
       const isOn = k.id === active.id
       // The worn card shows the live palette (Edgerunners 2 in CAPRI mode wears hers).
       const live = isOn ? SKIN : k
-      const isSecret = Boolean(k.hidden) || (isOn && isCapri)
       const tagline = isOn && isCapri ? skinTagline('capricorn', '') : skinTagline(k.id, k.description)
-      const alt = `${k.name}: ${tagline}${isOn ? ' · wearing' : ''}${isSecret ? ' · secret, found' : ''}`
+      const alt = `${k.name}: ${tagline}${isOn ? ' · wearing' : ''}`
       return (
         <Box key={`skin-${k.id}`} flexDirection="row" flexWrap="wrap" columnGap={1} alignItems="center">
           {Svg ? (
-            <Svg key={`skin-${k.id}-art`} source={skinCardSvg(cardW, live, tagline, { isOn, isSecret, mode: isOn && isCapri ? 'CAPRI' : '' })} alt={alt} width={cardW} height={SKIN_CARD_H} />
+            <Svg key={`skin-${k.id}-art`} source={skinCardSvg(cardW, live, tagline, { isOn, mode: isOn && isCapri ? 'CAPRI' : '' })} alt={alt} width={cardW} height={SKIN_CARD_H} />
           ) : (
             <Box key={`skin-${k.id}-text`} flexDirection="row" flexWrap="wrap" columnGap={1}>
               <Text color={k.colors.accent} bold>{`${isOn ? '▸' : ' '} ${k.name}`}</Text>
               {isOn ? chip(`skin-${k.id}-on`, isCapri ? 'WEARING · CAPRI' : 'WEARING', c.accent) : null}
-              {isSecret ? chip(`skin-${k.id}-secret`, '🔓 secret', c.accent2) : null}
               <Text dimColor wrap="truncate-end">{tagline}</Text>
             </Box>
           )}

@@ -1,6 +1,5 @@
-// The Skins pane's look: which group a skin sits in, the one-line tagline on its card, which
-// skin a secret hides behind and the vague hint its locked card shows, and the banner's
-// counts. Pure: no `$`, no state. The unlock phrases live elsewhere and are never shown here.
+// The Skins pane's look: which group a skin sits in, the one-line tagline on its card, and the
+// banner's count. Pure: no `$`, no state. Nothing here hints that anything is hidden.
 
 export type SkinGroup = 'classics' | 'tv' | 'city' | 'yours'
 export const SKIN_GROUPS: readonly SkinGroup[] = ['classics', 'tv', 'city', 'yours']
@@ -8,7 +7,7 @@ export const SKIN_GROUPS: readonly SkinGroup[] = ['classics', 'tv', 'city', 'you
 export const GROUP_TITLE: Record<SkinGroup, string> = { classics: 'Classics', tv: 'TV shows', city: 'Night City', yours: 'Your skins' }
 export const GROUP_TAGLINE: Record<SkinGroup, string> = {
   classics: 'the crab, and no skin at all',
-  tv: 'fan homages; each hides a secret',
+  tv: 'fan homages',
   city: 'the Cyberpunk Skins add-on',
   yours: 'from the Custom Claude Skins folder',
 }
@@ -25,19 +24,6 @@ export const groupOf = (cast: string | undefined, isBuiltIn: boolean): SkinGroup
   return 'classics'
 }
 
-/** The skin a secret hides behind, by the secret's id. SAMURAI hides in Night City as a whole. */
-export const SECRET_PARENT: Record<string, string> = {
-  'red-john': 'mentalist',
-  heisenberg: 'breaking-bad',
-  gene: 'better-call-saul',
-  samurai: 'cyberpunk-2077',
-  capricorn: 'edgerunners-2',
-}
-
-/** What a locked card says: where to look, never how to open it. */
-export const secretHint = (secretId: string, parentName: string | undefined): string =>
-  secretId === 'samurai' ? 'Night City hides a secret' : parentName ? `${parentName} hides a secret` : 'Somewhere, a secret'
-
 // One line per card: the description, cut to its look.
 const TAGLINES: Record<string, string> = {
   default: 'No skin: plain greys, system font',
@@ -51,7 +37,7 @@ const TAGLINES: Record<string, string> = {
   'cyberpunk-2077': 'Neon yellow, hot red, cut corners, scanlines',
   arasaka: 'Blood red on black, hard edges, no noise',
   'lucy-edgerunners': 'Rose-pink and cyan on deep violet',
-  'edgerunners-2': "D's optics: a cobalt glass HUD with a ghost in it",
+  'edgerunners-2': "D's optics: a cobalt glass HUD",
   samurai: 'Red on black, stage lights, never fade away',
   capricorn: 'She owns the HUD now',
 }
@@ -65,11 +51,5 @@ export const skinTagline = (id: string, description: string): string => {
   return line.length > 56 ? `${line.slice(0, 55).trimEnd()}…` : line
 }
 
-/** The banner's chips: how many skins there are to pick from, and the secrets found and still hidden. */
-export const skinsSummary = (shown: number, found: number, hidden: number): string[] => {
-  const n = (k: number, word: string) => `${k} ${word}${k === 1 ? '' : 's'}`
-  const out = [n(shown, 'skin')]
-  if (found) out.push(`${n(found, 'secret')} found`)
-  if (hidden) out.push(`${n(hidden, 'secret')} hidden`)
-  return out
-}
+/** The banner's chip: how many skins there are to pick from. */
+export const skinsSummary = (shown: number): string[] => [`${shown} skin${shown === 1 ? '' : 's'}`]
