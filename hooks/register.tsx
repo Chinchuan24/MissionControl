@@ -2429,6 +2429,21 @@ async function setEr2Mode($: EngineInterface, mode: Er2ModeName, auto: boolean):
   return true
 }
 
+// `/missioncontrol play <egg>` (unlisted): one of Invincible's eggs from now, while it is worn. The drawings are pinned to the time
+// set here, so one redraw of the band and the pane plays the whole act.
+const INV_REPLAYS = ['fight', 'showdown', 'think', 'eve', 'oliver', 'cecil', 'newsuit', 'classic'] as const
+async function invReplay($: EngineInterface, egg: string): Promise<string> {
+  if (!isInv()) return 'Wear the Invincible skin first.'
+  if (!(INV_REPLAYS as readonly string[]).includes(egg)) return `Play which? ${INV_REPLAYS.join(', ')}`
+  const at = await $.clock.now().catch(() => Date.now())
+  if (egg === 'newsuit' || egg === 'classic') {
+    if (!(await setInvEra($, egg === 'newsuit' ? 2 : 1).catch(() => false))) return `Already in the ${egg === 'newsuit' ? 'new' : 'classic'} suit.`
+  } else INV_FX = { kind: egg, at }
+  await update($, bandTick, () => at)
+  await update($, paneTick, () => at)
+  return `▶ ${egg}`
+}
+
 // Invincible's era: the new suit (2) or the classic (1). Writes the state, redraws in the era's palette and starts the title-card swap
 // (it pins to `since`); the first time the new suit is worn it earns the NEW SUIT patch.
 async function setInvEra($: EngineInterface, era: 1 | 2): Promise<boolean> {
@@ -7107,6 +7122,9 @@ export const register: Register = (on, options) => {
       await setOneShot($, mode)
       return { text: oneShotSaid(mode) }
     }
+    // Unlisted on purpose: `/missioncontrol play <egg>` replays one of Invincible's eggs now (no help text names it).
+    const replay = /^play(?:\s+(\S+))?\s*$/i.exec((e.args ?? '').trim())
+    if (replay) return { text: await invReplay($, (replay[1] ?? '').toLowerCase()) }
     // Billing: how to pay with API credits instead of the plan, in four steps (nothing is edited).
     if (/^billing$/i.test((e.args ?? '').trim())) {
       await refreshBilling($).catch(() => undefined)

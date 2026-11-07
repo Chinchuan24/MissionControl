@@ -3,7 +3,7 @@
 // in percent, so a single pinned delay (`pin(startAt)`) drives every piece: a redraw anywhere in the act resumes it, and a draw up
 // to AHEAD_MS before it schedules it (the delay is then positive). Cartoon, never gory: impact stars, flashes, KO swirl stars.
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { ACT_LEN, ACT_OFF, BAND_CUT, HOLE_END, fightAct, fightBand, fightHole, fightShake } from './invincible-fight'
+import { ACT_LEN, ACT_OFF, BAND_CUT, FIGHT_MS, HOLE_END, fightAct, fightBand, fightHole, fightShake } from './invincible-fight'
 import type { ActIndex } from './invincible-fight'
 import { thinkMark } from './invincible'
 import type { Era } from './invincible'
@@ -172,6 +172,8 @@ export const showdownDue = (at: number, era: Era, fx?: { kind: string; at: numbe
 }
 /** The fight's plan for a draw, or undefined: only while a job works, never with the swap, THINK, MARK or the showdown. */
 export const fightDue = (at: number, era: Era, working: boolean | undefined, fx?: { kind: string; at: number }, swapAt?: number): number | undefined => {
+  // A replay (`fx` kind 'fight') plays now, job or no job.
+  if (fx?.kind === 'fight' && liveAt(fx.at, at, FIGHT_MS + 600)) return fx.at
   if (!working) return undefined
   if (liveAt(swapAt, at, SWAP_MS + 500) || (fx && liveAt(fx.at, at, fx.kind === 'think' ? THINK_MS : fx.kind === 'showdown' ? SHOWDOWN_MS : 0))) return undefined
   const p = duelPlan(at, era)

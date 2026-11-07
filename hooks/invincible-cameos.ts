@@ -93,12 +93,35 @@ export const camPlanOfSlot = (slot: number): CamPlan => {
 /** The cameo whose slot holds `at`. */
 export const camPlan = (at: number): CamPlan => camPlanOfSlot(Math.floor(at / CAM_SLOT_MS))
 
+// A replay of one cameo from `startAt`: the next seeded slot with that one in it (a band act when there is one, so it shows on the
+// band too), moved to start now.
+const REPLAY_MODE: Record<Who, Mode> = { eve: 'fly-band', oliver: 'dash', cecil: 'feed' }
+export const camReplay = (who: Who, startAt: number): CamPlan => {
+  const k = Math.floor(startAt / CAM_SLOT_MS)
+  let pick: CamPlan | undefined
+  for (let slot = k; slot < k + 400; slot++) {
+    const p = camPlanOfSlot(slot)
+    if (p.who !== who) continue
+    pick ??= p
+    if (p.mode === REPLAY_MODE[who] && (who !== 'cecil' || p.rec)) {
+      pick = p
+      break
+    }
+  }
+  const p = pick ?? camPlanOfSlot(k)
+  return { ...p, on: true, startAt, endAt: startAt + p.durMs }
+}
+
 const liveWin = (since: number | undefined, a0: number, a1: number, ms: number): boolean => since !== undefined && since > 0 && overlaps(a0, a1, since, since + ms, 1000)
 /**
  * The cameo a draw at `at` should include: live now or starting within the look-ahead, and not clashing with a typed THINK, MARK
  * or a typed showdown or the era swap (they take the stage). Undefined when none.
  */
 export const camDue = (at: number, fx?: { kind: string; at: number }, swapAt?: number): CamPlan | undefined => {
+  if (fx && (fx.kind === 'eve' || fx.kind === 'oliver' || fx.kind === 'cecil')) {
+    const p = camReplay(fx.kind, fx.at)
+    if (at >= p.startAt - 1000 && at < p.endAt) return p
+  }
   const k = Math.floor(at / CAM_SLOT_MS)
   for (const slot of [k, k + 1]) {
     const p = camPlanOfSlot(slot)
