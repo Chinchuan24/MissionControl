@@ -11,6 +11,8 @@ import { bbRightLine } from './breakingbad-cards'
 import { THEMES, themeKeyOf } from './themes'
 import { ramStatus, settingsTagline, settingsTones } from './settingslook'
 import type { SettingsSection } from './settingslook'
+import { GROUP_TAGLINE, GROUP_TITLE, SECRET_PARENT, SKIN_GROUPS, groupOf, secretHint, skinTagline, skinsSummary } from './skinslook'
+import type { SkinGroup } from './skinslook'
 import { BCS_SKIN_WORDS, BCS_TOOLS, SAUL_GOODMAN_RE, TAKAVIC_RE } from './bettercallsaul'
 import { TOASTS, bashToast, cmdKind, fxOf, mcgillNow, resultFailed, toastDue } from './bettercallsaul-fx'
 import type { BashState, Fx, ToastKey } from './bettercallsaul-fx'
@@ -1923,6 +1925,8 @@ const readSkin = (raw: unknown, fallbackId: string): Skin | null => {
 }
 
 const skin = atom({ plugin: 'crab-progress', key: 'skin' } as const, CRAB_SKIN.id)
+// The Skins pane's last Skin kit reply (a draft, a check, a reload): written only when the person acts.
+const skinKit = atom({ plugin: 'crab-progress', key: 'skinKit' } as const, '')
 // Edgerunners 2 is one skin with two modes, D and CAPRI, that switch in place. `since` is the wall-clock ms of the last switch (it
 // pins the possession transition, and is 0 after a restart: no replay); `auto` is true when the context rule did it. The store
 // keeps the mode across restarts (mirrored here to redraw); `ER2` is the same state for the drawers, kept in step by `useSkin`.
@@ -5242,49 +5246,129 @@ const activityOf = (e: Record<string, unknown>): string => {
 // The panel's own wrapper for a crab that dances while the crew celebrates.
 const dancing = (drawn: string, isOn: boolean): string => (isOn ? `<g class="dance">${drawn}</g>` : drawn)
 
-// --- the skin picker: every skin as a small card in its own colours and shape,
-// with a button to put it on.
+// --- the skin picker: a banner (the worn skin's crew, "Skins", the counts and the skin worn),
+// then one card per skin under its group (skinslook.ts): a still picture, a mini pane in the
+// skin's own colours and shape with its mascot standing in it, the name in bold, a tagline, a
+// WEARING or SECRET badge, beside a native Wear button (the desktop draws a Button's label and
+// nothing inside it, so every visual lives in the picture). A secret still locked is a dimmed
+// silhouette of the skin it hides behind, with a hint of where to look and never the phrase.
+// The pictures read nothing that moves: no redraw while Claude works.
 
 const SKINS_PANE = 'crab-skins'
 // Settings and billing live in a pane of their own: the main pane redraws many times a
 // turn, and an open dropdown cannot survive that. This one reads only the quiet atoms.
 const SETTINGS_PANE = 'crab-settings'
 const SETTINGS_TITLE = 'Settings'
-const PREVIEW_H = 84
+const SKIN_CARD_H = 76
+// The mini pane at the left of a card, and where the text starts after it.
+const MINI = { x: 8, y: 8, w: 108, h: SKIN_CARD_H - 16 }
+const CARD_TX = MINI.x + MINI.w + 14
 
-const previewSvg = (W: number, k: Skin, isOn: boolean): string => {
-  const c = k.colors
-  const H = PREVIEW_H
-  const r = (n: number) => +n.toFixed(1)
-  const shape = (x: number, y: number, w: number, h: number, attrs: string, radius = 12): string => {
+// A skin's own card shape, whichever skin is worn: rounded, or cut at two corners like a HUD panel.
+const shapeOf =
+  (k: Skin) =>
+  (x: number, y: number, w: number, h: number, attrs: string, radius = 12): string => {
     if (k.corners !== 'chamfer') return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${radius}" ${attrs}/>`
     const cut = Math.min(radius, h / 3)
-    return `<path d="M${r(x + cut)} ${r(y)}H${r(x + w)}V${r(y + h - cut)}L${r(x + w - cut)} ${r(y + h)}H${r(x)}V${r(y + cut)}Z" ${attrs}/>`
+    return `<path d="M${r2(x + cut)} ${r2(y)}H${r2(x + w)}V${r2(y + h - cut)}L${r2(x + w - cut)} ${r2(y + h)}H${r2(x)}V${r2(y + cut)}Z" ${attrs}/>`
   }
-  const swatches = [c.accent, c.accent2, k.boss[1] ?? c.alert, c.done, c.warn, c.alert]
-    .map((col, i) => `<rect x="${W - 14 - (6 - i) * 16}" y="14" width="12" height="12" rx="${k.corners === 'chamfer' ? 1 : 6}" fill="${col}"/>`)
+
+// The skin's mascot standing still in a crab box (30 wide, feet at 27) scaled by `scale`: its
+// cast's boss, or the crab. Given `col` it is a flat silhouette in that colour, with no rim and
+// no face: the shape of the skin a secret hides behind, and nothing of the secret itself.
+const mascotOf = (k: Skin, x: number, y: number, scale: number, col?: string): string => {
+  const cast = k.cast ? CASTS[k.cast] : undefined
+  const at = `transform="translate(${r2(x)},${r2(y)}) scale(${scale})" shape-rendering="crispEdges"`
+  if (cast) {
+    const boss = cast.boss
+    const sp = col ? { rows: boss.rows, pal: Object.fromEntries(Object.keys(boss.pal).map(ch => [ch, col])), float: boss.float, rim: false } : boss
+    return `<g ${at}>${spriteMarkup(sp, col ?? k.roles[0] ?? k.colors.accent, CRAB_BOX)}</g>`
+  }
+  const rects: string[] = []
+  crabBody((cx, cy, w, h, c) => rects.push(`<rect x="${cx}" y="${cy}" width="${w}" height="${h}" fill="${col ?? c}"/>`))
+  return `<g ${at}>${rects.join('')}</g>`
+}
+
+// A small badge at the card's top right: "WEARING" in the accent, "SECRET" in the second accent.
+const cardBadge = (shape: ReturnType<typeof shapeOf>, right: number, text: string, fill: string, font: string): { markup: string; w: number } => {
+  const w = Math.ceil(textWidth(text, 10) * 1.12) + 16
+  const x = right - w
+  return {
+    w,
+    markup: `${shape(x, 10, w, 18, `fill="${fill}"`, 9)}<text x="${r2(x + w / 2)}" y="23" text-anchor="middle" font-family="${font}" font-size="10" font-weight="800" letter-spacing=".4" fill="${inkOn(fill)}">${xml(text)}</text>`,
+  }
+}
+
+type SkinCardFlags = { isOn: boolean; isSecret: boolean; mode?: string }
+// One skin's card, in that skin's own colours, font and shape: its mini pane (backdrop, a band
+// in the accent, two lines, a meter, the mascot), the name in bold, a tagline, six swatches of
+// its palette, and the badges. The card paints its own tile, so the text is the skin's own.
+const skinCardSvg = (W: number, k: Skin, tagline: string, flags: SkinCardFlags): string => {
+  const c = k.colors
+  const H = SKIN_CARD_H
+  const shape = shapeOf(k)
+  const m = MINI
+  const badges: string[] = []
+  let right = W - 10
+  for (const b of [flags.isOn ? { text: flags.mode ? `WEARING · ${flags.mode}` : 'WEARING', fill: c.accent } : null, flags.isSecret ? { text: '🔓 SECRET', fill: c.accent2 } : null]) {
+    if (!b) continue
+    const drawn = cardBadge(shape, right, b.text, b.fill, k.font)
+    badges.push(drawn.markup)
+    right -= drawn.w + 6
+  }
+  const nameMax = Math.max(60, right - CARD_TX - 6)
+  const meterW = 46
+  const swatches = [c.accent, c.accent2, c.done, c.warn, c.alert, c.meter]
+    .map((col, i) => `<rect x="${CARD_TX + i * 13}" y="55" width="9" height="9" rx="${k.corners === 'chamfer' ? 1 : 4.5}" fill="${col}"/>`)
     .join('')
-  const barW = W - 28 - 60
   const scan = k.effects.scanlines
-    ? `<defs><pattern id="pscan" width="4" height="3" patternUnits="userSpaceOnUse"><rect width="4" height="1" fill="#ffffff" fill-opacity=".05"/></pattern></defs>${shape(1, 1, W - 2, H - 2, 'fill="url(#pscan)"')}`
+    ? `<defs><pattern id="pscan" width="4" height="3" patternUnits="userSpaceOnUse"><rect width="4" height="1" fill="#ffffff" fill-opacity=".05"/></pattern></defs>${shape(0.5, 0.5, W - 1, H - 1, 'fill="url(#pscan)"')}`
     : ''
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
-${shape(1, 1, W - 2, H - 2, `fill="${c.tile}" stroke="${isOn ? c.accent : c.line}" stroke-width="${isOn ? 2 : 1}"`)}
-<text x="14" y="26" font-family="${k.font}" font-size="15" font-weight="700" fill="${c.accent}">${xml(k.name)}${isOn ? `<tspan fill="${c.subtext}" font-size="11" font-weight="500">   on now</tspan>` : ''}</text>
+${shape(0.5, 0.5, W - 1, H - 1, `fill="${c.tile}" stroke="${flags.isOn ? c.accent : c.line}" stroke-width="${flags.isOn ? 2 : 1}"`)}
+${shape(m.x, m.y, m.w, m.h, `fill="${k.backdrop.fill || c.track}"`, 8)}
+<rect x="${m.x + 6}" y="${m.y + 7}" width="40" height="4" rx="2" fill="${c.accent}"/>
+<rect x="${m.x + 6}" y="${m.y + 16}" width="30" height="3" rx="1.5" fill="${c.text}" fill-opacity=".55"/>
+<rect x="${m.x + 6}" y="${m.y + 22}" width="22" height="3" rx="1.5" fill="${c.subtext}" fill-opacity=".5"/>
+<rect x="${m.x + 6}" y="${m.y + m.h - 13}" width="${meterW}" height="5" rx="2.5" fill="${c.grid}"/>
+<rect x="${m.x + 6}" y="${m.y + m.h - 13}" width="${r2(meterW * 0.62)}" height="5" rx="2.5" fill="${c.meter}"/>
+${mascotOf(k, m.x + m.w - 48, m.y + m.h - 3 - 27 * 1.5, 1.5)}
+<text x="${CARD_TX}" y="28" font-family="${k.font}" font-size="14" font-weight="700" fill="${c.text}">${xml(fitText(k.name, 14, nameMax))}</text>
+<text x="${CARD_TX}" y="46" font-family="${k.font}" font-size="11.5" fill="${c.subtext}">${xml(fitText(tagline, 11.5, W - CARD_TX - 12))}</text>
 ${swatches}
-<text x="14" y="46" font-family="${k.font}" font-size="11.5" fill="${c.subtext}">${xml(fitText(k.description || ' ', 11.5, W - 28))}</text>
-${shape(14, 58, barW, 8, `fill="${c.track}"`, 4)}
-${shape(14, 58, barW * 0.62, 8, `fill="${c.meter}"`, 4)}
-<text x="${W - 14}" y="66" text-anchor="end" font-family="${k.font}" font-size="12" font-weight="700" fill="${c.text}">62%</text>
+${badges.join('')}
 ${scan}
 </svg>`
+}
+
+// A secret still locked, drawn in the worn skin: a dashed frame, the silhouette of the skin it
+// hides behind (a "?" when there is none), "???" and a hint of where to look.
+const secretCardSvg = (W: number, parent: Skin | undefined, hint: string): string => {
+  const c = SKIN.colors
+  const H = SKIN_CARD_H
+  const m = MINI
+  const figure = parent
+    ? mascotOf(parent, m.x + (m.w - 45) / 2, m.y + m.h - 3 - 27 * 1.5, 1.5, c.muted)
+    : `<text x="${m.x + m.w / 2}" y="${m.y + m.h / 2 + 10}" text-anchor="middle" font-family="${FONT}" font-size="28" font-weight="800" fill="${c.muted}">?</text>`
+  const word = '🔒 SECRET'
+  const pillW = Math.ceil(textWidth(word, 10) * 1.12) + 16
+  return stillSvg(
+    W,
+    H,
+    `${cardShape(0.5, 0.5, W - 1, H - 1, `class="tile" stroke="${c.muted}" stroke-opacity=".6" stroke-dasharray="4 3"`, 12)}
+${cardShape(m.x, m.y, m.w, m.h, `fill="${c.muted}" fill-opacity=".12"`, 8)}
+<g opacity=".55">${figure}</g>
+<text class="t" x="${CARD_TX}" y="28" font-family="${FONT}" font-size="14" font-weight="700" opacity=".8">???</text>
+<text class="s" x="${CARD_TX}" y="46" font-family="${FONT}" font-size="11.5">${xml(fitText(`secret skin · ${hint}`, 11.5, W - CARD_TX - 12))}</text>
+${cardShape(W - 10 - pillW, 10, pillW, 18, `fill="none" stroke="${c.muted}" stroke-opacity=".8"`, 9)}<text class="s" x="${r2(W - 10 - pillW / 2)}" y="23" text-anchor="middle" font-family="${FONT}" font-size="10" font-weight="800" letter-spacing=".4">${word}</text>`,
+  )
 }
 
 // The Settings pane's banner: the skin's own crew standing small at the left (the boss
 // between two of its workers), the title, and what is set now as chips in the colours of
 // the cards they come from. Drawn still: no motion CSS, so a redraw never replays anything.
 const SETTINGS_BANNER_H = 88
-const settingsBannerSvg = (W: number, chips: readonly { text: string; tone: string }[]): string => {
+const settingsBannerSvg = (W: number, chips: readonly { text: string; tone: string }[], title = SETTINGS_TITLE): string => {
   const H = SETTINGS_BANNER_H
   const c = SKIN.colors
   // The crew needs ~150 px; a narrow pane keeps the boss alone.
@@ -5310,7 +5394,7 @@ const settingsBannerSvg = (W: number, chips: readonly { text: string; tone: stri
     `${cardShape(0.5, 0.5, W - 1, H - 1, `class="tile" stroke="${c.accent}" stroke-opacity=".55"`, 14)}
 <rect x="0.5" y="16" width="3" height="${H - 32}" rx="1.5" fill="${c.accent}"/>
 ${crew}
-<text class="t" x="${x0}" y="37" font-family="${FONT}" font-size="22" font-weight="800">Settings</text>
+<text class="t" x="${x0}" y="37" font-family="${FONT}" font-size="22" font-weight="800">${xml(title)}</text>
 ${pills.join('')}`,
   )
 }
@@ -6752,6 +6836,34 @@ async function registerEntryPoints($: EngineInterface): Promise<void> {
 async function healEntryPoints($: EngineInterface): Promise<void> {
   const listed = await $.command.list()
   if (!listed.some(c => c.name === 'missioncontrol')) await registerEntryPoints($)
+}
+
+// The Skin kit, shared by /skin and the Skins pane's footer. The listing (▸ marks the worn skin)
+// shows the skins that can be worn, a hidden one only while it is worn.
+const skinListing = (): string =>
+  [...SKINS.values()]
+    .filter(k => canWear(k) && (!k.hidden || k.id === SKIN.id))
+    .map(k => `${k.id === SKIN.id ? '▸' : ' '} ${k.id}  ${k.name}${k.description ? ` · ${k.description}` : ''}`)
+    .join('\n')
+// /skin reload: re-reads the folder and the add-on; a skin from an add-on that is gone falls back to the crab.
+async function skinReload($: EngineInterface): Promise<string> {
+  const { folder, loaded, skipped } = await loadSkins($)
+  await checkAddon($)
+  const found = SKINS.get(SKIN.id)
+  const current = found && canWear(found) ? found : CRAB_SKIN
+  applySkin(current)
+  await update($, skin, () => `${current.id}`)
+  return folder ? `Reloaded ${loaded} skin file(s) from ${folder}.${skipped.length ? `\nSkipped: ${skipped.join('; ')}` : ''}\n${skinListing()}` : `No "${SKINS_FOLDER}" folder found.\n${skinListing()}`
+}
+// /skin new <idea> and /skin check <file>: skinkit.ts does the work; a saved draft is loaded at once.
+async function skinKitRun($: EngineInterface, kind: 'new' | 'check', arg: string): Promise<string> {
+  const reload = async () => {
+    await loadSkins($)
+    const found = SKINS.get(SKIN.id)
+    if (found) applySkin(found)
+  }
+  const deps = { folderName: SKINS_FOLDER, taken: () => new Set(SKINS.keys()), reload }
+  return kind === 'new' ? skinNew($, arg, deps) : skinCheck($, arg, deps)
 }
 
 export const register: Register = (on, options) => {
@@ -8211,8 +8323,12 @@ export const register: Register = (on, options) => {
     return { text: 'Skin picker opened.' }
   })
 
+  // The skin picker. It reads the skin, er2Mode (through useSkin) and skinKit atoms only, all of
+  // which change when the person acts: no redraw while Claude works.
   on('ui.render', { component: 'Pane', requestId: SKINS_PANE }, async ($, e) => {
+    try {
     const active = await useSkin($)
+    const kitText = await read($, skinKit)
     const ui = $.ui.resolve(e)
     const { Box, Text, Button } = ui
     const wear = async (k: Skin) => {
@@ -8222,45 +8338,166 @@ export const register: Register = (on, options) => {
       await retitle($)
       await er2ContextRule($, er2Ctx).catch(() => undefined)
     }
-    const skins = [...SKINS.values()].filter(k => canWear(k) && (!k.hidden || k.id === active.id))
-    if (e.surface === 'desktop' && 'Svg' in ui) {
-      const { Svg } = ui
-      // Drawn wider than the pane's columns suggest, then shrunk to the pane by the app:
-      // the cards fill it edge to edge instead of leaving a dark strip at the right.
-      const W = Math.max(240, Math.min(1100, Math.round((e.props.bodyColumns || 40) * 10) - 8))
+    const c = SKIN.colors
+    const isDark = SKIN.dark
+    const tones = settingsTones(c, SKIN.roles, SKIN.boss)
+    const isCapri = SKIN.cast === 'capricorn'
+    // What the picker offers, as before: the skins that can be worn, a hidden one only while it is worn.
+    const shown = [...SKINS.values()].filter(k => canWear(k) && (!k.hidden || k.id === active.id))
+    // The secrets still locked, shown as silhouettes and never by name. CAPRICORN has no entry of its own
+    // once found (it is Edgerunners 2 in CAPRI mode); an add-on's secret stays unmentioned without the add-on.
+    const locked = [...SKINS.values()].filter(k => k.hidden && canWear(k) && k.id !== active.id && !(k.id === 'capricorn' && isCapri))
+    const found = (active.hidden ? 1 : 0) + (isCapri ? 1 : 0)
+    const builtIn = new Set(BUILT_IN_SKINS.map(k => k.id))
+    type Entry = { k: Skin; isLocked: boolean }
+    const groups: Record<SkinGroup, Entry[]> = { classics: [], tv: [], city: [], yours: [] }
+    for (const k of shown) groups[groupOf(k.cast, builtIn.has(k.id))].push({ k, isLocked: false })
+    // A locked secret sits right after the skin it hides behind.
+    for (const k of locked) {
+      const g = groups[groupOf(k.cast, builtIn.has(k.id))]
+      const at = g.findIndex(x => x.k.id === SECRET_PARENT[k.id])
+      g.splice(at < 0 ? g.length : at + 1, 0, { k, isLocked: true })
+    }
+    const groupTone: Record<SkinGroup, string> = { classics: tones.look, tv: tones.crew, city: tones.money, yours: tones.guard }
+    const Svg = e.surface !== 'terminal' && 'Svg' in ui ? ui.Svg : null
+    const Field = 'Input' in ui ? ui.Input : null
+    const W = Math.max(240, Math.min(1100, Math.round((e.props.bodyColumns || 40) * 10) - 8))
+    // A card keeps a readable measure; the Wear button sits beside it, and wraps under it in a narrow pane.
+    const cardW = Math.max(230, Math.min(520, W - 96))
+    const rowW = Math.max(230, Math.min(320, Math.round(W * 0.52)))
+    const muted = (key: string, text: string) =>
+      isDark ? <Text key={key} color={c.muted} size="footnote" wrap="wrap">{text}</Text> : <Text key={key} dimColor size="footnote" wrap="wrap">{text}</Text>
+    const strong = (key: string, text: string) => <Text key={key} bold {...(isDark ? { color: c.text } : {})}>{text}</Text>
+    const chip = (key: string, text: string, fill: string) => <Text key={key} backgroundColor={fill} color={inkOn(fill)} bold>{` ${text} `}</Text>
+    // The banner: the counts (skins, secrets found, secrets hidden) and the skin worn, in the groups' colours.
+    const chips = [...skinsSummary(shown.length, found, locked.length).map((text, i) => ({ text, tone: i === 0 ? tones.crew : tones.money })), { text: `Wearing ${SKIN.name}`, tone: tones.look }]
+    const banner = Svg ? (
+      <Svg key="skins-banner" source={settingsBannerSvg(W, chips, 'Skins')} alt={`Skins: ${chips.map(ch => ch.text).join(', ')}`} />
+    ) : (
+      <Box key="skins-banner" flexDirection="row" flexWrap="wrap" columnGap={1}>
+        <Text bold color={c.accent}>🎨 Skins</Text>
+        {chips.map((ch, i) => chip(`skins-chip-${i}`, ch.text, ch.tone))}
+      </Box>
+    )
+    // One skin: its picture (or, on the terminal, its name, badges and tagline) and the Wear button beside it.
+    const cardRow = (en: Entry) => {
+      const k = en.k
+      if (en.isLocked) {
+        const parent = SKINS.get(SECRET_PARENT[k.id] ?? '')
+        const hint = secretHint(k.id, parent?.name)
+        return Svg ? (
+          <Box key={`secret-${k.id}`} flexDirection="row">
+            <Svg key={`secret-${k.id}-art`} source={secretCardSvg(cardW, parent, hint)} alt={`Secret skin, locked: ${hint}`} width={cardW} height={SKIN_CARD_H} />
+          </Box>
+        ) : (
+          muted(`secret-${k.id}`, `  ??? secret skin · ${hint}`)
+        )
+      }
+      const isOn = k.id === active.id
+      // The worn card shows the live palette (Edgerunners 2 in CAPRI mode wears hers).
+      const live = isOn ? SKIN : k
+      const isSecret = Boolean(k.hidden) || (isOn && isCapri)
+      const tagline = isOn && isCapri ? skinTagline('capricorn', '') : skinTagline(k.id, k.description)
+      const alt = `${k.name}: ${tagline}${isOn ? ' · wearing' : ''}${isSecret ? ' · secret, found' : ''}`
       return (
-        <Box flexDirection="column" gap={1}>
-          <Text dimColor>Pick a look for Mission Control and the band. Your own skins go in the Custom Claude Skins folder.</Text>
-          {HAS_CYBER ? null : <Text dimColor>{ADDON_PITCH}</Text>}
-          {skins.map(k => (
-            <Box key={`skin-${k.id}`} flexDirection="column">
-              <Svg source={previewSvg(W, k, k.id === active.id)} alt={`${k.name}: ${k.description}`} />
-              {k.id === active.id ? (
-                <Text dimColor>✓ On now</Text>
-              ) : (
-                <Button key={`wear-${k.id}`} label={`Use ${k.name} ▸`} plain onPress={() => wear(k)} />
-              )}
+        <Box key={`skin-${k.id}`} flexDirection="row" flexWrap="wrap" columnGap={1} alignItems="center">
+          {Svg ? (
+            <Svg key={`skin-${k.id}-art`} source={skinCardSvg(cardW, live, tagline, { isOn, isSecret, mode: isOn && isCapri ? 'CAPRI' : '' })} alt={alt} width={cardW} height={SKIN_CARD_H} />
+          ) : (
+            <Box key={`skin-${k.id}-text`} flexDirection="row" flexWrap="wrap" columnGap={1}>
+              <Text color={k.colors.accent} bold>{`${isOn ? '▸' : ' '} ${k.name}`}</Text>
+              {isOn ? chip(`skin-${k.id}-on`, isCapri ? 'WEARING · CAPRI' : 'WEARING', c.accent) : null}
+              {isSecret ? chip(`skin-${k.id}-secret`, '🔓 secret', c.accent2) : null}
+              <Text dimColor wrap="truncate-end">{tagline}</Text>
             </Box>
-          ))}
+          )}
+          {isOn ? muted(`skin-${k.id}-now`, '✓ On now') : <Button key={`wear-${k.id}`} label={Svg ? 'Wear ▸' : 'use'} plain onPress={() => wear(k)} />}
         </Box>
       )
     }
-    return (
-      <Box flexDirection="column">
-        {HAS_CYBER ? null : <Text dimColor>{ADDON_PITCH}</Text>}
-        {skins.map(k => (
-          <Box key={`skin-${k.id}`} flexDirection="row" gap={1}>
-            <Text color={k.colors.accent} bold>
-              {k.id === active.id ? '▸' : ' '} {k.name}
-            </Text>
-            <Text dimColor wrap="truncate-end">
-              {k.description}
-            </Text>
-            {k.id !== active.id && <Button key={`wear-${k.id}`} label="use" plain onPress={() => wear(k)} />}
+    // A group: a band in its colour (the title bold, the tagline after it), a frame in the same colour, its cards.
+    const groupCard = (g: SkinGroup, entries: Entry[]) => {
+      // Night City without the add-on says where the add-on is, as /skin does; an empty group of your own is left out.
+      if (!entries.length && (g !== 'city' || HAS_CYBER)) return null
+      const tone = groupTone[g]
+      const ink = inkOn(tone)
+      return (
+        <Box key={`skins-${g}`} flexDirection="column" borderStyle="round" borderColor={tone} {...(isDark ? { backgroundColor: c.tile } : {})}>
+          <Box key={`skins-${g}-band`} flexDirection="row" flexWrap="wrap" columnGap={2} alignItems="center" paddingX={1} backgroundColor={tone}>
+            <Text bold size="heading" color={ink}>{GROUP_TITLE[g]}</Text>
+            <Text color={ink} size="footnote">{GROUP_TAGLINE[g]}</Text>
           </Box>
-        ))}
+          <Box flexDirection="column" gap={1} paddingX={1} paddingY={1}>
+            {entries.map(cardRow)}
+            {g === 'city' && !HAS_CYBER ? muted('skins-pitch', ADDON_PITCH) : null}
+          </Box>
+        </Box>
+      )
+    }
+    // The Skin kit: draft, check, reload and the folder, each a row picture with its native control beside it.
+    const tk = tones.billing
+    const runKit = async (kind: 'new' | 'check' | 'reload', arg: string) => {
+      const text = kind === 'reload' ? await skinReload($) : await skinKitRun($, kind, arg)
+      await update($, skinKit, () => text)
+      $.ui.toast(clip(text.split('\n')[0] ?? '', 120))
+    }
+    const folder = await $.store.get('skinsFolder').catch(() => undefined)
+    const folderPath = typeof folder === 'string' ? folder : ''
+    const folderName = folderPath.split(/[\\/]/).filter(Boolean).pop() ?? ''
+    const kitRow = (key: string, art: Omit<SettingsRowArt, 'tone'>, ...controls: unknown[]) => {
+      const shown = controls.filter(Boolean)
+      if (Svg)
+        return (
+          <Box key={key} flexDirection="row" flexWrap="wrap" columnGap={1} alignItems="center">
+            <Svg key={`${key}-art`} source={settingsRowSvg(rowW, { ...art, tone: tk })} alt={`${art.label}${art.pill ? `: ${art.pill}` : ''}. ${art.hint}`} width={rowW} height={SETTINGS_ROW_H} />
+            {shown as never}
+          </Box>
+        )
+      return (
+        <Box key={key} flexDirection="column">
+          <Box key={`${key}-head`} flexDirection="row" flexWrap="wrap" columnGap={1} alignItems="center">
+            {strong(`${key}-l`, art.label)}
+            {art.pill ? chip(`${key}-v`, art.pill, tk) : null}
+            {shown as never}
+          </Box>
+          {muted(`${key}-h`, art.hint)}
+        </Box>
+      )
+    }
+    const kitCard = (
+      <Box key="skins-kit" flexDirection="column" borderStyle="round" borderColor={tk} {...(isDark ? { backgroundColor: c.tile } : {})}>
+        <Box key="skins-kit-band" flexDirection="row" flexWrap="wrap" columnGap={2} alignItems="center" paddingX={1} backgroundColor={tk}>
+          <Text bold size="heading" color={inkOn(tk)}>🧰 Skin kit</Text>
+          <Text color={inkOn(tk)} size="footnote">draft one, check a file, reload the folder</Text>
+        </Box>
+        <Box flexDirection="column" gap={1} paddingX={1} paddingY={1}>
+          {kitRow(
+            'kit-new',
+            { icon: '✨', label: 'Draft a skin', hint: Field ? 'Haiku writes one from a short idea' : 'Type /skin new <idea>' },
+            Field ? <Field key="kit-new-idea" placeholder="an idea: ocean sunset" value="" submitLabel="Draft" onSubmit={(v: string) => void runKit('new', v)} /> : null,
+          )}
+          {kitRow(
+            'kit-check',
+            { icon: '🔍', label: 'Check a file', hint: Field ? 'Says what the loader would reject' : 'Type /skin check <file>' },
+            Field ? <Field key="kit-check-file" placeholder="my-skin.json" value="" submitLabel="Check" onSubmit={(v: string) => void runKit('check', v)} /> : null,
+          )}
+          {kitRow('kit-reload', { icon: '↻', label: 'Reload', hint: 'Re-reads the folder after an edit' }, <Button key="kit-reload-btn" label="↺ Reload" plain onPress={() => void runKit('reload', '')} />)}
+          {kitRow('kit-folder', { icon: '📁', label: 'Folder', hint: folderPath || `None yet: a draft makes "${SKINS_FOLDER}" in the project`, pill: folderName || 'none yet' })}
+          {kitText ? <Text key="kit-out" wrap="wrap" {...(isDark ? { color: c.text } : {})}>{kitText}</Text> : null}
+        </Box>
       </Box>
     )
+    return (
+      <Box flexDirection="column" gap={1} {...(isDark && SKIN.backdrop.fill ? { backgroundColor: SKIN.backdrop.fill } : {})}>
+        {banner}
+        {SKIN_GROUPS.map(g => groupCard(g, groups[g]))}
+        {kitCard}
+      </Box>
+    )
+    } catch (err) {
+      const { Text } = $.ui.resolve(e)
+      return <Text wrap="wrap">{`Skins could not draw: ${String((err as Error)?.stack ?? err).slice(0, 800)}`}</Text>
+    }
   })
 
   // Settings and billing, in a pane of their own. The main pane redraws in bursts while a
@@ -8710,28 +8947,10 @@ export const register: Register = (on, options) => {
 
   on('command.run', { command: 'skin' }, async ($, e) => {
     const arg = (e.args ?? '').trim().toLowerCase()
-    const listing = () =>
-      [...SKINS.values()].filter(k => canWear(k) && (!k.hidden || k.id === SKIN.id)).map(k => `${k.id === SKIN.id ? '▸' : ' '} ${k.id}  ${k.name}${k.description ? ` · ${k.description}` : ''}`).join('\n')
-    if (arg === 'reload') {
-      const { folder, loaded, skipped } = await loadSkins($)
-      await checkAddon($)
-      // A skin from an add-on that is gone falls back to the crab.
-      const found = SKINS.get(SKIN.id)
-      const current = found && canWear(found) ? found : CRAB_SKIN
-      applySkin(current)
-      await update($, skin, () => `${current.id}`)
-      return { text: folder ? `Reloaded ${loaded} skin file(s) from ${folder}.${skipped.length ? `\nSkipped: ${skipped.join('; ')}` : ''}\n${listing()}` : `No "${SKINS_FOLDER}" folder found.\n${listing()}` }
-    }
+    const listing = skinListing
+    if (arg === 'reload') return { text: await skinReload($) }
     const word = /^(new|check)(?:\s+([\s\S]*))?$/i.exec((e.args ?? '').trim())
-    if (word) {
-      const reload = async () => {
-        await loadSkins($)
-        const found = SKINS.get(SKIN.id)
-        if (found) applySkin(found)
-      }
-      const deps = { folderName: SKINS_FOLDER, taken: () => new Set(SKINS.keys()), reload }
-      return { text: word[1]!.toLowerCase() === 'new' ? await skinNew($, word[2] ?? '', deps) : await skinCheck($, word[2] ?? '', deps) }
-    }
+    if (word) return { text: await skinKitRun($, word[1]!.toLowerCase() === 'new' ? 'new' : 'check', word[2] ?? '') }
     if (arg === 'folder') {
       const folder = await $.store.get('skinsFolder').catch(() => undefined)
       return { text: typeof folder === 'string' ? `Skins folder: ${folder}` : `No "${SKINS_FOLDER}" folder found yet.` }
