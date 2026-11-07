@@ -58,7 +58,7 @@ const d2 = (a: string, b: string): number => {
 const PATHS = new Map<string, string>()
 /** The `<path>`s of a sprite in pixel units (one per colour), rectangles merged, at most `K` colours. */
 export const rectPaths = (sp: Sprite, K: number): string => {
-  const key = `${sp.rows.length}|${sp.rows[0]}|${sp.rows[sp.rows.length >> 1]}|${K}`
+  const key = `${sp.rows.length}|${sp.rows[0]?.length}|${hash(sp.rows.join(''))}|${hash(JSON.stringify(sp.pal))}|${K}`
   const hit = PATHS.get(key)
   if (hit !== undefined) return hit
   const count = new Map<string, number>()
