@@ -5870,7 +5870,8 @@ const slimBandSvg = (OW: number, d: HudData): string => {
     rx -= sw('CACHE', 9.5, 0.8, true) + 22
     rights.push(`<rect class="k" x="${barX}" y="${yb - 7}" width="${barW}" height="4"/><rect x="${barX}" y="${yb - 7}" width="${live ? live.start : r2(barW * cacheShare)}" height="4" fill="${cacheTone}"${left !== null && left <= 600 && !ss.isBusy ? ' class="live"' : ''}>${live ? live.animate : ''}</rect>`)
   } else rx = xr - 24 // no cache bar: the corner (the smiley's) stays free
-  const totalOk = place('TOTAL', totalText, sw(totalText, 11.5) + 2)
+  // A theme whose name already draws the total in its own hand (Better Call Saul, GENE) skips the generic readout: one total, not two.
+  const totalOk = sl?.ownsTotal ? true : place('TOTAL', totalText, sw(totalText, 11.5) + 2)
   if (cacheOk && totalOk) for (const [k, v] of [parts[1], parts[0]] as [string, string][]) if (!place(k, v, sw(v, 11.5) + 2)) break
   s.push(...rights)
   const tipLive = d.tip.level === 2
