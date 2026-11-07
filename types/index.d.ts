@@ -290,6 +290,8 @@ declare module 'claude-code' {
       er2Mode: string
       /** The Skins pane's last Skin kit reply (a draft saved, a file checked, a reload); '' when none. */
       skinKit: string
+      /** Invincible's era (1 the classic suit, 2 the new suit) and when it last switched (0 after a restart), as `era|since`. */
+      invEra: string
       /** Mission Control's settings, mirrored from `$.store` so the pane redraws. */
       settings: { openOnStart: boolean; crewMode: boolean; crewAlways?: boolean; currency: string; sounds: boolean; simple: boolean; calm: boolean; voice: boolean; staffing: boolean; oneShot: 'ask' | 'on' | 'off'; ultraBy: 'me' | 'manager'; dailyUsd: number; autopilot: boolean; keepWarm: boolean; budgetUsd: number; tkOn: boolean; tkJobMin: number; tkAgentMin: number; ramLimit: string; maxAgents: number; killSwitch: string }
       /** Machine Guard: the detected machine as one line and in two words ("48 GB Mac", '' unknown), RAM in use (%, -1 before the first sample), the crew size in force and the calibrated one, and whether RAM is tight. */
