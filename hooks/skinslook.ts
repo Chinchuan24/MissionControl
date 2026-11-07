@@ -41,6 +41,7 @@ const TAGLINES: Record<string, string> = {
   samurai: 'Red on black, stage lights, never fade away',
   capricorn: 'She owns the HUD now',
   invincible: 'The comic page: Mark and Omni-Man across the panels',
+  caliper: 'Graphite and ice: a dial, a ruler, one blue',
 }
 
 /** The card's tagline: the short line for a built-in skin, else the description's first clause. */

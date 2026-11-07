@@ -20,3 +20,9 @@ test('skins pane: Invincible sits under TV shows in both eras', () => {
   expect(groupOf('invincible2', true)).toBe('tv')
   expect(groupOf('invincible', false)).toBe('yours')
 })
+
+test('skins pane: Caliper is a Classic in both faces, with its own tagline', () => {
+  expect(groupOf('caliper', true)).toBe('classics')
+  expect(groupOf('caliperlight', true)).toBe('classics')
+  expect(skinTagline('caliper', '')).toBe('Graphite and ice: a dial, a ruler, one blue')
+})

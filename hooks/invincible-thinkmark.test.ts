@@ -5,9 +5,10 @@ import { camPlanOfSlot } from './invincible-cameos'
 import { CAM_SLOT_MS } from './invincible-cameos'
 import type { CamPlan } from './invincible-cameos'
 import { AHEAD_MS, THINK_RE, duelPlan, showdownPlan } from './invincible-eggs'
-import { BUBBLES, DRAW_BUDGET, TM_KIND, TM_MS, drawOf, frameOf, shotAt, thinkMarkFx, thinkMarkHolds, thinkMarkLive, thinkMarkPane, thinkMarkRedraws } from './invincible-thinkmark'
+import { BUBBLES, DRAW_BUDGET, SHOT_COUNT, TM_KIND, TM_MS, drawOf, frameOf, patchWindows, shotAt, thinkMarkFx, thinkMarkHolds, thinkMarkLive, thinkMarkPane, thinkMarkRedraws } from './invincible-thinkmark'
+import { HARD_CUTS, PATCHES, SHOT_TIMES } from './invincible-thinkmark-plan'
 import { clearThinkMarkTimers, pendingThinkMarkTimers, scheduleThinkMark } from './invincible-thinkmark-timers'
-import { TM, TM_NAMES } from './invincible-thinkmark-sprites'
+import { PATCH_AT, TM, TM_NAMES } from './invincible-thinkmark-sprites'
 import { mock } from 'claude-code/testing'
 
 const pane = { title: '', isFocused: false, bodyColumns: 100, placement: 'dock', scroll: { offset: 0, bodyRows: 60 }, view: {} } as const
@@ -96,15 +97,54 @@ const sig = async ($: Engine) => {
 }
 const playing = (l: string[]) => l.filter(s => s.includes('class="tm-anim"'))
 
-test('think, mark: the sprite contract is all there, the trigger is the same words', () => {
-  expect(TM_NAMES).toHaveLength(17)
-  for (const n of TM_NAMES) expect(TM[n].rows.length).toBeGreaterThan(8)
+/** The plan's cut times, seconds: the start of each of the 24 shots, then the end. */
+const CUTS = [0, 2.85, 5.25, 7.2, 8.75, 14.3, 16.1, 18.1, 19.65, 24.65, 26.25, 30.4, 31.1, 32.45, 39.75, 45.7, 46.95, 48, 52.05, 55.65, 56.45, 58.6, 62.1, 63.35, 65]
+/** The plan's nine bubbles, word for word: [number, shot, who, start, end, text]. Only 4 and 9 are the show's own lines. */
+const PLAN_BUBBLES: [number, number, string, number, number, string][] = [
+  [1, 1, 'Omni-Man', 0.5, 2.8, 'Why force my hand?!'],
+  [2, 2, 'Omni-Man', 3.1, 5.2, "You'd let them all fall for this?!"],
+  [3, 3, 'Omni-Man', 5.6, 7.9, "You'd keep fighting while they all drop?"],
+  [4, 4, 'Omni-Man', 8.0, 9.6, 'THINK, MARK!'],
+  [5, 5, 'Omni-Man', 9.9, 13.4, "They'll all be gone. You won't."],
+  [6, 6, 'Omni-Man', 14.5, 17.2, 'This planet will rot away around you.'],
+  [7, 9, 'Omni-Man', 20.0, 24.4, 'Every face you love will vanish.'],
+  [8, 11, 'Omni-Man', 27.0, 31.6, "Five centuries on, what's left for you?"],
+  [9, 14, 'Mark', 36.8, 39.7, "I'd still have you."],
+]
+test('think, mark: the sprite contract is all there (but the one patch the art left out), the trigger is the same words', () => {
+  const missing = TM_NAMES.filter(n => !TM[n])
+  expect(missing.sort()).toEqual(['TM2_P_PROF_BLINK'])
+  expect(TM_NAMES).toHaveLength(50)
+  for (const n of TM_NAMES) if (TM[n] && !n.includes('_P_') && !n.includes('FX_')) expect(TM[n].rows.length).toBeGreaterThan(8)
   expect(THINK_RE.test('think, mark')).toBe(true)
   expect(TM_MS).toBe(65_000)
 })
-test('think, mark: at most six short bubbles, none over eleven words', () => {
-  expect(BUBBLES.length).toBeLessThanOrEqual(6)
-  for (const b of BUBBLES) expect(b[2].split(/\s+/).length).toBeLessThan(12)
+test('think, mark: 24 shots at the plan\'s cut times; the hard cuts are the plan\'s eleven', () => {
+  expect(SHOT_COUNT).toBe(24)
+  expect(SHOT_TIMES).toHaveLength(24)
+  expect([...SHOT_TIMES.map(s => s[0]), SHOT_TIMES[23]![1]]).toEqual(CUTS)
+  for (let i = 1; i < 24; i++) expect(SHOT_TIMES[i]![0]).toBe(SHOT_TIMES[i - 1]![1])
+  expect(HARD_CUTS).toEqual([5.25, 19.65, 24.65, 26.25, 32.45, 39.75, 46.95, 52.05, 55.65, 56.45, 63.35])
+  for (let i = 0; i < 24; i++) expect(shotAt(CUTS[i]! + 0.01)).toBe(i)
+})
+test('think, mark: nine bubbles at the plan\'s times with the plan\'s exact text; the show\'s own words only in 4 and 9', () => {
+  expect(BUBBLES).toHaveLength(9)
+  for (const [i, b] of PLAN_BUBBLES.entries()) {
+    const d = BUBBLES[i]!
+    expect([d.n, d.shot, d.who, d.start, d.end, d.text]).toEqual([...b])
+    expect(d.text.split(/\s+/).length).toBeLessThan(10)
+    // it is in the draws of its shots, shows from its start (the keyframe), and is in no draw far from it
+    for (const [wd, hd] of [[992, 384], [360, 300]] as const) {
+      const dr = drawOf(wd, hd, d.shot - 1)
+      const svg = thinkMarkPane(wd, hd, 'cred', 0, d.start + 0.01)
+      expect(svg).toContain(`>${d.text}</text>`)
+      const m = new RegExp(`@keyframes tmcb${d.n}\\{[^@]*?([\\d.]+)%\\{opacity:1;transform:scale\\(\\.85\\)\\}`).exec(dr.css) ?? new RegExp(`@keyframes tmcb${d.n}\\{[^@]*?([\\d.]+)%\\{opacity:1;transform:scale\\(\\.85\\)\\}`).exec(svg)
+      expect(Math.abs((Number(m?.[1]) / 100) * 65 - d.start)).toBeLessThan(0.01)
+    }
+    const far = thinkMarkPane(992, 384, 'cred', 0, (d.start + 30) % 64)
+    expect(far).not.toContain(`>${d.text}</text>`)
+  }
+  expect(BUBBLES.filter(b => ['THINK, MARK!', "I'd still have you."].includes(b.text)).map(b => b.n)).toEqual([4, 9])
 })
 test('think, mark: the windows: live from a second before the start to 65 s after; holds overlapping spans', () => {
   const fx = thinkMarkFx(10_000)
@@ -169,8 +209,8 @@ test('think, mark: the pane carries the whole film: one duration, keyframes in p
   expect(cred).not.toContain('@@T')
   expect(cred.match(/@keyframes/g)?.length).toBeGreaterThan(15)
   // a draw carries the bubbles of its own shots only
-  expect(cred).toContain('THINK! USE YOUR HEAD FOR ONCE!')
-  expect(cred).not.toContain("I'D HAVE MY DAD")
+  expect(cred).toContain('Why force my hand?!')
+  expect(cred).not.toContain("I'd still have you.")
 })
 test('think, mark: reduced motion: a still title card with one line and no animation; the band a still strip', async ($, on) => {
   base(on, 100_000, quietAt())
@@ -284,30 +324,65 @@ test('think, mark: the picture is as big as the card allows, 16:9, at full resol
 })
 test('think, mark: every draw has at most two shots, fits its byte budget and each Svg stays under 131072', () => {
   for (const [W, H] of [[992, 384], [496, 434], [360, 300]] as const) {
-    for (let k = 0; k < 12; k++) {
+    for (let k = 0; k < SHOT_COUNT; k++) {
       const d = drawOf(W, H, k)
       expect(d.which.length).toBeLessThanOrEqual(2)
       expect(d.which[0]).toBe(k)
       expect(d.defs.length).toBeLessThanOrEqual(DRAW_BUDGET)
-      for (const card of ['cred', 'task', 'log'] as const) expect(thinkMarkPane(W, H, card, 0, 6 * k).length).toBeLessThan(131072)
-      expect(thinkMarkPane(W, 384, 'cred', 0, [0, 6, 20, 25, 30, 36, 41, 48, 53, 56, 60, 64][k] as number).length).toBeLessThan(110_000)
     }
   }
-  // a pair that does not fit is not drawn: shot 5 (the Kid talking) is alone, shot 0 carries the wide shot after it
-  expect(drawOf(992, 384, 4).which).toEqual([4])
-  expect(drawOf(992, 384, 0).which).toEqual([0])
-  expect(drawOf(992, 384, 2).which).toEqual([2, 3])
+  // each draw carries the current shot plus the next while they fit
+  expect(drawOf(992, 384, 0).which).toEqual([0, 1])
+  expect(drawOf(992, 384, 23).which).toEqual([23])
   // the last shot of a draw holds its final frame to the end of the film (a late redraw changes only when the cut happens)
-  expect(drawOf(992, 384, 4).css).toContain('100%')
+  expect(drawOf(992, 384, 23).css).toContain('100%')
+})
+test('think, mark: the size sweep: every 0.5 s of all 24 shots at three sizes, each Svg under 131072, the three cards together under the pane budget', () => {
+  let worst = 0
+  let worstCards = 0
+  for (const [W, H] of [[992, 384], [496, 434], [360, 300], [600, 236]] as const) {
+    for (let s = 0; s < 65; s += 0.5) {
+      const cards = (['cred', 'task', 'log'] as const).map(c => thinkMarkPane(W, H, c, 0, s))
+      for (const c of cards) { expect(c.length).toBeLessThan(131072); worst = Math.max(worst, c.length) }
+      const sum = cards.reduce((n, c) => n + c.length, 0)
+      worstCards = Math.max(worstCards, sum)
+      expect(sum).toBeLessThan(95_000)
+    }
+  }
+  expect(worst).toBeGreaterThan(20_000)
+  expect(worstCards).toBeGreaterThan(20_000)
+})
+test('think, mark: every patch sits inside its parent sprite, and a patch that was never drawn is skipped, not drawn', () => {
+  const names = new Set(PATCHES.map(p => p.name))
+  expect(names.size).toBe(21)
+  for (const pd of PATCHES) {
+    const at = PATCH_AT[pd.name]!
+    const parent = TM[at.parent]
+    const patch = TM[pd.name]
+    expect(parent).toBeDefined()
+    if (!patch) continue
+    expect(at.x).toBeGreaterThanOrEqual(0)
+    expect(at.y).toBeGreaterThanOrEqual(0)
+    expect(at.x + patch.rows[0]!.length).toBeLessThanOrEqual(parent!.rows[0]!.length)
+    expect(at.y + patch.rows.length).toBeLessThanOrEqual(parent!.rows.length)
+  }
+  // the windows follow the plan's cycle: base 0.15 s, then the patch 0.12 s, ending on the base
+  const w = patchWindows(3, 'TM2_P_KNEEL_GRAB_MOUTH')
+  expect(w[0]).toEqual([5.55, 5.67])
+  expect(Math.abs(w[1]![0] - 5.82)).toBeLessThan(1e-6)
+  expect(w[w.length - 1]![1]).toBeLessThanOrEqual(7.1)
+  expect(patchWindows(14, 'TM2_P_MARK_BLINK')).toEqual([[33.5, 33.75], [38.9, 39.2]])
+  expect(patchWindows(2, 'TM2_P_CU_MOUTH_CLOSED').some(([a, b]) => a === 4.6 && b === 5.25)).toBe(true)
+  // a lone patch ends at the next event of the same patch, not at the cut
+  expect(patchWindows(9, 'TM2_P_ECU_MOUTH_CLOSED')).toEqual([[22.6, 24.0], [24.0, 24.65]])
 })
 test('think, mark: the pane is redrawn after every cut: the schedule, the cancel on a new trigger and on a skin switch', async ($, on) => {
   const t0 = 1_000_000
   const times = thinkMarkRedraws(t0)
-  expect(times).toHaveLength(12)
-  for (let i = 0; i < 11; i++) expect(shotAt((times[i] as number - t0) / 1000)).toBe(i + 1)
-  expect(times[0]).toBe(t0 + 5_250 + 80)
-  expect(times[10]).toBe(t0 + 63_000 + 80)
-  expect(times[11]).toBe(t0 + 65_000 + 80)
+  expect(times).toHaveLength(24)
+  for (let i = 0; i < 23; i++) expect(shotAt((times[i] as number - t0) / 1000)).toBe(i + 1)
+  for (let i = 0; i < 23; i++) expect(times[i]).toBe(Math.round(t0 + CUTS[i + 1]! * 1000 + 80))
+  expect(times[23]).toBe(t0 + 65_000 + 80)
   // the timers: one per cut ahead, cancelled by clear, replaced by a new trigger
   const log: string[] = []
   let n = 0
@@ -320,7 +395,7 @@ test('think, mark: the pane is redrawn after every cut: the schedule, the cancel
   expect(log.filter(l => l.startsWith('cancel'))).toHaveLength(due.length)
   scheduleThinkMark(after, t0, t0, () => undefined)
   scheduleThinkMark(after, t0, t0, () => undefined)
-  expect(pendingThinkMarkTimers()).toBe(12)
+  expect(pendingThinkMarkTimers()).toBe(24)
   clearThinkMarkTimers()
   clearThinkMarkTimers()
   expect(pendingThinkMarkTimers()).toBe(0)
@@ -346,6 +421,6 @@ test('think, mark: the pane is redrawn after every cut: the schedule, the cancel
   for (const c of cuts.slice(1, 4)) expect(writes).toContain(c)
   await $.command.run({ command: 'skin', args: 'mentalist' } as never)
   await clk.advance(45_000)
-  expect(writes).not.toContain(cuts[4])
-  expect(writes).not.toContain(cuts[11])
+  expect(writes).not.toContain(cuts[12])
+  expect(writes).not.toContain(cuts[23])
 })

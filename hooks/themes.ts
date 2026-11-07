@@ -37,6 +37,7 @@ import { bcsExtras } from './bettercallsaul-extra'
 import { zoomWrap } from './bettercallsaul-fx'
 import type { Fx } from './bettercallsaul-fx'
 import { invTheme } from './invincible-theme'
+import { calTheme } from './caliper-theme'
 import { roamPlan } from './roamer'
 import type { HackArgs } from './edgerunners2-hack'
 import { ER_CAPRI } from './cast'
@@ -46,16 +47,18 @@ import type { Badge, Beat, Cred, CredWords, Frame } from './extras'
 import type { Legend } from './eggs'
 
 /** What the band's figure slot knows: the clock, the context, and whether the job-done celebration is drawing. */
-export type FigureCtx = { at: number; ctxPct: number; party?: boolean; fx?: { kind: string; at: number } }
-export type ThemeKey = 'mentalist' | 'redjohn' | 'breakingbad' | 'heisenberg' | 'edgerunners2' | 'capricorn' | 'bettercallsaul' | 'gene' | 'invincible' | 'invincible2'
+export type FigureCtx = { at: number; ctxPct: number; party?: boolean; fx?: { kind: string; at: number }; /** A job is running. */ working?: boolean; /** The job's progress, 0 to 100 (absent before a plan). */ progress?: number }
+export type ThemeKey = 'mentalist' | 'redjohn' | 'breakingbad' | 'heisenberg' | 'edgerunners2' | 'capricorn' | 'bettercallsaul' | 'gene' | 'invincible' | 'invincible2' | 'caliper' | 'caliperlight'
 /** The pane cards a roaming act can belong to: the level card, the task card, the log. */
 export type PaneCard = 'cred' | 'task' | 'log'
 /** What a theme's rare scheduled eggs know (all from the clock, so an idle draw still shows them). */
 export type ExtraArgs = { W: number; H: number; surface: 'band' | 'pane'; at: number; ctxPct: number; party?: boolean; card?: PaneCard; unplugAt?: number; fx?: { kind: string; at: number }; /** A job is running (a theme's fights only play then). */ working?: boolean; /** When the last era swap started (Invincible's title-card slam transition). */ swapAt?: number }
+/** One node of the hierarchy as a theme's `org` drawer sees it (a structural copy of the engine's). */
+export type ThemeOrg = { label: string; color: string; kind: string; status?: string; isQuiet?: boolean; children: ThemeOrg[] }
 /** The skin colours a theme's drawers read. */
 export type ThemeColors = { accent: string; accent2: string; done: string; warn: string; alert: string; text: string; subtext: string; muted: string; tile: string; track: string; line: string }
 /** What the band knows when it asks for its corner egg. */
-export type ThemeCtx = { ctxPct: number; overBudget: boolean; /** The session total cost in dollars (a band's "Total $1.23"). */ totalUsd?: number; /** The clock. */ at?: number; /** Is a job running (the Edgerunners 2 frame runs a beam while it works). */ isWorking?: boolean; /** Is a roaming character out on the band (the Edgerunners 2 HUD turns hers). */ capri?: boolean }
+export type ThemeCtx = { ctxPct: number; overBudget: boolean; /** The session total cost in dollars (a band's "Total $1.23"). */ totalUsd?: number; /** The clock. */ at?: number; /** Is a job running (the Edgerunners 2 frame runs a beam while it works). */ isWorking?: boolean; /** Is a roaming character out on the band (the Edgerunners 2 HUD turns hers). */ capri?: boolean; /** The job-done celebration is drawing, and since when (Caliper's ruler wave). */ party?: boolean; partyAt?: number }
 
 /** A character who wanders through both panels now and then (roamer.ts): her sprite, rim colours, lines and chance. */
 export type ThemeRoamer = {
@@ -112,7 +115,7 @@ export type ThemeEggs = {
   /** `card` is the theme's own cred card; without it the shared medal card is drawn with `title`, `ranks` and `words`. */
   cred: { title: string; ranks: (level: number) => string; words: CredWords; badges: Badge[]; toast: (level: number) => string; card?: (W: number, c: Cred, t: ThemeColors, font: string, frame: Frame) => string }
   /** The pane's card about the task (cold read, lab notes). */
-  card: { draw: (W: number, task: string, isWorking: boolean, done: number, total: number, t: ThemeColors, font: string, frame: Frame, legends: Legend[]) => string; alt: (isWorking: boolean, done: number, total: number) => string }
+  card: { draw: (W: number, task: string, isWorking: boolean, done: number, total: number, t: ThemeColors, font: string, frame: Frame, legends: Legend[], steps?: { title: string; state: string; note?: string }[]) => string; alt: (isWorking: boolean, done: number, total: number) => string }
   /** `hidden`: the theme's `card` already draws the closed jobs (the Classroom's honor roll), so the shared legends card is skipped. */
   legends: { title: string; empty: string; icon: string; alt: string; toast: string | ((task: string) => string); hidden?: boolean }
   /** The pane's log of tool calls. `hasControls`: it has the First/Back/Next/Live buttons (a replay timeline). */
@@ -124,6 +127,10 @@ export type ThemeEggs = {
   words: string[]
   tools: Record<string, string>
   // --- optional slots: leave out and nothing is drawn ---
+  /** Caliper only: which of the skin's two faces this entry draws (the palette; no coordinate ever reads it). */
+  face?: 'dark' | 'light'
+  /** The hierarchy in the theme's own hand, in place of the engine's chart: the manager, its roles and agents. */
+  org?: (W: number, root: ThemeOrg) => string
   /** Invincible only: which of the skin's two eras this entry draws (1 the classic suit, 2 the new suit). */
   era?: 1 | 2
   /** Characters the pane keeps free for this theme's big eggs while a job works (the layers between `<!--dl-->` markers are not counted, this is instead): the pane never changes layout as they come and go. */
@@ -145,7 +152,7 @@ export type ThemeEggs = {
     /** The figure in the task row (a 34 by 40 box at x 20, y 36); `ctx` is the clock and the context, for a figure that acts now and then (the duets). */
     figure: (ctx?: FigureCtx) => string
     /** One crew member at the top-left, 7 by 10 pixels at 1.4x. */
-    crew: (x: number, y: number, color: string) => string
+    crew: (x: number, y: number, color: string, live?: boolean) => string
     /** A step pip, centred at (cx, cy). */
     pip: (state: string, cx: number, cy: number, t: ThemeColors) => string
     /** A right-aligned gauge before the episode; dropped first when there is no room. */
@@ -385,6 +392,8 @@ const saulTheme = (gene: boolean): ThemeEggs => ({
 export const THEMES: Record<ThemeKey, ThemeEggs> = {
   invincible: invTheme(1),
   invincible2: invTheme(2),
+  caliper: calTheme('dark'),
+  caliperlight: calTheme('light'),
   bettercallsaul: saulTheme(false),
   gene: saulTheme(true),
   mentalist: caseTheme(false),
