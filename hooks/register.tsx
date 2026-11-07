@@ -5356,7 +5356,7 @@ const heartbeat = (x: number, y: number, w: number, color: string): string => {
 // The simple band (default and Crab Classic): three rows a newcomer reads at a glance.
 // 1. What is happening: the boss, the status, the action, the gauge and its percent.
 // 2. Who is on it: the crew's crabs and one plain count.
-// 3. What it costs: this task, today, and how full the context is.
+// 3. What it costs: this task, the session's total, and how full the context is.
 // The full readouts stay in the pane; Settings brings the full band back.
 const SIMPLE_H = 100
 const SIMPLE_OUT_H = SIMPLE_H + HUD_PAD * 2
@@ -5407,9 +5407,18 @@ const hudSimpleSvg = (OW: number, d: HudData): string => {
   // Row 3: the money and the context, in words.
   const y3 = 86
   const ctxTone = gaugeColor(d.ctxPct)
-  // Today's spend in the warn colour from 80% of the daily cap, the alert colour from 100%.
+  // The row shows the SESSION's total (the same figure as the full band's "$ TOTAL"). The daily cap still measures TODAY's spend
+  // across sessions, so it is not painted on the total: a small dot beside it turns the warn colour from 80% of the cap, the
+  // alert colour from 100% (hover for the day's figure).
   const capPct = dailyCapUsd > 0 ? ((d.todayUsd ?? 0) / dailyCapUsd) * 100 : 0
-  const todayFill = capPct >= 100 ? ` fill="${c.alert}"` : capPct >= 80 ? ` fill="${c.warn}"` : ''
+  const capFill = capPct >= 100 ? c.alert : capPct >= 80 ? c.warn : ''
+  const capDot = capFill ? `<tspan fill="${capFill}"> ●<title>${xml(`Today ≈${fmtCost(d.todayUsd ?? 0)} of the ${fmtCost(dailyCapUsd)} daily cap`)}</title></tspan>` : ''
+  const totalPart = `Total <tspan font-weight="800">≈${fmtCost(d.session.total)}</tspan>${capDot}`
+  const taskPart = `This task <tspan font-weight="800">≈${fmtCost(d.taskUsd ?? 0)}</tspan><tspan class="m">   ·   </tspan>`
+  // On a narrow band the task figure gives way first: the total and the context stay.
+  const ctxW = textWidth(`Context ${d.ctxPct}%`, 12) + 14
+  const costRoom = W - 14 - ctxW - left - 16
+  const costText = textWidth(`This task ≈${fmtCost(d.taskUsd ?? 0)}   ·   Total ≈${fmtCost(d.session.total)} ●`, 12.5) <= costRoom ? `${taskPart}${totalPart}` : totalPart
   const label = (y: number, text: string) => `<text class="m" x="14" y="${y}" font-family="${FONT}" font-size="10" font-weight="700" letter-spacing=".6">${text}</text>`
   return svg(
     OW,
@@ -5432,7 +5441,7 @@ ${label(y2 + 14, 'CREW')}
 ${crabs}${more}
 <text class="s" x="${W - 14}" y="${y2 + 14}" text-anchor="end" font-family="${FONT}" font-size="12">${xml(count)}</text>
 ${label(y3, 'COST')}
-<text class="t" x="${left}" y="${y3}" font-family="${FONT}" font-size="12.5" font-variant-numeric="tabular-nums">This task <tspan font-weight="800">≈${fmtCost(d.taskUsd ?? 0)}</tspan><tspan class="m">   ·   </tspan>Today <tspan font-weight="800"${todayFill}>≈${fmtCost(d.todayUsd ?? 0)}</tspan></text>
+<text class="t" x="${left}" y="${y3}" font-family="${FONT}" font-size="12.5" font-variant-numeric="tabular-nums">${costText}</text>
 <text class="s" x="${W - 14}" y="${y3}" text-anchor="end" font-family="${FONT}" font-size="12">Context <tspan font-weight="800" fill="${ctxTone}">${d.ctxPct}%</tspan></text>
 </g>`,
   )
@@ -5696,7 +5705,9 @@ const slimBandSvg = (OW: number, d: HudData): string => {
   const live = until ? liveWidth(d.at, t => barW * Math.min(1, leftAt(t) / (CACHE_TTL_MS / 1000))) : null
   const tipX = x0 + 14
   const parts: [string, string][] = [['TODAY', `${d.today.tasks} ${d.today.tasks === 1 ? 'task' : 'tasks'} · ≈${fmtCost(d.today.costUsd)}`], ['TURN', `${ss.turn} · ${fmtCost(ss.turnCost)}`]]
-  // What goes on the right, from the right: CACHE, then TURN, then TODAY, as long as the tip keeps 160px.
+  // What goes on the right, from the right: CACHE, then the session TOTAL (the same figure as the full band's "$ TOTAL"),
+  // then TURN, then TODAY, as long as the tip keeps 160px. The total is the first to stay when room is short.
+  const totalText = fmtCost(ss.total)
   const rights: string[] = []
   let rx = barX - 8
   const cacheW = sw(cacheText, 11.5) + 6
@@ -5717,8 +5728,9 @@ const slimBandSvg = (OW: number, d: HudData): string => {
     rights.push(Lb(rx, yb, 'CACHE', 'end'))
     rx -= sw('CACHE', 9.5, 0.8, true) + 22
     rights.push(`<rect class="k" x="${barX}" y="${yb - 7}" width="${barW}" height="4"/><rect x="${barX}" y="${yb - 7}" width="${live ? live.start : r2(barW * cacheShare)}" height="4" fill="${cacheTone}"${left !== null && left <= 600 && !ss.isBusy ? ' class="live"' : ''}>${live ? live.animate : ''}</rect>`)
-    for (const [k, v] of [parts[1], parts[0]] as [string, string][]) if (!place(k, v, sw(v, 11.5) + 2)) break
-  }
+  } else rx = xr - 24 // no cache bar: the corner (the smiley's) stays free
+  const totalOk = place('TOTAL', totalText, sw(totalText, 11.5) + 2)
+  if (cacheOk && totalOk) for (const [k, v] of [parts[1], parts[0]] as [string, string][]) if (!place(k, v, sw(v, 11.5) + 2)) break
   s.push(...rights)
   const tipLive = d.tip.level === 2
   s.push(`<circle${tipLive ? ' class="live"' : ''} cx="${x0 + 4}" cy="${yb - 4}" r="3.5" fill="${MOOD_COLOR[d.tip.level]}"/>`)
