@@ -1,0 +1,77 @@
+{
+  "$schema": "./skin.schema.json",
+  "id": "caliper",
+  "name": "Caliper",
+  "description": "Graphite and ice: a dial, a ruler, one blue. Dark, light, or follows the app.",
+  "font": "-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',Ubuntu,Cantarell,'Noto Sans','Liberation Sans',sans-serif",
+  "corners": "round",
+  "dark": true,
+  "colors": {
+    "accent": "#5AA9FF",
+    "accent2": "#AAB2BC",
+    "done": "#5FC58F",
+    "warn": "#E0B14C",
+    "alert": "#F0665A",
+    "meter": "#5AA9FF",
+    "text": "#ECEEF0",
+    "subtext": "#AAB2BC",
+    "muted": "#8A93A0",
+    "tile": "#15181B",
+    "track": "#242930",
+    "line": "#2B3138",
+    "grid": "#1B1F23"
+  },
+  "boss": [
+    "#5AA9FF",
+    "#AAB2BC",
+    "#ECEEF0",
+    "#AAB2BC",
+    "#5AA9FF"
+  ],
+  "roles": [
+    "#8FB4E8",
+    "#7FC4A5",
+    "#D9B06A",
+    "#C79BD9",
+    "#E09A8E",
+    "#8FC9D6"
+  ],
+  "effects": {
+    "scanlines": false,
+    "glitch": false
+  },
+  "backdrop": {
+    "fill": "#0E1012",
+    "pattern": "none",
+    "ink": ""
+  },
+  "chat": true,
+  "words": [
+    "Measuring",
+    "Zeroing",
+    "Squaring up",
+    "Taking a reading",
+    "Within tolerance"
+  ],
+  "toolWords": {
+    "Read": "Read",
+    "Grep": "Scan",
+    "Glob": "Index",
+    "LS": "Index",
+    "Edit": "Adjust",
+    "MultiEdit": "Adjust",
+    "NotebookEdit": "Adjust",
+    "Write": "Mark",
+    "Bash": "Run",
+    "PowerShell": "Run",
+    "Agent": "Delegate",
+    "ToolSearch": "Look up",
+    "WebFetch": "Fetch",
+    "WebSearch": "Search"
+  },
+  "tabs": {
+    "mission": "Mission Control",
+    "skins": "Skins"
+  },
+  "cast": "caliper"
+}

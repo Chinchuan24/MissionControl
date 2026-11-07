@@ -3869,6 +3869,15 @@ export const BCS_MIKE_CHAIR: Sprite = {
   pal: { a: '#525057', b: '#CB8C6D', c: '#25443E', d: '#2C2B32', e: '#87827F', f: '#262C45', g: '#A59F9D', h: '#3C3B41', i: '#BFBBB9', j: '#ECAB83', k: '#2F6F51', l: '#C4B0A4', m: '#47464C', n: '#1F2336', o: '#1D1E29', p: '#4B8E68', q: '#59565C' },
 }
 
+// Caliper's one figure: a 9 pixel ring that takes the role's tint, a dot in the middle. No rim, no legs.
+const CAL_RING: Sprite = {
+  rows: ['..ttttt..', '.tt...tt.', 'tt.....tt', 't...t...t', 't..ttt..t', 't...t...t', 'tt.....tt', '.tt...tt.', '..ttttt..'],
+  pal: {},
+  float: true,
+  rim: false,
+}
+const CAL_CAST: Cast = { name: 'Caliper', bossName: 'Claude', boss: CAL_RING, roles: {}, crew: [CAL_RING] }
+
 export const CASTS: Record<string, Cast> = {
   // David leads; Lucy, Maine, Rebecca, Kiwi, Dorio, Pilar, Falco and Johnny take the roles.
   runners: { name: 'Edgerunners', bossName: 'David', boss: DAVID, roles: CREW_ROLES, crew: [CHOOM, GANGER, NEON] },
@@ -4011,6 +4020,10 @@ export const CASTS: Record<string, Cast> = {
     roles: { explore: INV_EVE, fable: INV_OMNI, heavy: INV_BATTLEBEAST, careful: INV_CECIL, medium: INV_SAMSON, light: INV_RAE, artist: INV_KATE, writer: INV_DEBBIE, banker: INV_REX, other: INV_ALLEN },
     crew: [INV_AGENT, INV_AGENT2, INV_AGENT3],
   },
+  // Caliper (an original design, no characters): the figure slot is the dial, so the cast is one ring in the role's tint, for the few
+  // places a pixel figure is asked for (the pane's agent rows). Both faces share it.
+  caliper: CAL_CAST,
+  caliperlight: CAL_CAST,
   // Edgerunners 2 (fan homage): D leads, Roman, Talia, Weak and Jessie work, the Kings and the teal-jacket runners back them.
   edgerunners2: {
     name: 'Edgerunners 2',
