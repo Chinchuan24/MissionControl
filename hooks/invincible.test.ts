@@ -5,8 +5,10 @@ import { CASTS } from './cast'
 import type { Sprite } from './cast'
 import { BADGES, RANKS, VERBS, coverCard, coverHeight, pageCard, rankOf, tierOf, wallCard } from './invincible-cards'
 import { ACT_LEN, ACT_OFF, BAND_CUT, FIGHT_CSS, FIGHT_MS, FIGHT_PANE_RESERVE, FRAME_KEYS, chainOfAct, fightAct, fightBand, frameSprite } from './invincible-fight'
-import { AHEAD_MS, CLASSIC_RE, DUEL_MS, GUARDIANS_RE, NEW_SUIT_RE, SHOWDOWN_MS, THINK_RE, duelPlan, showdownPlan, slotPlan } from './invincible-eggs'
-import { CSS, EPISODES, ERA1, ERA2, PROPS, SP, TITLE_WORDS, condW, contrast, episodeAt, monoW, sansW } from './invincible'
+import { CAMEO_CSS, CAM_JITTER_MS, CAM_SLOT_MS, CECIL_LINES, DUR_MS, EVE_LINE, OLIVER_LINE, camBlocked, camExtras, camPlanOfSlot } from './invincible-cameos'
+import type { CamPlan } from './invincible-cameos'
+import { AHEAD_MS, CLASSIC_RE, DUEL_MS, GUARDIANS_RE, NEW_SUIT_RE, SHOWDOWN_MS, THINK_RE, duelPlan, showdown, showdownPlan, slotPlan } from './invincible-eggs'
+import { CSS, EPISODES, ERA1, ERA2, PROPS, SP, TITLE_WORDS, condW, contrast, episodeAt, monoW, sansW, unit as unitOf } from './invincible'
 import { THEMES } from './themes'
 
 const pane = { title: '', isFocused: false, bodyColumns: 100, placement: 'dock', scroll: { offset: 0, bodyRows: 60 }, view: {} } as const
@@ -538,6 +540,363 @@ test('layout: 130 redraws over ~43 minutes keep one layout signature', { timeout
     if ((await svgs($, 'Pane')).join('').includes('class="dl-anim"')) fights++
   }
   expect(fights).toBeGreaterThan(0)
+  expect([...seen]).toHaveLength(1)
+})
+// --- the cameos: Atom Eve, Oliver and Cecil ---------------------------------------------------------------------------------
+const K0 = Math.floor(NOW / CAM_SLOT_MS)
+/** The first cameo from NOW on that is on and matches. */
+const camFind = (pred: (p: CamPlan) => boolean, from = K0): CamPlan => {
+  for (let k = from; ; k++) {
+    const p = camPlanOfSlot(k)
+    if (p.on && pred(p)) return p
+  }
+}
+const CARD_WORD = { cred: 'COVER STORY', log: 'THE PAGE', task: 'GDA WALL' } as const
+const camsIn = (svgList: string[], who?: string): string[] => svgList.filter(s => (who ? s.includes(`data-cam="${who}"`) : s.includes('data-cam=')))
+const MODES = [['eve', 'fly-band'], ['eve', 'fly-pane'], ['eve', 'perch'], ['oliver', 'dash'], ['oliver', 'pop'], ['cecil', 'feed']] as const
+test('cameos: each character appears at a known seed and time, and the plan is the same every time', () => {
+  // Slots from 2026-10-20 10:00 UTC: [slot, who, mode, start].
+  const want: [number, string, string, string][] = [[0, 'eve', 'perch', '2026-10-20T10:01:00.682Z'], [1, 'eve', 'fly-band', '2026-10-20T10:06:18.200Z'], [2, 'cecil', 'feed', '2026-10-20T10:12:38.919Z'], [4, 'oliver', 'pop', '2026-10-20T10:25:52.788Z']]
+  for (const [i, who, mode, iso] of want) {
+    const p = camPlanOfSlot(K0 + i)
+    expect([p.on, p.who, p.mode, new Date(p.startAt).toISOString()]).toEqual([true, who, mode, iso])
+    expect(camPlanOfSlot(K0 + i)).toEqual(p)
+    expect(p.endAt - p.startAt).toBe(DUR_MS[p.mode])
+    expect(p.startAt - p.slot * CAM_SLOT_MS).toBeLessThan(CAM_JITTER_MS)
+  }
+})
+test('cameos: Eve over the band at her time: the pinned delay is negative inside the act', async ($, on) => {
+  const eve = camFind(q => q.who === 'eve' && q.mode === 'fly-band')
+  base(on, 100_000, eve.startAt + 2_000)
+  await start($, 'invincible')
+  const b = await bandAt($, 1250, false)
+  expect(b).toContain('data-cam="eve"')
+  expect(b).toMatch(/animation-delay:calc\(-2s \+ 0s\)/)
+  expect(b).toContain('class="cm-anim"')
+})
+test('cameos: scheduled ahead (a positive pinned delay), live (a negative one), gone after the act', async ($, on) => {
+  const cecil = camFind(q => q.who === 'cecil')
+  const clock = base(on, 100_000, cecil.startAt - 40_000)
+  await start($, 'invincible')
+  await jobIn($)
+  const ahead = await svgs($, 'Pane')
+  expect(camsIn(ahead, 'cecil')).toHaveLength(1)
+  expect(camsIn(ahead, 'cecil')[0]).toMatch(/animation-delay:calc\(40s \+ 0s\)/)
+  await clock.advance(43_000)
+  expect(camsIn(await svgs($, 'Pane'), 'cecil')[0]).toMatch(/animation-delay:calc\(-3s \+ 0s\)/)
+  await clock.advance(DUR_MS.feed)
+  expect(camsIn(await svgs($, 'Pane'))).toHaveLength(0)
+})
+for (const [who, mode] of MODES) {
+  test(`cameos: ${who} ${mode}: drawn from the clock alone, on the right surface and card, with the show's words only`, async ($, on) => {
+    const p = camFind(q => q.who === who && q.mode === mode && q.bubble && (q.mode !== 'feed' || q.rec))
+    base(on, 100_000, p.startAt + 2_000)
+    await start($, 'invincible')
+    await jobIn($)
+    await four($)
+    const band = await bandAt($, 1250)
+    const pn = await svgs($, 'Pane')
+    const onBand = mode === 'fly-band' || mode === 'dash' || mode === 'feed'
+    expect(band.includes(`data-cam="${who}"`)).toBe(onBand)
+    const cards = camsIn(pn, who)
+    expect(cards).toHaveLength(mode === 'fly-band' || mode === 'dash' ? 0 : 1)
+    if (cards[0]) expect(cards[0]).toContain(CARD_WORD[p.card])
+    for (const s of [band, ...cards]) {
+      if (!s.includes('data-cam=')) continue
+      expect(s).toContain('class="cm-anim"')
+      // Only the plan's own line is on a bubble.
+      for (const other of [EVE_LINE, OLIVER_LINE, ...CECIL_LINES]) if (other !== p.line) expect(s.includes(`>${other}</text>`)).toBe(false)
+    }
+    if (mode !== 'feed') expect([band, ...cards].join('').includes(`>${p.line}</text>`)).toBe(true)
+    else expect(cards.join('').includes(`>${p.line}</text>`)).toBe(true)
+    for (const s of camsIn(pn)) expect(s.includes('GDA WALL')).toBe(who === 'cecil' || p.card === 'task')
+  })
+}
+test("cameos: the lines are short and the show's own", () => {
+  for (const l of [EVE_LINE, OLIVER_LINE, ...CECIL_LINES]) expect(l.split(/\s+/).length).toBeLessThanOrEqual(6)
+  expect(EVE_LINE).toBe('Need a hand, Mark?')
+  expect(OLIVER_LINE).toBe('Hi, Mark!')
+  expect(CECIL_LINES).toContain('We need to talk.')
+  expect(CECIL_LINES).toContain('Mark. My office.')
+})
+test('cameos: Cecil is on the GDA WALL only; the band gets just a tiny GDA REC tag, and never his bust', async ($, on) => {
+  const p = camFind(q => q.who === 'cecil' && q.rec)
+  base(on, 100_000, p.startAt + 3_000)
+  await start($, 'invincible')
+  await jobIn($)
+  await four($)
+  const pn = await svgs($, 'Pane')
+  const hits = camsIn(pn, 'cecil')
+  expect(hits).toHaveLength(1)
+  expect(hits[0]).toContain('GDA WALL')
+  expect(hits[0]).toContain('INCOMING FEED')
+  for (const s of pn) if (!s.includes('GDA WALL')) expect(s).not.toContain('data-cam="cecil"')
+  const band = await bandAt($, 1250)
+  expect(band).toContain('data-cam="cecil"')
+  expect(band).toContain('>REC<')
+  expect(band).not.toContain('INCOMING FEED')
+})
+for (const [who, mode] of [['eve', 'perch'], ['eve', 'fly-pane'], ['oliver', 'pop']] as const) {
+  test(`cameos: ${who} ${mode} never puts Cecil's feed on any card`, async ($, on) => {
+    const p = camFind(q => q.who === who && q.mode === mode)
+    base(on, 100_000, p.startAt + 2_800)
+    await start($, 'invincible')
+    await jobIn($)
+    const pn = (await svgs($, 'Pane')).join('')
+    expect(pn).toContain(`data-cam="${who}"`)
+    expect(pn).not.toContain('INCOMING FEED')
+    expect(pn).not.toContain('data-cam="cecil"')
+  })
+}
+test('cameos: one character per 30 s window, 4 to 8 minutes apart, every character shows up, over 3 simulated hours', () => {
+  for (const from of [K0, K0 + 480, K0 + 2_000]) {
+    const plans = Array.from({ length: 30 }, (_, i) => camPlanOfSlot(from + i)).filter(p => p.on)
+    expect(plans.length).toBeGreaterThanOrEqual(29)
+    expect(plans.length).toBeLessThanOrEqual(30)
+    const buckets = new Set(plans.map(p => Math.floor(p.startAt / 30_000)))
+    expect(buckets.size).toBe(plans.length)
+    expect(new Set(plans.map(p => p.who)).size).toBe(3)
+    for (let i = 1; i < plans.length; i++) {
+      const [a, b] = [plans[i - 1] as CamPlan, plans[i] as CamPlan]
+      expect(a.endAt).toBeLessThan(b.startAt - 30_000)
+      if (b.slot !== a.slot + 1) continue
+      expect(b.startAt - a.startAt).toBeGreaterThanOrEqual(4 * 60_000 - 1)
+      expect(b.startAt - a.startAt).toBeLessThanOrEqual(8 * 60_000 + 1)
+    }
+  }
+  // Over 2 000 slots (200 hours) the mix is Eve about 40 %, Oliver 34 %, Cecil 26 %, and nearly every slot has one.
+  const count: Record<string, number> = { eve: 0, oliver: 0, cecil: 0 }
+  let on = 0
+  for (let k = K0; k < K0 + 2_000; k++) {
+    const p = camPlanOfSlot(k)
+    if (!p.on) continue
+    on++
+    count[p.who] = (count[p.who] as number) + 1
+  }
+  expect(on).toBeGreaterThan(1_980)
+  expect((count.eve as number) / on).toBeGreaterThan(0.33)
+  expect((count.eve as number) / on).toBeLessThan(0.47)
+  expect((count.oliver as number) / on).toBeGreaterThan(0.28)
+  expect((count.oliver as number) / on).toBeLessThan(0.4)
+  expect((count.cecil as number) / on).toBeGreaterThan(0.2)
+  expect((count.cecil as number) / on).toBeLessThan(0.32)
+})
+test("cameos: never inside the fight's or the showdown's window (either era), over 12 simulated hours", () => {
+  let checked = 0
+  for (let k = K0; k < K0 + 120; k++) {
+    const p = camPlanOfSlot(k)
+    if (!p.on) continue
+    expect(camBlocked(p.startAt, p.endAt)).toBe(false)
+    for (const era of [1, 2] as const) {
+      for (let t = p.startAt - 8_000; t <= p.endAt + 8_000; t += 1_000) {
+        const d = duelPlan(t, era)
+        if (d.on) expect(p.startAt < d.endAt + 5_000 && d.startAt < p.endAt + 5_000).toBe(false)
+        const sd = showdownPlan(t, era)
+        expect(p.startAt < sd.endAt + 5_000 && sd.startAt < p.endAt + 5_000).toBe(false)
+        checked++
+      }
+    }
+  }
+  expect(checked).toBeGreaterThan(5_000)
+  // A window that sits on a fight is refused, and so is one on the showdown.
+  const fs = fightStart(1, NOW)
+  expect(camBlocked(fs + 1_000, fs + 4_000)).toBe(true)
+  expect(camBlocked(showdownPlan(NOW, 1).startAt + 500, showdownPlan(NOW, 1).startAt + 4_000)).toBe(true)
+})
+test("cameos: a moment that would touch the fight is moved to the slot's next seeded moment", () => {
+  let moved = 0
+  for (let k = K0; k < K0 + 600; k++) {
+    const p = camPlanOfSlot(k)
+    const first = k * CAM_SLOT_MS + Math.floor(unitOf(`inv-cam|${k}|at`) * CAM_JITTER_MS)
+    if (p.on && p.startAt !== first) moved++
+  }
+  expect(moved).toBeGreaterThan(0)
+})
+test('cameos: not while the fight is drawn: none is live and a coming one waits', async ($, on) => {
+  const st = fightStart(1, quietAt(1) + 3_600_000)
+  base(on, 100_000, st + 2_000)
+  await start($, 'invincible')
+  await jobIn($)
+  await four($)
+  const band = await bandAt($, 1250)
+  expect(band).toContain('class="dl-anim"')
+  expect(camsIn([band, ...(await svgs($, 'Pane'))])).toHaveLength(0)
+})
+test('cameos: a typed showdown takes the stage from a live cameo', async ($, on) => {
+  const p = camFind(q => q.who === 'cecil')
+  base(on, 100_000, p.startAt + 2_000)
+  await start($, 'invincible')
+  await jobIn($)
+  expect(camsIn(await svgs($, 'Pane'))).toHaveLength(1)
+  await $.prompt.submit({ text: 'guardians', cursor: 0 } as never)
+  expect(camsIn([await bandAt($, 1250), ...(await svgs($, 'Pane'))])).toHaveLength(0)
+  expect((await svgs($, 'Pane')).join('')).toContain('LAST ONE STANDING.')
+})
+test('cameos: the daily showdown has the wall to itself', async ($, on) => {
+  const sd = showdownPlan(NOW, 1)
+  base(on, 100_000, sd.startAt + 1_000)
+  await start($, 'invincible')
+  await jobIn($)
+  const wall = await svgs($, 'Pane')
+  expect(wall.join('')).toContain('LAST ONE STANDING.')
+  expect(camsIn([await bandAt($, 1250), ...wall])).toHaveLength(0)
+})
+test('cameos: THINK, MARK takes the band from a live cameo', async ($, on) => {
+  const q = camFind(z => z.who === 'eve' && z.mode === 'fly-band')
+  base(on, 100_000, q.startAt + 1_500)
+  await start($, 'invincible')
+  await jobIn($)
+  expect(await bandAt($, 1250)).toContain('data-cam="eve"')
+  await $.prompt.submit({ text: 'think, mark', cursor: 0 } as never)
+  expect(camsIn([await bandAt($, 1250)])).toHaveLength(0)
+})
+test('cameos: the era swap takes the band from a live cameo', async ($, on) => {
+  const q = camFind(z => z.who === 'eve' && z.mode === 'fly-band')
+  base(on, 100_000, q.startAt + 1_500)
+  await start($, 'invincible')
+  await jobIn($)
+  await $.prompt.submit({ text: 'new suit', cursor: 0 } as never)
+  expect(camsIn([await bandAt($, 1250)])).toHaveLength(0)
+})
+test('cameos: never during the job-done celebration', async ($, on) => {
+  const p = camFind(q => q.who === 'eve' && q.mode === 'fly-band' && q.startAt - 20_600 > NOW)
+  const clock = base(on, 100_000, p.startAt + 1_800 - 20_600)
+  await start($, 'invincible')
+  await jobIn($)
+  await clock.advance(20_600)
+  expect(await bandAt($, 1250)).toContain('data-cam="eve"')
+  await $.turn.complete({ reason: 'answer', answer: 'done' } as never)
+  const band = await bandAt($, 1250)
+  expect(band).toContain('JOB DONE')
+  expect(band).not.toContain('data-cam=')
+  // The theme's slot says the same for a party draw at any cameo time.
+  for (const era of [1, 2] as const) expect(camExtras(era)({ W: 1250, H: 134, surface: 'band', at: p.startAt + 1_800, ctxPct: 10, party: true })).toBe('')
+})
+test('cameos: reduced motion: the sheet stops or hides every animated class it defines', () => {
+  const reduced = /@media \(prefers-reduced-motion: reduce\)\{(.*)\}$/.exec(CAMEO_CSS)?.[1] ?? ''
+  expect(reduced).toBeTruthy()
+  const animated = [...CAMEO_CSS.replace(/@media[\s\S]*$/, '').matchAll(/\.(cm-[\w-]+)\{[^}]*animation:/g)].map(m => m[1] as string)
+  expect(animated.length).toBeGreaterThanOrEqual(5)
+  for (const cls of animated) expect(reduced).toContain(`.${cls}`)
+  expect(reduced).toContain('.cm-anim{display:none}')
+  expect(reduced).toContain('.cm-still{display:block')
+})
+for (const [who, mode] of MODES) {
+  test(`cameos: reduced motion: ${who} ${mode}: only the hidden act moves, and a faint still lasts the act's length`, async ($, on) => {
+    const known = new Set([...CAMEO_CSS.matchAll(/\.(cm-[\w-]+)/g)].map(m => m[1]))
+    const p = camFind(q => q.who === who && q.mode === mode && q.still && (q.mode !== 'feed' || q.rec))
+    base(on, 100_000, p.startAt + 1_000)
+    await start($, 'invincible')
+    await jobIn($)
+    const mine = camsIn([await bandAt($, 1250), ...(await svgs($, 'Pane'))])
+    expect(mine.length).toBeGreaterThan(0)
+    for (const s of mine) {
+      for (const m of s.matchAll(/class="(cm-[\w-]+)/g)) expect(known.has(m[1])).toBe(true)
+      expect(s).toMatch(new RegExp(`class="cm-still" style="animation-duration:${p.durMs / 1000}s;animation-delay:calc\\(-1s \\+ 0s\\)"`))
+      // The only inline `animation:` styles are inside the act (`.cm-anim`), which is hidden; the still has none.
+      const still = s.slice(s.indexOf('class="cm-still"'))
+      expect(still).not.toMatch(/style="animation:/)
+    }
+  })
+}
+for (const era of [1, 2] as const) {
+  for (const [who, mode] of MODES) {
+    test(`cameos: era ${era}: ${who} ${mode}: sizes: the band under 70 kB, every pane Svg under 60 kB, the pane under 260 kB with four running agents`, async ($, on) => {
+      const p = camFind(q => q.who === who && q.mode === mode && q.bubble)
+      // Era 2 puts the suit on first (the swap holds the cameo back for ~3.7 s), so its clock starts 6.5 s earlier.
+      const clock = base(on, 880_000, p.startAt + 2_500 - (era === 2 ? 6_500 : 0))
+      await start($, 'invincible')
+      if (era === 2) await $.prompt.submit({ text: 'new suit', cursor: 0 } as never)
+      await jobIn($)
+      await four($)
+      if (era === 2) {
+        await clock.advance(3_000)
+        await clock.advance(3_500)
+      }
+      for (const W of [750, 900, 1250]) expect((await bandAt($, W)).length).toBeLessThan(70_000)
+      const pn = await svgs($, 'Pane')
+      for (const s of pn) {
+        expect(s.length).toBeLessThan(60_000)
+        expect(s.length).toBeLessThan(131_072)
+      }
+      expect(pn.reduce((n, s) => n + s.length, 0)).toBeLessThan(260_000)
+      expect(camsIn([...pn, await bandAt($, 900)]).length).toBeGreaterThan(0)
+    })
+  }
+  test(`cameos: era ${era}: the largest band: a live cameo with a fight already drawn ahead stays under 70 kB`, async ($, on) => {
+    let p: CamPlan | undefined
+    for (let k = K0; k < K0 + 3_000 && !p; k++) {
+      const q = camPlanOfSlot(k)
+      if (!q.on || (q.mode !== 'fly-band' && q.mode !== 'dash')) continue
+      const d = duelPlan(q.startAt + 30_000, era)
+      if (d.on && d.startAt >= q.endAt + 6_000 && d.startAt <= q.startAt + 60_000) p = q
+    }
+    expect(p).toBeTruthy()
+    const q = p as CamPlan
+    const clock = base(on, 880_000, q.startAt + 1_200 - (era === 2 ? 6_500 : 0))
+    await start($, 'invincible')
+    if (era === 2) await $.prompt.submit({ text: 'new suit', cursor: 0 } as never)
+    await jobIn($)
+    await four($)
+    if (era === 2) {
+      await clock.advance(3_000)
+      await clock.advance(3_500)
+    }
+    for (const W of [750, 900, 1250]) {
+      const b = await bandAt($, W)
+      expect(b).toContain(`data-cam="${q.who}"`)
+      expect(b).toContain('class="dl-anim"')
+      expect(b.length).toBeLessThan(70_000)
+    }
+  })
+}
+test('cameos: the pieces are small: each fragment under 14 kB, and the showdown wall with one more still fits under 131072', () => {
+  const sd = showdown(600, 296, 1, { delay: '0s' })
+  for (const era of [1, 2] as const) {
+    for (const [who, mode] of MODES) {
+      const p = camFind(q => q.who === who && q.mode === mode && q.bubble && q.still)
+      for (const [W, H, surface, card] of [[1250, 134, 'band', undefined], [600, 296, 'pane', p.card], [496, 236, 'pane', p.card]] as const) {
+        const out = camExtras(era)({ W, H, surface, at: p.startAt + 1_000, ctxPct: 10, ...(card ? { card } : {}) })
+        expect(out.length).toBeLessThan(14_000)
+        expect(out.length + sd.length).toBeLessThan(131_072)
+      }
+    }
+  }
+})
+test("cameos: the same in both eras; only the band tag and Oliver's speed lines take the era's colours", () => {
+  const p = camFind(q => q.who === 'eve' && q.mode === 'fly-band')
+  const at = { W: 1250, H: 134, surface: 'band', ctxPct: 10 } as const
+  expect(camExtras(1)({ ...at, at: p.startAt + 1_000 })).toBe(camExtras(2)({ ...at, at: p.startAt + 1_000 }))
+  const cec = camFind(q => q.who === 'cecil' && q.rec)
+  expect(camExtras(1)({ ...at, at: cec.startAt + 1_000 })).not.toBe(camExtras(2)({ ...at, at: cec.startAt + 1_000 }))
+  const oli = camFind(q => q.who === 'oliver' && q.mode === 'dash')
+  expect(camExtras(1)({ ...at, at: oli.startAt + 1_000 })).not.toBe(camExtras(2)({ ...at, at: oli.startAt + 1_000 }))
+  expect(THEMES.invincible.extras).toBeTruthy()
+  expect(THEMES.invincible2?.extras).toBeTruthy()
+})
+test('cameos: layout: 130 redraws over ~43 minutes keep one layout signature, with cameos showing', { timeoutMs: 180_000 }, async ($, on) => {
+  const clock = base(on, 100_000, NOW)
+  await start($, 'invincible')
+  await jobIn($)
+  await four($)
+  const sig = async () => {
+    const b = await svgs($, 'AbovePrompt', 900)
+    const p = await svgs($, 'Pane')
+    const dims = (l: string[]) => l.map(s => `${/width="(\d+)"/.exec(s)?.[1]}x${/height="(\d+)"/.exec(s)?.[1]}`).join(',')
+    return `${b.length}:${/height="(\d+)"/.exec(b[0] ?? '')?.[1]}|${p.length}|${dims(p)}`
+  }
+  const seen = new Set([await sig()])
+  const who = new Set<string>()
+  let drawn = 0
+  for (let i = 0; i < 130; i++) {
+    await clock.advance(20_000)
+    seen.add(await sig())
+    const all = [...(await svgs($, 'AbovePrompt', 900)), ...(await svgs($, 'Pane'))]
+    for (const s of all) for (const m of s.matchAll(/data-cam="(\w+)"/g)) who.add(m[1] as string)
+    if (camsIn(all).length) drawn++
+  }
+  expect(drawn).toBeGreaterThan(10)
+  expect(who.size).toBeGreaterThanOrEqual(2)
   expect([...seen]).toHaveLength(1)
 })
 test('skins: Invincible is one entry in the picker, ships in the core edition, and the JSON copy matches', async ($, on) => {
