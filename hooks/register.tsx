@@ -9,6 +9,8 @@ import { TYGER_RE } from './mentalist'
 import { BB_REVEAL_MS, BB_RIGHT, BB_SKIN_WORDS, BB_TOOLS, SAY_MY_NAME_RE } from './breakingbad'
 import { bbRightLine } from './breakingbad-cards'
 import { THEMES, themeKeyOf } from './themes'
+import { ramStatus, settingsTagline, settingsTones } from './settingslook'
+import type { SettingsSection } from './settingslook'
 import { BYE_CAPRI_RE, CAPRICORN_RE, CAPRI_WORD_RE, ER2_FONT, ER2_TOOLS, ER2_WORDS } from './edgerunners2'
 import { CAPRI_MODE, ER2_MODE_DEFAULT } from './edgerunners2-duet'
 import type { Er2Mode, Er2ModeName } from './edgerunners2-duet'
@@ -5187,6 +5189,38 @@ ${scan}
 </svg>`
 }
 
+// The Settings pane's banner: the skin's own crew standing small at the left (the boss
+// between two of its workers), the title, and what is set now as chips in the colours of
+// the cards they come from. Drawn still: no motion CSS, so a redraw never replays anything.
+const SETTINGS_BANNER_H = 88
+const settingsBannerSvg = (W: number, chips: readonly { text: string; tone: string }[]): string => {
+  const H = SETTINGS_BANNER_H
+  const c = SKIN.colors
+  // The crew needs ~150 px; a narrow pane keeps the boss alone.
+  const isWide = W >= 420
+  const crew = isWide
+    ? `${crab(10, 36, 'role:explore', false, false, 1.5)}${crab(46, 21, 'boss', false, false, 2)}${crab(104, 36, 'role:heavy', false, false, 1.5, true)}`
+    : crab(10, 26, 'boss', false, false, 1.8)
+  const x0 = isWide ? 164 : 76
+  let x = x0
+  const pills: string[] = []
+  for (const chip of chips) {
+    const w = Math.ceil(textWidth(chip.text, 12) * 1.06) + 20
+    if (x + w > W - 12) break
+    pills.push(`${cardShape(x, 50, w, 24, `fill="${chip.tone}"`, 12)}<text x="${r2(x + w / 2)}" y="66.5" text-anchor="middle" font-family="${FONT}" font-size="12" font-weight="700" fill="${inkOn(chip.tone)}">${xml(chip.text)}</text>`)
+    x += w + 6
+  }
+  return stillSvg(
+    W,
+    H,
+    `${cardShape(0.5, 0.5, W - 1, H - 1, `class="tile" stroke="${c.accent}" stroke-opacity=".55"`, 14)}
+<rect x="0.5" y="16" width="3" height="${H - 32}" rx="1.5" fill="${c.accent}"/>
+${crew}
+<text class="t" x="${x0}" y="37" font-family="${FONT}" font-size="22" font-weight="800">Settings</text>
+${pills.join('')}`,
+  )
+}
+
 // --- the chat, in the skin: tool rows as small cards with a status rail, an
 // icon, the skin's verb and what the call is about; spinner words in the skin's
 // voice. The Default skin leaves both as the app draws them.
@@ -8057,14 +8091,45 @@ export const register: Register = (on, options) => {
     // Settings with a few fixed choices are dropdowns where the surface draws a Select, else ▸ buttons that cycle.
     const Pick = 'Select' in ui ? ui.Select : null
     const typed = draft.get(clockNow)
+    // The look: a banner with the skin's crew and what is set now, then one card per subject
+    // under a band in its own colour of the skin's palette (settingslook.ts) with a tagline in
+    // the skin's voice. Each option leads with a short bold label and its value as a chip (on
+    // green, off grey), one short muted hint, then its controls. Dark skins paint the pane and
+    // the cards in their own colours, as the main pane does; every pill picks the ink that reads.
+    const c = SKIN.colors
+    const isDark = SKIN.dark
+    const tones = settingsTones(c, SKIN.roles, SKIN.boss)
+    const OFF = c.muted
+    const muted = (key: string, text: string) =>
+      isDark ? <Text key={key} color={c.muted} size="footnote" wrap="wrap">{text}</Text> : <Text key={key} dimColor size="footnote" wrap="wrap">{text}</Text>
+    const strong = (key: string, text: string) => <Text key={key} bold {...(isDark ? { color: c.text } : {})}>{text}</Text>
+    const chip = (key: string, text: string, fill: string) => <Text key={key} backgroundColor={fill} color={inkOn(fill)} bold>{` ${text} `}</Text>
+    const box = (isOn: boolean) => (isOn ? '☑︎' : '☐')
+    // A label and its value: a chip in the card's colour, or a grey OFF.
+    const labelled = (key: string, text: string, value: string | null, fill: string) => (
+      <Box key={key} flexDirection="row" flexWrap="wrap" columnGap={1}>
+        {strong(`${key}-l`, text)}
+        {chip(`${key}-v`, value ?? 'OFF', value === null ? OFF : fill)}
+      </Box>
+    )
+    // A switch: the whole row presses, its state a green ON or a grey OFF pill.
+    const toggle = (key: string, text: string, isOn: boolean, press: () => unknown, label = `${box(isOn)} ${text}`, onText = 'ON') => (
+      <Button key={key} label={label} plain onPress={() => void press()}>
+        {strong(`${key}-l`, `${box(isOn)} ${text}`)}
+        {' '}
+        {chip(`${key}-v`, isOn ? onText : 'OFF', isOn ? c.done : OFF)}
+      </Button>
+    )
     const billingBlock = (
-      <Box key="billing" flexDirection="column">
-        <Text bold color={isApiCredits(bill.mode) ? ACCENT : undefined}>{modeChip(bill.mode)}</Text>
-        <Text>{bill.isMac ? keyStatus(bill) : MAC_ONLY}</Text>
-        {bill.note ? <Text dimColor wrap="wrap">{bill.note}</Text> : null}
+      <Box key="billing" flexDirection="column" gap={1}>
+        <Box key="bill-head" flexDirection="row" flexWrap="wrap" columnGap={1}>
+          {chip('bill-mode', modeChip(bill.mode), isApiCredits(bill.mode) ? tones.billing : OFF)}
+          {strong('bill-status', bill.isMac ? keyStatus(bill) : MAC_ONLY)}
+        </Box>
+        {bill.note ? muted('bill-note', bill.note) : null}
         {bill.isMac && Field ? (
           <Box key="bill-form" flexDirection="column">
-            <Text dimColor wrap="wrap">The box shows a dot for each character, never the key (a paste can show for a moment before it turns to dots). Paste, press Enter, and the box clears. To type it fully hidden, run this in your own terminal: {terminalAlternative()}</Text>
+            {muted('bill-how', `Shows a dot for each character, never the key (a paste may show for a moment). Enter saves and clears the box. Fully hidden, in your own terminal: ${terminalAlternative()}`)}
             <Field
               key={`bill-key-${bill.nonce}`}
               label="Claude API key"
@@ -8074,7 +8139,7 @@ export const register: Register = (on, options) => {
               onInput={(v: string) => void billingType($, v)}
               onSubmit={(v: string) => billingSave($, v)}
             />
-            <Box flexDirection="row" gap={2}>
+            <Box flexDirection="row" flexWrap="wrap" columnGap={2}>
               <Button key="bill-save" label="🔑 Save to Keychain" plain onPress={async () => billingSave($, draft.get(await $.clock.now()))} />
               <Button key="bill-clear" label="✕ Clear box" plain onPress={async () => { draft.clear(); await update($, billing, prev => ({ ...prev, nonce: prev.nonce + 1, typedLen: 0 })) }} />
               {bill.saved || bill.inKeychain ? <Button key="bill-remove" label="🗑 Remove key" plain onPress={() => billingRemove($)} /> : null}
@@ -8090,10 +8155,9 @@ export const register: Register = (on, options) => {
             await update($, billing, prev => ({ ...prev, isGuideOpen: !prev.isGuideOpen }))
           }}
         />
-        {bill.isGuideOpen ? <Text wrap="wrap">{guideText($.plugin.root, bill.mode)}</Text> : null}
+        {bill.isGuideOpen ? <Text wrap="wrap" {...(isDark ? { color: c.text } : {})}>{guideText($.plugin.root, bill.mode)}</Text> : null}
       </Box>
     )
-
     // The spend card's period: a list (and, for a custom range, two date fields) where the
     // surface draws them, else buttons. Without the fields a custom range is `/tokens spend <from> <to>`.
     const spendControls = (() => {
@@ -8143,28 +8207,40 @@ export const register: Register = (on, options) => {
         </Box>
       )
     })()
-    // The layout: one card per subject, each with a heading in a colour of the skin's own
-    // palette, every option followed by one short muted line saying what it does. Pickers and
-    // their "…or type" fields share the card's left edge. A colour names a section, nothing else.
-    const c = SKIN.colors
-    const muted = (key: string, text: string) =>
-      SKIN.dark ? <Text key={key} color={c.muted} wrap="wrap">{text}</Text> : <Text key={key} dimColor wrap="wrap">{text}</Text>
-    // One option: its control (and a field to type into, if any), then its hint, indented.
-    const opt = (key: string, hintText: string, ...controls: unknown[]) => (
-      <Box key={key} flexDirection="column">
-        {controls.filter(Boolean) as never}
-        <Box paddingLeft={2}>{muted(`${key}-hint`, hintText)}</Box>
-      </Box>
-    )
-    const card = (key: string, title: string, tone: string, ...rows: unknown[]) => (
-      <Box key={key} flexDirection="column" gap={1} paddingX={1} borderStyle="round" {...(SKIN.dark ? { borderColor: c.line } : { borderDimColor: true })}>
-        <Text color={tone} bold>{title}</Text>
-        {rows.filter(Boolean) as never}
-      </Box>
-    )
+    // One option: what it is (a label and its value, or a switch), its hint, then its controls.
+    const opt = (key: string, hintText: string, head: unknown, ...controls: unknown[]) => {
+      const shown = controls.filter(Boolean)
+      return (
+        <Box key={key} flexDirection="column">
+          {head as never}
+          <Box paddingLeft={2}>{muted(`${key}-hint`, hintText)}</Box>
+          {shown.length ? (
+            <Box key={`${key}-ctl`} flexDirection="row" flexWrap="wrap" columnGap={2} paddingLeft={2}>
+              {shown as never}
+            </Box>
+          ) : null}
+        </Box>
+      )
+    }
+    // A card: a band in its colour (the title bold, the tagline after it), a frame in the same colour.
+    const card = (key: string, section: SettingsSection, title: string, ...rows: unknown[]) => {
+      const tone = tones[section]
+      const ink = inkOn(tone)
+      return (
+        <Box key={key} flexDirection="column" borderStyle="round" borderColor={tone} {...(isDark ? { backgroundColor: c.tile } : {})}>
+          <Box key={`${key}-band`} flexDirection="row" flexWrap="wrap" columnGap={2} alignItems="center" paddingX={1} backgroundColor={tone}>
+            <Text bold size="heading" color={ink}>{title}</Text>
+            <Text color={ink} size="footnote">{settingsTagline(SKIN.cast, section)}</Text>
+          </Box>
+          <Box flexDirection="column" gap={1} paddingX={1} paddingY={1}>
+            {rows.filter(Boolean) as never}
+          </Box>
+        </Box>
+      )
+    }
     // A dropdown's value is always one of its options: a stray one shows the first.
     const among = (value: string, options: readonly { value: string }[]): string => (options.some(o => o.value === value) ? value : options[0]?.value ?? value)
-    const box = (isOn: boolean) => (isOn ? '☑︎' : '☐')
+    const labelOf = (value: string, options: readonly { value: string; label?: string }[]): string => options.find(o => o.value === value)?.label ?? value
     const crewOptions = CREW_OPTIONS
     const shotValue = cleanOneShot(prefs.oneShot)
     const dailyOptions = stepOptions(DAILY_STEPS, prefs.dailyUsd, v => `${fmtCost(v)} a day`)
@@ -8172,103 +8248,117 @@ export const register: Register = (on, options) => {
     const ramOptions = ramLimitOptions(prefs.ramLimit)
     const agentOptions = maxAgentsOptions(gd.autoLabel, prefs.maxAgents)
     const killChoices = killOptions()
+    const crewChoice: CrewChoice = !prefs.crewMode ? 'off' : prefs.crewAlways ? 'every' : 'big'
+    const ramLabel = labelOf(cleanRamLimit(prefs.ramLimit), ramOptions)
+    const maxNow = cleanMaxAgents(prefs.maxAgents)
+    const isKillOn = cleanKillSwitch(prefs.killSwitch) === 'on'
+    const ultraBy = cleanUltraBy(prefs.ultraBy)
     const money = card(
       'set-money',
+      'money',
       '💰 Money',
-      c.done,
-      opt(
-        'opt-autopilot',
-        'Read-only explorer agents run on Haiku, the cheapest model.',
-        <Button key="set-autopilot" label={`${box(prefs.autopilot)} Autopilot`} plain onPress={async () => setAutopilot($, !(await read($, settings)).autopilot)} />,
-      ),
-      opt(
-        'opt-warm',
-        'Refreshes the prompt cache only when that costs less than letting it expire.',
-        <Button key="set-warm" label={`${box(prefs.keepWarm)} Keep-Warm`} plain onPress={async () => setKeepWarm($, !(await read($, settings)).keepWarm)} />,
-      ),
+      opt('opt-autopilot', 'Read-only explorer agents run on Haiku, the cheapest model.', toggle('set-autopilot', 'Autopilot', prefs.autopilot, async () => setAutopilot($, !(await read($, settings)).autopilot))),
+      opt('opt-warm', 'Refreshes the prompt cache only when that costs less.', toggle('set-warm', 'Keep-Warm', prefs.keepWarm, async () => setKeepWarm($, !(await read($, settings)).keepWarm))),
       opt(
         'opt-daily',
-        "Warns you at 80% and again when today's spend reaches it.",
+        'Warns at 80% of it, and again at the cap.',
+        labelled('set-daily-now', 'Daily cap', prefs.dailyUsd ? `${fmtCost(prefs.dailyUsd)} / day` : null, tones.money),
         Pick ? (
-          <Pick key="set-daily-pick" label="💵︎ Daily cap" value={among(String(prefs.dailyUsd), dailyOptions)} options={dailyOptions} onSelect={v => void setDailyCap($, Number(v) || 0)} />
+          <Pick key="set-daily-pick" value={among(String(prefs.dailyUsd), dailyOptions)} options={dailyOptions} onSelect={v => void setDailyCap($, Number(v) || 0)} />
         ) : (
-          <Button key="set-daily" label={`💵︎ Daily cap: ${prefs.dailyUsd ? `${fmtCost(prefs.dailyUsd)} a day` : 'off'} ▸`} plain onPress={async () => setDailyCap($, nextStep(DAILY_STEPS, (await read($, settings)).dailyUsd))} />
+          <Button key="set-daily" label={`Daily cap: ${prefs.dailyUsd ? `${fmtCost(prefs.dailyUsd)} a day` : 'off'} ▸`} plain onPress={async () => setDailyCap($, nextStep(DAILY_STEPS, (await read($, settings)).dailyUsd))} />
         ),
-        Field ? <Field key="set-daily-type" label="…or type a daily cap" placeholder={`${CURRENCY.symbol || '$'} amount, 0 = off`} value="" submitLabel="set" onSubmit={(v: string) => void typeMoney($, 'daily', v)} /> : null,
+        Field ? <Field key="set-daily-type" label="or type" placeholder={`${CURRENCY.symbol || '$'} amount, 0 = off`} value="" submitLabel="set" onSubmit={(v: string) => void typeMoney($, 'daily', v)} /> : null,
       ),
       opt(
         'opt-budget',
-        "Warns you when one task's spend nears or passes it.",
+        'Warns when one task nears or passes it.',
+        labelled('set-budget-now', 'Budget per task', prefs.budgetUsd ? `${fmtCost(prefs.budgetUsd)} / task` : null, tones.money),
         Pick ? (
-          <Pick key="set-budget-pick" label="🎯︎ Budget per task" value={among(String(prefs.budgetUsd), budgetOptions)} options={budgetOptions} onSelect={v => void setBudget($, Number(v) || 0)} />
+          <Pick key="set-budget-pick" value={among(String(prefs.budgetUsd), budgetOptions)} options={budgetOptions} onSelect={v => void setBudget($, Number(v) || 0)} />
         ) : (
-          <Button key="set-budget" label={`🎯︎ Budget per task: ${prefs.budgetUsd ? fmtCost(prefs.budgetUsd) : 'off'} ▸`} plain onPress={async () => setBudget($, nextStep(BUDGET_STEPS, (await read($, settings)).budgetUsd))} />
+          <Button key="set-budget" label={`Budget per task: ${prefs.budgetUsd ? fmtCost(prefs.budgetUsd) : 'off'} ▸`} plain onPress={async () => setBudget($, nextStep(BUDGET_STEPS, (await read($, settings)).budgetUsd))} />
         ),
-        Field ? <Field key="set-budget-type" label="…or type a budget" placeholder={`${CURRENCY.symbol || '$'} amount, 0 = off`} value="" submitLabel="set" onSubmit={(v: string) => void typeMoney($, 'budget', v)} /> : null,
+        Field ? <Field key="set-budget-type" label="or type" placeholder={`${CURRENCY.symbol || '$'} amount, 0 = off`} value="" submitLabel="set" onSubmit={(v: string) => void typeMoney($, 'budget', v)} /> : null,
       ),
-      opt('opt-spend', 'Which days the spend card on the main pane adds up.', Pick && Field ? null : <Text key="set-spend-h" bold>{s.spend.period}</Text>, spendControls),
+      opt(
+        'opt-spend',
+        "Which days the main pane's spend card adds up.",
+        labelled('set-spend-h', s.spend.period, s.spend[sp.period.kind], tones.money),
+        spendControls,
+      ),
     )
     const machine = card(
       'set-guard',
+      'guard',
       '🛡︎ Machine Guard',
-      c.meter,
-      opt('opt-machine', 'What Mission Control found on this computer.', <Text key="set-guard-machine" bold>{`🖥︎ ${gd.line}`}</Text>),
+      opt('opt-machine', 'What Mission Control found on this computer.', <Text key="set-guard-machine" bold color={isDark ? c.text : undefined}>{`🖥︎ ${gd.line}`}</Text>),
       opt(
         'opt-ram',
         'How much memory Claude and all its agents may use together.',
+        labelled('set-ram-now', 'RAM limit', ramLabel, tones.guard),
         Pick ? (
-          <Pick key="set-ram-pick" label="🧠︎ RAM Claude may use" value={among(cleanRamLimit(prefs.ramLimit), ramOptions)} options={ramOptions} onSelect={v => void setRamLimit($, v)} />
+          <Pick key="set-ram-pick" value={among(cleanRamLimit(prefs.ramLimit), ramOptions)} options={ramOptions} onSelect={v => void setRamLimit($, v)} />
         ) : (
-          <Button key="set-ram" label={`🧠︎ RAM Claude may use: ${ramOptions.find(o => o.value === cleanRamLimit(prefs.ramLimit))?.label ?? 'Auto'} ▸`} plain onPress={async () => {
+          <Button key="set-ram" label={`RAM Claude may use: ${ramLabel} ▸`} plain onPress={async () => {
             const now = (await read($, settings)).ramLimit
             const opts = ramLimitOptions(now)
             const i = opts.findIndex(o => o.value === cleanRamLimit(now))
             await setRamLimit($, (opts[(i + 1) % opts.length] ?? opts[0])?.value ?? 'auto')
           }} />
         ),
-        Field ? <Field key="set-ram-type" label="…or type a limit" placeholder="GB, like 12" value="" submitLabel="set" onSubmit={(v: string) => void typeRamLimit($, v)} /> : null,
+        Field ? <Field key="set-ram-type" label="or type" placeholder="GB, like 12" value="" submitLabel="set" onSubmit={(v: string) => void typeRamLimit($, v)} /> : null,
       ),
       opt(
         'opt-agents',
-        'How many agents may run at once. Auto works it out from the RAM limit.',
+        'Agents at once. Auto works it out from the RAM limit.',
+        labelled('set-agents-now', 'Max agents', maxNow ? String(maxNow) : gd.autoLabel.replace(/\s*\(.*\)$/, ''), tones.guard),
         Pick ? (
-          <Pick key="set-agents-pick" label="👥︎ Max agents at once" value={among(String(cleanMaxAgents(prefs.maxAgents)), agentOptions)} options={agentOptions} onSelect={v => void setMaxAgents($, Number(v) || 0)} />
+          <Pick key="set-agents-pick" value={among(String(maxNow), agentOptions)} options={agentOptions} onSelect={v => void setMaxAgents($, Number(v) || 0)} />
         ) : (
-          <Button key="set-agents" label={`👥︎ Max agents at once: ${cleanMaxAgents(prefs.maxAgents) || gd.autoLabel} ▸`} plain onPress={async () => {
+          <Button key="set-agents" label={`Max agents at once: ${maxNow || gd.autoLabel} ▸`} plain onPress={async () => {
             const now = cleanMaxAgents((await read($, settings)).maxAgents)
             await setMaxAgents($, [0, ...MAX_AGENTS_STEPS].find(v => v > now) ?? 0)
           }} />
         ),
-        Field ? <Field key="set-agents-type" label="…or type a number" placeholder="agents, like 24" value="" submitLabel="set" onSubmit={(v: string) => void typeMaxAgents($, v)} /> : null,
+        Field ? <Field key="set-agents-type" label="or type" placeholder="agents, like 24" value="" submitLabel="set" onSubmit={(v: string) => void typeMaxAgents($, v)} /> : null,
       ),
       opt(
         'opt-kill',
-        'If Claude goes over its RAM limit, stops its biggest heavy command (tsc, tests, builds).',
+        'Over the RAM limit? Stops its biggest heavy command (tsc, tests, builds).',
+        <Box key="set-kill-now" flexDirection="row" flexWrap="wrap" columnGap={1}>
+          {strong('set-kill-now-l', 'Kill switch')}
+          {chip('set-kill-now-v', isKillOn ? 'ON' : 'OFF', isKillOn ? c.done : c.alert)}
+        </Box>,
         Pick ? (
-          <Pick key="set-kill-pick" label={'🔪\uFE0E Kill switch'} value={among(cleanKillSwitch(prefs.killSwitch), killChoices)} options={killChoices} onSelect={v => void setKillSwitch($, cleanKillSwitch(v))} />
+          <Pick key="set-kill-pick" value={among(cleanKillSwitch(prefs.killSwitch), killChoices)} options={killChoices} onSelect={v => void setKillSwitch($, cleanKillSwitch(v))} />
         ) : (
-          <Button key="set-kill" label={`🔪\uFE0E Kill switch: ${cleanKillSwitch(prefs.killSwitch) === 'on' ? 'On' : 'Off'} ▸`} plain onPress={async () => setKillSwitch($, cleanKillSwitch((await read($, settings)).killSwitch) === 'on' ? 'off' : 'on')} />
+          <Button key="set-kill" label={`Kill switch: ${isKillOn ? 'On' : 'Off'} ▸`} plain onPress={async () => setKillSwitch($, cleanKillSwitch((await read($, settings)).killSwitch) === 'on' ? 'off' : 'on')} />
         ),
       ),
       opt(
         'opt-agent-ram',
-        'Learned by watching agents run. Reset it if the figure looks wrong.',
-        <Text key="set-agent-ram" bold>{`🧮︎ ${gd.perAgent}`}</Text>,
+        'Learned by watching agents run. Reset it if it looks wrong.',
+        <Box key="set-agent-ram-now" flexDirection="row" flexWrap="wrap" columnGap={1}>
+          {strong('set-agent-ram-l', 'RAM per agent')}
+          {chip('set-agent-ram', `🧮︎ ${gd.perAgent}`, tones.guard)}
+        </Box>,
         <Button key="set-agent-ram-reset" label="↺ Reset learned RAM per agent" plain onPress={() => resetAgentRam($)} />,
       ),
     )
+    const tkName = tkStr().setting(tkNow.jobMin, tkNow.agentMin).split(':')[0] ?? 'Timekeeper'
     const crewCard = card(
       'set-crew-card',
+      'crew',
       '🦀︎ Crew',
-      c.accent,
       opt(
         'opt-crew',
-        'Splits work across helper agents: big jobs only, every job, or off.',
+        'Splits work across helper agents: big jobs, every job, or off.',
+        labelled('set-crew-now', 'Crew mode', crewChoice === 'off' ? null : crewChoice === 'every' ? 'Every job' : 'Big jobs', tones.crew),
         Pick ? (
           <Pick
             key="set-crew-pick"
-            label="🦀︎ Crew mode"
-            value={among(!prefs.crewMode ? 'off' : prefs.crewAlways ? 'every' : 'big', crewOptions)}
+            value={among(crewChoice, crewOptions)}
             options={crewOptions}
             onSelect={v => void setCrewChoice($, v === 'off' || v === 'every' ? v : 'big')}
           />
@@ -8292,54 +8382,61 @@ export const register: Register = (on, options) => {
       ),
       opt(
         'opt-oneshot',
-        'Once you approve a plan: do it all then report, one part at a time, or ask.',
+        'Once you approve a plan: all of it, one part at a time, or ask.',
+        labelled('set-oneshot-now', 'One-shot plans', shotValue === 'on' ? 'Whole plan' : shotValue === 'off' ? 'Step by step' : 'Ask each time', tones.crew),
         Pick ? (
-          <Pick key="set-oneshot-pick" label="⏩︎ One-shot plans" value={among(shotValue, SHOT_OPTIONS)} options={SHOT_OPTIONS} onSelect={v => void setOneShot($, cleanOneShot(v))} />
+          <Pick key="set-oneshot-pick" value={among(shotValue, SHOT_OPTIONS)} options={SHOT_OPTIONS} onSelect={v => void setOneShot($, cleanOneShot(v))} />
         ) : (
-          <Button key="set-oneshot" label={`⏩︎ One-shot plans: ${prefs.oneShot === 'on' ? 'on' : prefs.oneShot === 'off' ? 'off' : 'ask each time'} ▸`} plain onPress={async () => setOneShot($, nextOneShot(cleanOneShot((await read($, settings)).oneShot)))} />
+          <Button key="set-oneshot" label={`One-shot plans: ${prefs.oneShot === 'on' ? 'on' : prefs.oneShot === 'off' ? 'off' : 'ask each time'} ▸`} plain onPress={async () => setOneShot($, nextOneShot(cleanOneShot((await read($, settings)).oneShot)))} />
         ),
       ),
       opt(
         'opt-ultra-by',
-        'Who says which agents get max effort and a deep check: you, or the Manager per task.',
+        'Who gives agents max effort and a deep check.',
+        labelled('set-ultraby-now', 'Ultra decided by', ultraBy === 'manager' ? 'Manager' : 'Me', tones.crew),
         Pick ? (
-          <Pick key="set-ultraby-pick" label="⚡ Ultra decided by" value={among(cleanUltraBy(prefs.ultraBy), ULTRA_BY_OPTIONS)} options={ULTRA_BY_OPTIONS} onSelect={v => void setUltraBy($, cleanUltraBy(v))} />
+          <Pick key="set-ultraby-pick" value={among(ultraBy, ULTRA_BY_OPTIONS)} options={ULTRA_BY_OPTIONS} onSelect={v => void setUltraBy($, cleanUltraBy(v))} />
         ) : (
-          <Button key="set-ultraby" label={`⚡ Ultra decided by: ${cleanUltraBy(prefs.ultraBy) === 'manager' ? 'Manager' : 'Me'} ▸`} plain onPress={async () => setUltraBy($, cleanUltraBy((await read($, settings)).ultraBy) === 'manager' ? 'me' : 'manager')} />
+          <Button key="set-ultraby" label={`Ultra decided by: ${ultraBy === 'manager' ? 'Manager' : 'Me'} ▸`} plain onPress={async () => setUltraBy($, cleanUltraBy((await read($, settings)).ultraBy) === 'manager' ? 'me' : 'manager')} />
         ),
       ),
-      opt(
-        'opt-staffing',
-        'Each agent gets the model and effort its job needs.',
-        <Button key="set-staffing" label={`${box(prefs.staffing)} Smart staffing`} plain onPress={async () => setFlag($, 'staffing', !(await read($, settings)).staffing)} />,
-      ),
+      opt('opt-staffing', 'Each agent gets the model and effort its job needs.', toggle('set-staffing', 'Smart staffing', prefs.staffing, async () => setFlag($, 'staffing', !(await read($, settings)).staffing))),
       opt(
         'opt-timekeeper',
-        'A time budget for each job and each agent, with a nudge when one runs long.',
-        <Button
-          key="set-timekeeper"
-          label={`${box(tkNow.on)} ${tkStr().setting(tkNow.jobMin, tkNow.agentMin)}`}
-          plain
-          onPress={async () => {
-            await setTimekeeper($, { on: !(await read($, timekeeper)).on })
-          }}
-        />,
+        'A time budget per job and per agent, with a nudge when one runs long.',
+        toggle(
+          'set-timekeeper',
+          tkName,
+          tkNow.on,
+          async () => setTimekeeper($, { on: !(await read($, timekeeper)).on }),
+          `${box(tkNow.on)} ${tkStr().setting(tkNow.jobMin, tkNow.agentMin)}`,
+          `ON · ${tkNow.jobMin} / ${tkNow.agentMin} min`,
+        ),
       ),
     )
     const look = card(
       'set-look',
+      'look',
       '🎨 Look and feel',
-      c.accent2,
-      opt('opt-skin', `Now: ${SKIN.name}. Colours and style of this pane and the band.`, <Button key="set-skin" label="Change skin ▸" plain onPress={() => void showPane($, SKINS_PANE, SKIN.tabs.skins)} />),
+      opt(
+        'opt-skin',
+        `Now: ${SKIN.name}, on this pane, the band and the chat.`,
+        <Box key="set-skin-now" flexDirection="row" flexWrap="wrap" columnGap={1}>
+          {strong('set-skin-now-l', 'Skin')}
+          {chip('set-skin-now-v', SKIN.name, tones.look)}
+          <Button key="set-skin" label="Change skin ▸" plain onPress={() => void showPane($, SKINS_PANE, SKIN.tabs.skins)} />
+        </Box>,
+      ),
       opt(
         'opt-currency',
         'The currency costs are shown in.',
+        labelled('set-currency-now', 'Currency', CURRENCY.code, tones.look),
         Pick ? (
-          <Pick key="set-currency-pick" label="¤ Currency" value={among(CURRENCY.code, currencyOptions())} options={currencyOptions()} onSelect={v => void setCurrency($, CURRENCIES.find(cur => cur.code === v) ?? CURRENCY)} />
+          <Pick key="set-currency-pick" value={among(CURRENCY.code, currencyOptions())} options={currencyOptions()} onSelect={v => void setCurrency($, CURRENCIES.find(cur => cur.code === v) ?? CURRENCY)} />
         ) : (
           <Button
             key="set-currency"
-            label={`¤ Currency: ${currencyLabel(currencyOf(prefs.currency, CURRENCY.code === prefs.currency ? CURRENCY.rate : undefined))} ▸`}
+            label={`Currency: ${currencyLabel(currencyOf(prefs.currency, CURRENCY.code === prefs.currency ? CURRENCY.rate : undefined))} ▸`}
             plain
             onPress={async () => {
               const i = CURRENCIES.findIndex(cur => cur.code === CURRENCY.code)
@@ -8348,47 +8445,55 @@ export const register: Register = (on, options) => {
           />
         ),
       ),
-      SKIN.cast
-        ? null
-        : opt('opt-simple', "The band shows 3 rows: what's happening, the crew, the cost.", <Button key="set-simple" label={`${box(prefs.simple)} Simple band`} plain onPress={async () => setFlag($, 'simple', !(await read($, settings)).simple)} />),
-      opt('opt-calm', 'One status line instead of the band.', <Button key="set-calm" label={`${box(prefs.calm)} Calm mode`} plain onPress={async () => setFlag($, 'calm', !(await read($, settings)).calm)} />),
+      SKIN.cast ? null : opt('opt-simple', "The band in 3 rows: what's on, the crew, the cost.", toggle('set-simple', 'Simple band', prefs.simple, async () => setFlag($, 'simple', !(await read($, settings)).simple))),
+      opt('opt-calm', 'One status line instead of the band.', toggle('set-calm', 'Calm mode', prefs.calm, async () => setFlag($, 'calm', !(await read($, settings)).calm))),
       opt(
         'opt-sounds',
         cyberOf() ? 'Chimes, blips and the MaxTac siren.' : 'A chime when a job is done.',
-        <Button
-          key="set-sounds"
-          label={`${box(prefs.sounds)} Sounds`}
-          plain
-          onPress={async () => {
-            const isOn = !(await read($, settings)).sounds
-            await $.store.set('sounds', isOn).catch(() => undefined)
-            await update($, settings, prev => ({ ...prev, sounds: isOn }))
-          }}
-        />,
+        toggle('set-sounds', 'Sounds', prefs.sounds, async () => {
+          const isOn = !(await read($, settings)).sounds
+          await $.store.set('sounds', isOn).catch(() => undefined)
+          await update($, settings, prev => ({ ...prev, sounds: isOn }))
+        }),
       ),
-      opt('opt-voice', 'Says out loud when a job is done and what it cost.', <Button key="set-voice" label={`${box(prefs.voice)} Spoken status`} plain onPress={async () => setFlag($, 'voice', !(await read($, settings)).voice)} />),
+      opt('opt-voice', 'Says out loud when a job is done and what it cost.', toggle('set-voice', 'Spoken status', prefs.voice, async () => setFlag($, 'voice', !(await read($, settings)).voice))),
       opt(
         'opt-open',
         'Opens Mission Control each time Claude starts.',
-        <Button
-          key="set-open"
-          label={`${box(prefs.openOnStart)} Open on start`}
-          plain
-          onPress={async () => {
-            const isOn = !(await read($, settings)).openOnStart
-            await $.store.set('openOnStart', isOn).catch(() => undefined)
-            await update($, settings, prev => ({ ...prev, openOnStart: isOn }))
-          }}
-        />,
+        toggle('set-open', 'Open on start', prefs.openOnStart, async () => {
+          const isOn = !(await read($, settings)).openOnStart
+          await $.store.set('openOnStart', isOn).catch(() => undefined)
+          await update($, settings, prev => ({ ...prev, openOnStart: isOn }))
+        }),
       ),
     )
+    // The banner: what is set now, at a glance, in the colours of the cards it comes from.
+    const status = [
+      { text: SKIN.name, tone: tones.look },
+      { text: `Crew: ${crewChoice === 'off' ? 'off' : crewChoice === 'every' ? 'every job' : 'big jobs'}`, tone: tones.crew },
+      { text: ramStatus(gd.autoLabel, maxNow, ramLabel), tone: tones.guard },
+    ]
+    const banner =
+      e.surface !== 'terminal' && 'Svg' in ui ? (
+        (() => {
+          const { Svg } = ui
+          const W = Math.max(240, Math.min(1100, Math.round((e.props.bodyColumns || 40) * 10) - 8))
+          return <Svg key="set-banner" source={settingsBannerSvg(W, status)} alt={`Settings: ${status.map(st => st.text).join(', ')}`} />
+        })()
+      ) : (
+        <Box key="set-banner" flexDirection="row" flexWrap="wrap" columnGap={1}>
+          <Text bold color={c.accent}>⚙ Settings</Text>
+          {status.map((st, i) => chip(`set-status-${i}`, st.text, st.tone))}
+        </Box>
+      )
     return (
-      <Box flexDirection="column" gap={1}>
+      <Box flexDirection="column" gap={1} {...(isDark && SKIN.backdrop.fill ? { backgroundColor: SKIN.backdrop.fill } : {})}>
+        {banner}
         {money}
         {machine}
         {crewCard}
         {look}
-        {card('set-billing', '💳 Billing', c.warn, billingBlock)}
+        {card('set-billing', 'billing', '💳 Billing', billingBlock)}
       </Box>
     )
     } catch (err) {
