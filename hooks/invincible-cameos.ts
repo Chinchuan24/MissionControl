@@ -17,6 +17,7 @@
 import { AHEAD_MS, SHOWDOWN_MS, SWAP_MS, THINK_MS, duelPlan, fightDue, kf, mover, showdownDue, showdownPlan } from './invincible-eggs'
 import { M, PROPS, SP, T, clamp, pal, pin, px, r1, sansW, speedLines, spH, spW, unit } from './invincible'
 import type { Era } from './invincible'
+import { thinkMarkHolds } from './invincible-thinkmark'
 import type { ExtraArgs, PaneCard } from './themes'
 
 export const CAM_SLOT_MS = 360_000
@@ -103,7 +104,7 @@ export const camDue = (at: number, fx?: { kind: string; at: number }, swapAt?: n
   for (const slot of [k, k + 1]) {
     const p = camPlanOfSlot(slot)
     if (!p.on || at >= p.endAt || p.startAt > at + AHEAD_MS) continue
-    if (liveWin(swapAt, p.startAt, p.endAt, SWAP_MS + 500)) return undefined
+    if (liveWin(swapAt, p.startAt, p.endAt, SWAP_MS + 500) || thinkMarkHolds(fx, p.startAt, p.endAt)) return undefined
     if (fx && (fx.kind === 'think' || fx.kind === 'showdown') && liveWin(fx.at, p.startAt, p.endAt, fx.kind === 'think' ? THINK_MS : SHOWDOWN_MS)) return undefined
     return p
   }

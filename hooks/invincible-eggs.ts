@@ -6,6 +6,7 @@
 import { ACT_LEN, ACT_OFF, BAND_CUT, HOLE_END, fightAct, fightBand, fightHole, fightShake } from './invincible-fight'
 import type { ActIndex } from './invincible-fight'
 import { thinkMark } from './invincible'
+import { thinkMarkExtras, thinkMarkHolds, thinkMarkLive } from './invincible-thinkmark'
 import type { Era } from './invincible'
 import type { ExtraArgs, PaneCard } from './themes'
 import { C, PROPS, SP, caption, halftoneDefs, impact, koStars, pal, px, r1, sfx, speedLines, spH, spW, unit, uniq } from './invincible'
@@ -166,22 +167,25 @@ const dly = (t: number): string => `calc(${pin(t)} + 0s)`
 const pin = (ms: number): string => `@@T${Math.round(ms)}@@`
 /** The showdown is on the GDA WALL for its 7.4 s: typed (`fx`), or the day's seeded time. */
 export const showdownDue = (at: number, era: Era, fx?: { kind: string; at: number }): number | undefined => {
+  if (thinkMarkLive(fx, at)) return undefined // the cutscene holds the stage for its 65 s
   if (fx?.kind === 'showdown' && liveAt(fx.at, at, SHOWDOWN_MS)) return fx.at
   const p = showdownPlan(at, era)
-  return due(p, at) ? p.startAt : undefined
+  return due(p, at) && !thinkMarkHolds(fx, p.startAt, p.endAt) ? p.startAt : undefined
 }
 /** The fight's plan for a draw, or undefined: only while a job works, never with the swap, THINK, MARK or the showdown. */
 export const fightDue = (at: number, era: Era, working: boolean | undefined, fx?: { kind: string; at: number }, swapAt?: number): number | undefined => {
   if (!working) return undefined
   if (liveAt(swapAt, at, SWAP_MS + 500) || (fx && liveAt(fx.at, at, fx.kind === 'think' ? THINK_MS : fx.kind === 'showdown' ? SHOWDOWN_MS : 0))) return undefined
   const p = duelPlan(at, era)
-  if (!due(p, at)) return undefined
+  if (!due(p, at) || thinkMarkHolds(fx, p.startAt, p.endAt)) return undefined
   if (showdownPlan(at, era).startAt < p.endAt + 5000 && showdownPlan(at, era).endAt > p.startAt - 5000) return undefined
   return p.startAt
 }
 /** The slot's hole, THE FIGHT's band cut and the pane acts, THE SHOWDOWN, the era swap and THINK, MARK for a panel. */
 export const invExtras = (era: Era, tile: string) => (o: ExtraArgs): string => {
   if (o.party) return ''
+  const scene = thinkMarkExtras(o, era)
+  if (scene !== undefined) return scene
   const out: string[] = []
   const idx = o.card ? ACT_OF[o.card] : 0
   if (liveAt(o.swapAt, o.at, SWAP_MS)) out.push(swap(o.W, o.H, o.surface, era, { delay: dly((o.swapAt as number) + (o.surface === 'pane' ? 60 * idx : 0)) }))
