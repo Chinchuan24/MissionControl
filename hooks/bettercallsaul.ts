@@ -400,7 +400,7 @@ export const BCS_BOOT = ['OPENING THE OFFICE…', "S'ALL GOOD, MAN"]
 export const GENE_BOOT = ['CLOCKING IN…', 'OMAHA · THE MALL']
 export const BCS_GREETING = "Saul Goodman, attorney at law. S'all good, man!"
 export const GENE_GREETING = 'Gene speaking. …It’s just a name.'
-export const BCS_TITLE_WORDS = ['Chicanery', 'Sunk Costs', 'Expenses', 'Slip', 'Something Stupid', 'Bagman', 'Wine and Roses', 'Fun and Games', 'Waterworks', 'Quite a Ride', 'Namaste', 'Magic Man', 'Off Brand', 'Winner']
+export const BCS_TITLE_WORDS = ['Sunk Costs', 'Expenses', 'Slip', 'Something Stupid', 'Bagman', 'Wine and Roses', 'Fun and Games', 'Waterworks', 'Quite a Ride', 'Magic Man', 'Off Brand', 'Winner']
 export const BCS_SKIN_WORDS = BCS_TITLE_WORDS
 export const BCS_TOOLS: Record<string, string> = {
   Read: 'Review', Grep: 'Discovery', Glob: 'Docket', LS: 'Docket', Edit: 'Redline', MultiEdit: 'Redline', NotebookEdit: 'Redline', Write: 'Draft',
@@ -422,7 +422,8 @@ export const EPISODES: [string, string][] = [['S1E1', 'Uno'], ['S1E2', 'Mijo'], 
   ['S6E1', 'Wine and Roses'], ['S6E2', 'Carrot and Stick'], ['S6E3', 'Rock and Hard Place'], ['S6E4', 'Hit and Run'], ['S6E5', 'Black and Blue'], ['S6E6', 'Axe and Grind'], ['S6E7', 'Plan and Execution'], ['S6E8', 'Point and Shoot'], ['S6E9', 'Fun and Games'], ['S6E10', 'Nippy'], ['S6E11', 'Breaking Bad'], ['S6E12', 'Waterworks'], ['S6E13', 'Saul Gone']]
 /** One title an hour, as the ticker's "S3E5 Chicanery". */
 export const bcsEpisodeAt = (at: number): string => {
-  const e = EPISODES[Math.floor(at / 3_600_000) % EPISODES.length] as [string, string]
+  const list = EPISODES.filter(([, t]) => t !== 'Chicanery' && t !== 'Namaste') // two of the typed trigger words
+  const e = list[Math.floor(at / 3_600_000) % list.length] as [string, string]
   return `${e[0]} ${e[1]}`
 }
 /** Season 1's titles all end in "O" except "Alpine Shepherd Boy" (Vince Gilligan, the Insider podcast): that last letter gets its own colour. */

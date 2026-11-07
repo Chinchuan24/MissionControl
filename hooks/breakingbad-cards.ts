@@ -7,7 +7,7 @@
 // colours (paper, wood, slate, a CRT): they are objects, not UI. Type is the skin's system sans
 // at weights 400 and 700 only, and widths come from `sansW` (measured in Chrome), not `textW`.
 
-import { BADGES, levelOf, xpFor } from './extras'
+import { BADGES, levelOf, nextOf, veil, xpFor } from './extras'
 import type { Beat, Cred, Frame } from './extras'
 import type { Legend } from './eggs'
 import { BB_RIGHT, BB_REVEAL_MS, BB_TOOLS, ELEMENTS, empireRankOf } from './breakingbad'
@@ -218,6 +218,12 @@ export const periodicCard = (W: number, c: Cred, theme: CardTheme, font: string,
   // The table: the nine badge elements light up where they really live.
   const g = tableGeom(W)
   const cellAt = (per: number, grp: number): [number, number] => [g.x0 + (grp - 1) * g.p, g.y0 + (per - 1) * g.p]
+  // An element as the table shows it: the secret one stays a '?' tile until it is found.
+  const elOf = (id: string, got: boolean): string[] => {
+    const e = ELEMENTS[id] as string[]
+    const v = veil({ id, name: e[2] as string, icon: e[0] as string, how: e[3] as string }, got)
+    return [v.icon, e[1] as string, v.name, v.how]
+  }
   const bz = new Map(BADGES.map(b => [Number((ELEMENTS[b.id] ?? [])[1]), b]))
   const cells: string[] = []
   const seen = new Set<string>()
@@ -233,7 +239,7 @@ export const periodicCard = (W: number, c: Cred, theme: CardTheme, font: string,
     const sym = isRange ? '' : symOf(zz)
     const symSize = g.p < 20 ? 7.5 : 8
     if (b) {
-      const e = ELEMENTS[b.id] as string[]
+      const e = elOf(b.id, c.badges.includes(b.id))
       if (c.badges.includes(b.id)) {
         cells.push(`<g><title>${esc(`${e[2]}: ${e[3]}`)}</title><rect x="${x}" y="${y}" width="${g.cell}" height="${g.cell}" rx="2" fill="${t.el}"/><text x="${x + 2.5}" y="${y + 7}" font-family="${font}" font-size="6" font-weight="700" fill="${t.elInk}" fill-opacity=".8">${zz}</text><text x="${x + g.cell / 2}" y="${y + g.cell - 5}" text-anchor="middle" font-family="${font}" font-size="${g.p < 20 ? 9 : 10.5}" font-weight="700" fill="${t.elInk}">${sym}</text></g>`)
       } else {
@@ -268,9 +274,9 @@ export const periodicCard = (W: number, c: Cred, theme: CardTheme, font: string,
   // The transition-metal void (periods 2-3, groups 3-12): the next element to find.
   const [vx, vy] = cellAt(2, 3)
   const vw = 10 * g.p - 2
-  const next = BADGES.find(b => !c.badges.includes(b.id))
+  const next = nextOf(BADGES, c)
   if (next) {
-    const e = ELEMENTS[next.id] as string[]
+    const e = elOf(next.id, false)
     const pr = next.progress(c)
     s.push(LBL(vx + 6, vy + 14, 'NEXT', t.muted, font) + `<text x="${r1(vx + 6 + sansW('NEXT', 9.5, 0.8, true) + 7)}" y="${vy + 14}" font-family="${font}" font-size="11.5" font-weight="700" fill="${t.text}">${esc(sansClip(`${e[0]} · ${e[2]}`, 11.5, vw - 60, 0, true))}</text>`)
     s.push(`<text x="${vx + 6}" y="${vy + 30}" font-family="${font}" font-size="11.5" fill="${t.subtext}">${esc(sansClip(e[3] as string, 11.5, vw - 50))}</text><text x="${vx + vw - 4}" y="${vy + 30}" text-anchor="end" font-family="${font}" font-size="11.5" font-weight="700" fill="${t.text}" font-variant-numeric="tabular-nums">${Math.round(pr * 100)}%</text>`)
@@ -280,7 +286,7 @@ export const periodicCard = (W: number, c: Cred, theme: CardTheme, font: string,
   const ky = g.y0 + 7 * g.p + 16
   const colw = (W - 32) / 3
   BADGES.forEach((b, i) => {
-    const e = ELEMENTS[b.id] as string[]
+    const e = elOf(b.id, c.badges.includes(b.id))
     const x = 16 + (i % 3) * colw
     const y = ky + Math.floor(i / 3) * 17
     const got = c.badges.includes(b.id)
@@ -502,11 +508,11 @@ export const bbHead = (x: number, y: number, theme: CardTheme, font: string, hei
   const logo = heis ? sprite(x, y - 9.5, 19 / 13, HAT, { k: t.text, h: t.text, g: t.tile }) : ''
   return { svg: logo + brba(x + hx, y - 13.5, theme, font, heis), w: hx + 36 }
 }
-/** The context chip past 85%: NO HALF MEASURES, then SAY MY NAME, with a pixel hat. */
+/** The context chip past 85%: NO HALF MEASURES, then TREAD LIGHTLY, with a pixel hat. */
 export const bbChip = (x: number, y: number, ctxPct: number, theme: CardTheme, font: string): { svg: string; w: number } => {
   if (ctxPct < 85) return { svg: '', w: 0 }
   const name = ctxPct >= 95
-  const label = name ? 'SAY MY NAME' : 'NO HALF MEASURES'
+  const label = name ? 'TREAD LIGHTLY' : 'NO HALF MEASURES'
   const fill = name ? theme.alert : theme.warn
   const ink = name ? '#1A0807' : '#1A1505'
   const w = Math.round(sansW(label, 9.5, 0.8, true) + 32)

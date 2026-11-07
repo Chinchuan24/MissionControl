@@ -126,7 +126,7 @@ test('invincible: Allen goes wide at 96%', async ($, on) => {
   const b = await bandAt($, 1250)
   expect(b).toContain('class="inv-wide"')
 })
-for (const [pct, ctx, word] of [[88, 880_000, 'THAT ACTUALLY HURT'], [96, 960_000, 'THINK, MARK!']] as const) {
+for (const [pct, ctx, word] of [[88, 880_000, 'THAT ACTUALLY HURT'], [96, 960_000, 'HOLD THE LINE']] as const) {
   test(`invincible: the ${pct}% chip says ${word}`, async ($, on) => {
     base(on, ctx, quietAt())
     await start($, 'invincible')

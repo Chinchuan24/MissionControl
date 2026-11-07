@@ -1809,7 +1809,7 @@ const INVINCIBLE_SKIN: Skin = {
   id: 'invincible',
   cast: 'invincible',
   name: 'Invincible',
-  description: 'Fan homage: the comic page that became the show. Mark and Omni-Man fight across the panels; a second era hides behind "new suit".',
+  description: 'Fan homage: the comic page that became the show. Mark and Omni-Man fight across the panels.',
   font: "-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',Ubuntu,Cantarell,'Noto Sans','Liberation Sans',sans-serif",
   corners: 'round',
   dark: true,

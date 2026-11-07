@@ -89,7 +89,7 @@ export const BB_EPISODES: string[] = [
   'S2E2 Grilled', 'S2E6 Peekaboo', 'S2E7 Negro y Azul', 'S2E8 Better Call Saul', 'S2E9 4 Days Out', 'S2E12 Phoenix', 'S2E13 ABQ',
   'S3E1 No Más', 'S3E4 Green Light', 'S3E7 One Minute', 'S3E8 I See You', 'S3E9 Kafkaesque', 'S3E10 Fly', 'S3E12 Half Measures', 'S3E13 Full Measure',
   'S4E1 Box Cutter', 'S4E7 Problem Dog', 'S4E8 Hermanos', 'S4E10 Salud', 'S4E11 Crawl Space', 'S4E12 End Times', 'S4E13 Face Off',
-  'S5E1 Live Free or Die', 'S5E2 Madrigal', 'S5E3 Hazard Pay', 'S5E5 Dead Freight', 'S5E7 Say My Name', 'S5E8 Gliding Over All', 'S5E14 Ozymandias', 'S5E15 Granite State', 'S5E16 Felina',
+  'S5E1 Live Free or Die', 'S5E2 Madrigal', 'S5E3 Hazard Pay', 'S5E5 Dead Freight', 'S5E8 Gliding Over All', 'S5E14 Ozymandias', 'S5E15 Granite State', 'S5E16 Felina',
 ]
 export const bbEpisodeAt = (at: number): string => BB_EPISODES[Math.floor(at / 3_600_000) % BB_EPISODES.length] as string
 
@@ -201,7 +201,7 @@ export const ELEMENTS: Record<string, [string, string, string, string]> = {
   crewboss: ['Fe', '26', 'HAZMAT CREW', 'Run a batch with 5+ sub-agents'],
   chromed: ['Cl', '17', 'NO HALF MEASURES', 'Push the context past 90%'],
   owl: ['Si', '14', 'NIGHT SHIFT', 'Finish a batch after midnight'],
-  samurai: ['He', '2', 'SAY MY NAME', 'Find the secret skin'],
+  samurai: ['He', '2', 'SAY MY NAME', 'Keep exploring.'],
 }
 export const EMPIRE_BADGES: Badge[] = BADGES.map(b => {
   const e = ELEMENTS[b.id]
@@ -210,7 +210,7 @@ export const EMPIRE_BADGES: Badge[] = BADGES.map(b => {
 export const EMPIRE_WORDS: CredWords = { badges: EMPIRE_BADGES, cases: 'BATCHES', long: 'LONG BATCHES', all: 'EVERY ELEMENT FOUND. YEAH, SCIENCE!' }
 
 // --- Words ---
-export const BB_TITLE_WORDS: string[] = ['Gray Matter', 'Half Measures', 'Full Measure', 'Better Call Saul', 'Say My Name', 'Green Light', 'Live Free or Die', 'Hazard Pay', 'Crawl Space', 'Granite State', 'Felina', 'Problem Dog']
+export const BB_TITLE_WORDS: string[] = ['Gray Matter', 'Half Measures', 'Full Measure', 'Better Call Saul', 'Green Light', 'Live Free or Die', 'Hazard Pay', 'Crawl Space', 'Granite State', 'Felina', 'Problem Dog']
 export const BB_SKIN_WORDS: string[] = ['Respecting the chemistry', 'Applying yourself', 'Calling Saul', 'Washing cars', 'Treading lightly', 'Building an empire']
 export const BB_TOOLS: Record<string, string> = {
   Read: 'Study', Grep: 'Trace', Glob: 'Sort', Edit: 'Adjust', MultiEdit: 'Adjust', Write: 'Label', Bash: 'Cook', PowerShell: 'Cook',

@@ -3,7 +3,7 @@
 // capsule as fragments are recovered. NETRUN TRACE is the tool-call log on a four-lane oscilloscope with Roman's REC
 // viewfinder. CLOSED GIGS lists each closed job. Pure SVG strings, no `$`, no state. Kept lean (shared defs, merged
 // pixel runs): each card stays under CARD_BUDGET characters.
-import { levelOf, xpFor } from './extras'
+import { levelOf, nextOf, veil, xpFor } from './extras'
 import type { Badge, Beat, Cred } from './extras'
 import type { Legend } from './eggs'
 import { ER_CAPRI_BUST } from './cast'
@@ -24,12 +24,12 @@ export const ER2_BADGES: Badge[] = [
   { id: 'crewboss', name: 'FULL CREW', icon: '⚑', how: 'Run a job with 5+ sub-agents', progress: c => share(c.crewJobs, 1) },
   { id: 'chromed', name: 'POSSESSED', icon: '✕', how: 'Push the context past 90%', progress: c => (c.chromed ? 1 : 0) },
   { id: 'owl', name: 'WATSON NIGHTS', icon: '☾', how: 'Finish a job after midnight', progress: c => share(c.nightJobs, 1) },
-  { id: 'samurai', name: '0+2=1', icon: '∞', how: 'Find the secret skin', progress: c => (c.samurai ? 1 : 0) },
+  { id: 'samurai', name: '0+2=1', icon: '∞', how: 'Keep exploring.', progress: c => (c.samurai ? 1 : 0) },
 ]
 export const ER2_WORDS = { badges: ER2_BADGES, cases: 'JOBS', long: 'LONG JOBS', all: 'EVERY FRAGMENT RECOVERED.' }
 /** D's arc, with no spoilers: from a signal-less nomad to Capri's host. */
-export const er2RankOf = (lv: number): string => (lv >= 20 ? '0+2=1' : lv >= 15 ? "CAPRI'S HOST" : lv >= 10 ? 'CHIPPED' : lv >= 7 ? "KING'S CREW" : lv >= 4 ? 'RUNNER' : lv >= 2 ? 'SNAKE NATION' : 'NO SIGNAL')
-const NEXT_RANKS: [number, string][] = [[2, 'SNAKE NATION'], [4, 'RUNNER'], [7, "KING'S CREW"], [10, 'CHIPPED'], [15, "CAPRI'S HOST"], [20, '0+2=1']]
+export const er2RankOf = (lv: number): string => (lv >= 20 ? 'ONE MIND' : lv >= 15 ? "CAPRI'S HOST" : lv >= 10 ? 'CHIPPED' : lv >= 7 ? "KING'S CREW" : lv >= 4 ? 'RUNNER' : lv >= 2 ? 'SNAKE NATION' : 'NO SIGNAL')
+const NEXT_RANKS: [number, string][] = [[2, 'SNAKE NATION'], [4, 'RUNNER'], [7, "KING'S CREW"], [10, 'CHIPPED'], [15, "CAPRI'S HOST"], [20, 'ONE MIND']]
 export const er2Toast = (level: number): string => `NEURAL SYNC ↑ ${level} · ${er2RankOf(level)}`
 /** SYNC %: the XP share of the next level's threshold, the same two numbers the card prints (10500 / 11550 XP is 91%). */
 export const syncPct = (xp: number): number => {
@@ -165,13 +165,12 @@ export const syncCard = (W: number, c: Cred, sec: boolean): string => {
   s.push(T(16, fy0, 'ENGRAM FRAGMENTS', 9.5, 800, P.muted, 'letter-spacing="1.2"'))
   const per = perRow(W)
   const gap = Math.floor((W - 32 - per * FRAG_W) / Math.max(1, per - 1))
-  let nextB: [Badge, number] | undefined
-  ER2_BADGES.forEach((b, i) => {
+  ER2_BADGES.forEach((b0, i) => {
+    const b = veil(b0, c.badges.includes(b0.id))
     const tx = 16 + (i % per) * (FRAG_W + gap)
     const ty = fy0 + 8 + Math.floor(i / per) * 62
     const got = c.badges.includes(b.id)
     const prog = clamp(b.progress(c), 0, 1)
-    if (!got && !nextB) nextB = [b, prog]
     if (got) {
       s.push(pane(tx, ty, FRAG_W, 50, { sec, cut: 6, scanId: sid, fillOp: 0.75, ghost: false, shared: sid }))
       s.push(T(tx + 10, ty + 23, b.icon, 15, 500, P.aT))
@@ -189,7 +188,8 @@ export const syncCard = (W: number, c: Cred, sec: boolean): string => {
       s.push(M(tx + FRAG_W - 8, ty + 31, `${Math.round(prog * 100)}%`, 7.5, P.muted, 'text-anchor="end"'))
     }
   })
-  const nb = nextB as [Badge, number] | undefined
+  const nx = nextOf(ER2_BADGES.map(b => veil(b, c.badges.includes(b.id))), c)
+  const nb: [Badge, number] | undefined = nx ? [nx, clamp(nx.progress(c), 0, 1)] : undefined
   s.push(T(16, H - 12, nb ? er2Clip(`Next: ${nb[0].name} · ${nb[0].how} · ${Math.round(nb[1] * 100)}%`, 11.5, W - 32, 0, 500) : 'Every fragment recovered. She remembers you, choom.', 11.5, 500, P.sub, 'font-style="italic"'))
   return `${s.join('')}</svg>`
 }

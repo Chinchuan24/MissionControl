@@ -24,6 +24,16 @@ export const xpFor = (level: number): number => 25 * level * (level - 1)
 // Badge ids are what the store keeps; the names are what Night City calls them.
 export type Badge = { id: string; name: string; icon: string; how: string; progress: (c: Cred) => number }
 const share = (n: number, of: number) => Math.max(0, Math.min(1, n / of))
+// The last badge is found, never listed: while it is locked every card shows the same neutral tile.
+export const SECRET_BADGE = 'samurai'
+export const veil = <T extends { id: string; name: string; icon: string; how: string }>(b: T, earned: boolean): T =>
+  b.id === SECRET_BADGE && !earned ? { ...b, name: '???', icon: '?', how: 'Keep exploring.' } : b
+// The badge a card points at next: the closest locked one, never the veiled one unless it is all that is left.
+export const nextOf = <T extends { id: string; progress: (c: any) => number }>(list: T[], c: { badges: string[] } & Record<string, any>, byProgress = false): T | undefined => {
+  const open = list.filter(b => !c.badges.includes(b.id))
+  const rest = open.filter(b => b.id !== SECRET_BADGE)
+  return (byProgress ? rest.sort((a, b) => b.progress(c) - a.progress(c)) : rest)[0] ?? open[0]
+}
 export const BADGES: Badge[] = [
   { id: 'choom', name: 'FIRST GIG', icon: '✦', how: 'Finish your first gig', progress: c => share(c.jobs, 1) },
   { id: 'merc', name: "FIXER'S FAVORITE", icon: '◆', how: 'Finish 10 gigs', progress: c => share(c.jobs, 10) },
@@ -33,7 +43,7 @@ export const BADGES: Badge[] = [
   { id: 'crewboss', name: 'FIXER', icon: '⚑', how: 'Run a gig with 5+ sub-agents', progress: c => share(c.crewJobs, 1) },
   { id: 'chromed', name: 'CYBERPSYCHO', icon: '⚙', how: 'Push the context past 90%', progress: c => (c.chromed ? 1 : 0) },
   { id: 'owl', name: 'GRAVEYARD SHIFT', icon: '☾', how: 'Finish a gig after midnight', progress: c => share(c.nightJobs, 1) },
-  { id: 'samurai', name: 'SAMURAI', icon: '♪', how: 'Find the secret skin', progress: c => (c.samurai ? 1 : 0) },
+  { id: 'samurai', name: 'SAMURAI', icon: '♪', how: 'Keep exploring.', progress: c => (c.samurai ? 1 : 0) },
 ]
 
 // The badges a cred has just earned, and the cred with them recorded.
@@ -156,7 +166,7 @@ const credHead = (W: number): number => (W < NARROW ? 206 : 146)
 const credPer = (W: number): number => Math.max(1, Math.floor((W - 28) / 100))
 export const credHeight = (W: number): number => credHead(W) + 20 + Math.ceil(BADGES.length / credPer(W)) * 70
 export const credCard = (W: number, c: Cred, t: Theme, font: string, frame: Frame, title: string, kana = '', ranks: (level: number) => string = rankOf, words?: CredWords): string => {
-  const badges = words?.badges ?? BADGES
+  const badges = (words?.badges ?? BADGES).map(b => veil(b, c.badges.includes(b.id)))
   const H = credHeight(W)
   const head = credHead(W)
   const isNarrow = W < NARROW
@@ -244,7 +254,7 @@ ${bar}
 ${stats}
 <line x1="14" y1="${head + 0.5}" x2="${W - 14}" y2="${head + 0.5}" stroke="${t.line}"/>
 ${(() => {
-  const next = badges.filter(b => !c.badges.includes(b.id)).sort((a, b2) => b2.progress(c) - a.progress(c))[0]
+  const next = nextOf(badges, c, true)
   const line = next ? `NEXT: ${next.name} · ${next.how}` : words?.all ?? 'ALL BADGES EARNED. PREEM.'
   return `<text x="${W - 14}" y="${head + 12}" text-anchor="end" font-family="${font}" font-size="8.5" font-weight="800" letter-spacing=".8" fill="${t.muted}">${esc(clipW(line, 8.5, W - 28, 0.8))}</text>`
 })()}

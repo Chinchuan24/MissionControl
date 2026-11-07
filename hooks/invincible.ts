@@ -270,7 +270,7 @@ export const chip = (x: any, y: any, pct: any, era: any) => {
   if (pct < 85) return { svg: '', w: 0 }
   const P = pal(era)
   const hot = pct >= 95
-  const label = hot ? 'THINK, MARK!' : 'THAT ACTUALLY HURT'
+  const label = hot ? 'HOLD THE LINE' : 'THAT ACTUALLY HURT'
   const cap = caption(x, y - 13, label, 10, hot ? PROPS.red : P.hero, { ink: hot ? '#FFFFFF' : P.heroInk, cls: hot ? 'inv-chip' : '' })
   return { svg: cap.svg, w: cap.w + 2 }
 }
