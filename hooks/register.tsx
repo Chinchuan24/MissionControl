@@ -14,6 +14,8 @@ import { TOASTS, bashToast, cmdKind, fxOf, mcgillNow, resultFailed, toastDue } f
 import type { BashState, Fx, ToastKey } from './bettercallsaul-fx'
 import { UNPLUG_GAP_MS, shouldUnplug } from './bettercallsaul-extra'
 import { CLASSIC_RE, GUARDIANS_RE, NEW_SUIT_RE, THINK_RE } from './invincible-eggs'
+import { TM_KIND, thinkMarkFx, thinkMarkLive } from './invincible-thinkmark'
+import { clearThinkMarkTimers, scheduleThinkMark } from './invincible-thinkmark-timers'
 import { ERA1, ERA2, TITLE_WORDS as INV_WORDS } from './invincible'
 import { VERBS as INV_VERBS } from './invincible-cards'
 import { BYE_CAPRI_RE, CAPRICORN_RE, CAPRI_WORD_RE, ER2_FONT, ER2_TOOLS, ER2_WORDS } from './edgerunners2'
@@ -2303,6 +2305,11 @@ async function loadSkins($: EngineInterface): Promise<{ folder: string; loaded: 
 function applySkin(k: Skin): void {
   // The reveal belongs to the unlock; any other switch drops it.
   if (k.id !== 'heisenberg') BB_REVEAL_AT = 0
+  // Leaving Invincible ends the cutscene; wearing it again (an era switch, a reload) leaves it playing, its redraws still waiting.
+  if (k.id !== 'invincible') {
+    clearThinkMarkTimers()
+    if (INV_FX?.kind === TM_KIND) INV_FX = undefined
+  }
   // The hidden CAPRICORN id is an alias: Edgerunners 2 in CAPRI mode, the palette of the mode below.
   if (k.id === 'capricorn') k = EDGERUNNERS2_SKIN
   if (k.id === 'edgerunners-2' && ER2.mode === 'capri') {
@@ -2443,7 +2450,10 @@ let er2Dismissed = false
 async function er2ContextRule($: EngineInterface, ctx: number): Promise<void> {
   er2Ctx = ctx
   // Invincible: the first time the context passes 95% Omni-Man drops in with his line.
-  if (isInv() && ctx >= 95 && INV_CTX < 95) INV_FX = { kind: 'think', at: await $.clock.now().catch(() => Date.now()) }
+  if (isInv() && ctx >= 95 && INV_CTX < 95) {
+    const at = await $.clock.now().catch(() => Date.now())
+    if (!thinkMarkLive(INV_FX, at)) INV_FX = { kind: 'think', at }
+  }
   INV_CTX = ctx
   if (ctx < 95) er2Dismissed = false
   if (SKIN.id !== 'edgerunners-2') return
@@ -6843,6 +6853,7 @@ export const register: Register = (on, options) => {
     await update($, er2Mode, () => er2Pack(ER2))
     INV_ERA = { era: (await $.store.get('invEra').catch(() => undefined)) === 2 ? 2 : 1, since: 0 }
     INV_FX = undefined
+    clearThinkMarkTimers()
     INV_CTX = 0
     await update($, invEra, () => invPack(INV_ERA))
     const worn = typeof chosen === 'string' ? SKINS.get(chosen === 'capricorn' ? 'edgerunners-2' : chosen) : undefined
@@ -8121,8 +8132,14 @@ export const register: Register = (on, options) => {
       const toNew = NEW_SUIT_RE.test(asked)
       const toOld = CLASSIC_RE.test(asked)
       if (toNew !== toOld) await setInvEra($, toNew ? 2 : 1).catch(() => false)
-      if (THINK_RE.test(asked)) INV_FX = { kind: 'think', at }
-      else if (GUARDIANS_RE.test(asked)) INV_FX = { kind: 'showdown', at }
+      if (THINK_RE.test(asked)) {
+        INV_FX = thinkMarkFx(at)
+        // The pane is drawn again after every cut: a draw carries the shot playing and the next (see invincible-thinkmark.ts).
+        scheduleThinkMark((ms, fn) => $.clock.after(ms, fn), at, at, t => { void update($, paneTick, () => t).catch(() => undefined) })
+      } else if (GUARDIANS_RE.test(asked)) {
+        INV_FX = { kind: 'showdown', at }
+        clearThinkMarkTimers()
+      }
     }
     // Edgerunners 2's two modes (the prompt goes on unchanged): "bye capri" sends her back to D (checked first); the whole word
     // "capri" in any case, or the third episode's title "0+2=1" (which toggles), lets her in.
