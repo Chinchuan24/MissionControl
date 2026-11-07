@@ -118,9 +118,10 @@ test('settings: five sections in order, every control kept, each with a hint, an
   const missing: string[] = []
   for (const key of keys) if (!(await ui.find({ key }))) missing.push(key)
   expect(missing).toEqual([])
-  // One short hint line under each option, saying what it does.
-  for (const hint of ['Read-only explorer agents run on Haiku', 'How much memory Claude and all its agents may use together', 'Learned by watching agents run', 'Splits work across helper agents', 'Now: ', 'Opens Mission Control each time Claude starts.'])
-    expect(texts.some(t => t.startsWith(hint))).toBe(true)
+  // One short hint under each option, saying what it does: drawn in each row's picture, so read from its alt.
+  const alts = (await ui.findAll({ type: 'Svg' })).map(el => String(el.props.alt ?? ''))
+  for (const hint of ['Haiku for read-only explorers', 'Memory Claude and its agents may use', 'Learned from agents that ran', 'Splits work across helper agents', 'Restyles the panes and the band', 'Opens when Claude starts'])
+    expect(alts.some(t => t.endsWith(`. ${hint}`))).toBe(true)
   expect(texts.some(t => t.startsWith('🖥︎ '))).toBe(true)
   expect(texts.some(t => t.includes('GB per agent'))).toBe(true)
   for (const pick of await ui.findAll({ type: 'Select' })) {
@@ -220,9 +221,9 @@ test('settings: every dropdown holds strings, sits on one of its options, and ea
     await ui.drawn()
     last[key] = second
   }
-  // The switches: each press flips its box, and the store keeps it.
+  // The switches: each press flips its button (Turn on / Turn off), and the store keeps it.
   const switches = ['set-autopilot', 'set-warm', 'set-staffing', 'set-timekeeper', 'set-simple', 'set-calm', 'set-sounds', 'set-voice', 'set-open']
-  const boxOf = async (key: string) => String((await ui.find({ key }))?.props.label ?? '').slice(0, 2)
+  const boxOf = async (key: string) => String((await ui.find({ key }))?.props.label ?? '')
   const was: Record<string, string> = {}
   for (const key of switches) {
     was[key] = await boxOf(key)

@@ -5315,6 +5315,46 @@ ${pills.join('')}`,
   )
 }
 
+// One Settings row's picture, drawn beside its native control: the card's accent stripe, an
+// icon on a tile in the card's colour, the bold label, then a drawn switch (a track and a knob,
+// green and right when on, grey and left when off) or a read-only value as a pill, and one
+// short hint under it. Still, as the banner: nothing in it moves.
+type SettingsRowArt = { icon: string; label: string; hint: string; tone: string; isOn?: boolean; onText?: string; pill?: string }
+const SETTINGS_ROW_H = 46
+const settingsRowSvg = (W: number, a: SettingsRowArt): string => {
+  const c = SKIN.colors
+  const H = SETTINGS_ROW_H
+  const lx = 50
+  const label = fitText(a.label, 13.5, W - lx - 70)
+  let x = r2(lx + textWidth(label, 13.5) * 1.08 + 9)
+  let value = ''
+  if (a.isOn !== undefined) {
+    const word = a.isOn ? (a.onText ?? 'ON') : 'OFF'
+    const fill = a.isOn ? c.done : c.muted
+    const ink = inkOn(fill)
+    const w = Math.max(48, Math.ceil(textWidth(word, 10.5) * 1.12) + 30)
+    const knob = a.isOn ? x + w - 10 : x + 10
+    const tx = a.isOn ? x + 9 : x + 21
+    value = `<rect x="${x}" y="6" width="${w}" height="20" rx="10" fill="${fill}"/><circle cx="${r2(knob)}" cy="16" r="7" fill="${ink}" fill-opacity=".92"/><text x="${r2(tx)}" y="19.8" font-family="${FONT}" font-size="10.5" font-weight="800" fill="${ink}">${xml(word)}</text>`
+  } else if (a.pill) {
+    const text = fitText(a.pill, 11.5, Math.max(40, W - x - 24))
+    const w = Math.ceil(textWidth(text, 11.5) * 1.08) + 16
+    value = `${cardShape(x, 6, w, 20, `fill="${a.tone}"`, 10)}<text x="${r2(x + w / 2)}" y="19.8" text-anchor="middle" font-family="${FONT}" font-size="11.5" font-weight="700" fill="${inkOn(a.tone)}">${xml(text)}</text>`
+  }
+  // Text in the skin's own colours on a dark skin; on the others, in the app's light or dark scheme.
+  const style = SKIN.dark
+    ? `<style>.t{fill:${c.text}}.m{fill:${c.muted}}</style>`
+    : `<style>.t{fill:#1f1f1f}.m{fill:#6e6e6a}@media (prefers-color-scheme: dark){.t{fill:${c.text}}.m{fill:${c.muted}}}</style>`
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${style}
+<rect x="0" y="5" width="3" height="${H - 10}" rx="1.5" fill="${a.tone}"/>
+${cardShape(11, 8, 30, 30, `fill="${a.tone}" fill-opacity=".2" stroke="${a.tone}" stroke-opacity=".75"`, 8)}
+<text x="26" y="28.5" text-anchor="middle" font-size="15">${xml(a.icon)}</text>
+<text class="t" x="${lx}" y="20.5" font-family="${FONT}" font-size="13.5" font-weight="700">${xml(label)}</text>
+${value}
+<text class="m" x="${lx}" y="37.5" font-family="${FONT}" font-size="11.5">${xml(fitText(a.hint, 11.5, W - lx - 6))}</text>
+</svg>`
+}
+
 // --- the chat, in the skin: tool rows as small cards with a status rail, an
 // icon, the skin's verb and what the call is about; spinner words in the skin's
 // voice. The Default skin leaves both as the app draws them.
@@ -8251,10 +8291,11 @@ export const register: Register = (on, options) => {
     const typed = draft.get(clockNow)
     // The look: a banner with the skin's crew and what is set now, then one card per subject
     // under a band in its own colour of the skin's palette (settingslook.ts) with a tagline in
-    // the skin's voice. Each option shows its value once: a short bold label beside its dropdown,
-    // or a switch with an ON (green) / OFF (grey) pill, or a read-only value as a pill; then one
-    // short muted hint and any "or type" field. Dark skins paint the pane and the cards in their
-    // own colours, as the main pane does; every pill picks the ink that reads on it.
+    // the skin's voice. Each setting is a row: a still picture (an icon on a tile in the card's
+    // colour, the bold label, a drawn switch or a read-only value, one short hint) with its
+    // native control beside it, which alone shows a dropdown's value. The terminal, which draws
+    // no pictures, gets the label, a pill and the hint as text. Dark skins paint the pane and the
+    // cards in their own colours, as the main pane does; every pill picks the ink that reads on it.
     const c = SKIN.colors
     const isDark = SKIN.dark
     const tones = settingsTones(c, SKIN.roles, SKIN.boss)
@@ -8264,58 +8305,95 @@ export const register: Register = (on, options) => {
     const strong = (key: string, text: string) => <Text key={key} bold {...(isDark ? { color: c.text } : {})}>{text}</Text>
     const chip = (key: string, text: string, fill: string) => <Text key={key} backgroundColor={fill} color={inkOn(fill)} bold>{` ${text} `}</Text>
     const box = (isOn: boolean) => (isOn ? '☑︎' : '☐')
-    // A label and the control that shows and changes its value, on one row: the value is drawn
-    // once, by the dropdown (the engine draws a Select in its own style; a Button cannot open
-    // one). Where the surface has no dropdown, the cycling button already names the setting.
-    const choice = (key: string, text: string, control: unknown, isNamed = false) => (
-      <Box key={key} flexDirection="row" flexWrap="wrap" columnGap={1} alignItems="center">
-        {Pick || isNamed ? strong(`${key}-l`, text) : null}
-        {control as never}
-      </Box>
-    )
-    // A switch: the whole row presses, its state a green ON or a grey OFF pill.
-    const toggle = (key: string, text: string, isOn: boolean, press: () => unknown, label = `${box(isOn)} ${text}`, onText = 'ON') => (
-      <Button key={key} label={label} plain onPress={() => void press()}>
-        {strong(`${key}-l`, `${box(isOn)} ${text}`)}
-        {' '}
-        {chip(`${key}-v`, isOn ? onText : 'OFF', isOn ? c.done : OFF)}
-      </Button>
-    )
+    // Where the surface draws pictures, each row is a picture (settingsRowSvg) with its native
+    // control beside it; the pictures share one width, so the controls line up down the card.
+    const Svg = e.surface !== 'terminal' && 'Svg' in ui ? ui.Svg : null
+    const rowW = Math.max(230, Math.min(320, Math.round((e.props.bodyColumns || 40) * 10 * 0.52)))
+    type Art = Omit<SettingsRowArt, 'tone'>
+    // One setting: its picture (or, on the terminal, its bold label, value pill and hint), then its controls.
+    const row = (key: string, tone: string, art: Art, ...controls: unknown[]) => {
+      const shown = controls.filter(Boolean)
+      const state = art.isOn === undefined ? (art.pill ? `: ${art.pill}` : '') : `: ${art.isOn ? (art.onText ?? 'on') : 'off'}`
+      if (Svg)
+        return (
+          <Box key={key} flexDirection="row" flexWrap="wrap" columnGap={1} alignItems="center">
+            <Svg key={`${key}-art`} source={settingsRowSvg(rowW, { ...art, tone })} alt={`${art.label}${state}. ${art.hint}`} width={rowW} height={SETTINGS_ROW_H} />
+            {shown as never}
+          </Box>
+        )
+      return (
+        <Box key={key} flexDirection="column">
+          <Box key={`${key}-head`} flexDirection="row" flexWrap="wrap" columnGap={1} alignItems="center">
+            {art.isOn === undefined ? strong(`${key}-l`, art.label) : null}
+            {art.pill ? chip(`${key}-v`, art.pill, tone) : null}
+            {shown as never}
+          </Box>
+          <Box paddingLeft={2}>{muted(`${key}-hint`, art.hint)}</Box>
+        </Box>
+      )
+    }
+    // A switch's control: beside its drawn switch, a short "Turn on" / "Turn off"; on the terminal,
+    // where nothing is drawn, the box and its name with an ON / OFF pill after it.
+    const toggle = (key: string, text: string, isOn: boolean, press: () => unknown, onText = 'ON') =>
+      Svg ? (
+        <Button key={key} label={isOn ? 'Turn off' : 'Turn on'} plain onPress={() => void press()} />
+      ) : (
+        <Box key={`${key}-box`} flexDirection="row" columnGap={1}>
+          <Button key={key} label={`${box(isOn)} ${text}`} plain onPress={() => void press()} />
+          {chip(`${key}-v`, isOn ? onText : 'OFF', isOn ? c.done : OFF)}
+        </Box>
+      )
+    // A switch row: its picture's switch is drawn from the same state the button flips.
+    const switchRow = (key: string, tone: string, icon: string, text: string, hint: string, isOn: boolean, press: () => unknown, onText?: string) =>
+      row(key, tone, { icon, label: text, hint, isOn, onText }, toggle(`set-${key.slice(4)}`, text, isOn, press, onText))
+    const tb = tones.billing
     const billingBlock = (
       <Box key="billing" flexDirection="column" gap={1}>
-        <Box key="bill-head" flexDirection="row" flexWrap="wrap" columnGap={1}>
-          {chip('bill-mode', modeChip(bill.mode), isApiCredits(bill.mode) ? tones.billing : OFF)}
-          {strong('bill-status', bill.isMac ? keyStatus(bill) : MAC_ONLY)}
-        </Box>
+        {row(
+          'opt-bill-mode',
+          tb,
+          { icon: '💳', label: 'Paid by', hint: 'Your plan, or API credits' },
+          chip('bill-mode', modeChip(bill.mode), isApiCredits(bill.mode) ? tb : OFF),
+          strong('bill-status', bill.isMac ? keyStatus(bill) : MAC_ONLY),
+        )}
         {bill.note ? muted('bill-note', bill.note) : null}
         {bill.isMac && Field ? (
           <Box key="bill-form" flexDirection="column">
-            {muted('bill-how', `Shows a dot for each character, never the key (a paste may show for a moment). Enter saves and clears the box. Fully hidden, in your own terminal: ${terminalAlternative()}`)}
-            <Field
-              key={`bill-key-${bill.nonce}`}
-              label="Claude API key"
-              placeholder="sk-ant-…"
-              value={maskKey(typed)}
-              submitLabel="save"
-              onInput={(v: string) => void billingType($, v)}
-              onSubmit={(v: string) => billingSave($, v)}
-            />
+            {row(
+              'opt-bill-key',
+              tb,
+              { icon: '🔑', label: 'API key', hint: 'Kept in the macOS Keychain' },
+              <Field
+                key={`bill-key-${bill.nonce}`}
+                placeholder="sk-ant-…"
+                value={maskKey(typed)}
+                submitLabel="save"
+                onInput={(v: string) => void billingType($, v)}
+                onSubmit={(v: string) => billingSave($, v)}
+              />,
+            )}
             <Box flexDirection="row" flexWrap="wrap" columnGap={2}>
               <Button key="bill-save" label="🔑 Save to Keychain" plain onPress={async () => billingSave($, draft.get(await $.clock.now()))} />
               <Button key="bill-clear" label="✕ Clear box" plain onPress={async () => { draft.clear(); await update($, billing, prev => ({ ...prev, nonce: prev.nonce + 1, typedLen: 0 })) }} />
               {bill.saved || bill.inKeychain ? <Button key="bill-remove" label="🗑 Remove key" plain onPress={() => billingRemove($)} /> : null}
             </Box>
+            {muted('bill-how', `Shows a dot for each character, never the key (a paste may show for a moment). Fully hidden, in your own terminal: ${terminalAlternative()}`)}
           </Box>
         ) : null}
-        <Button
-          key="bill-guide"
-          label={`${bill.isGuideOpen ? '▾' : '▸'} Use it for Claude Code: 4 steps`}
-          plain
-          onPress={async () => {
-            await refreshBilling($).catch(() => undefined)
-            await update($, billing, prev => ({ ...prev, isGuideOpen: !prev.isGuideOpen }))
-          }}
-        />
+        {row(
+          'opt-bill-guide',
+          tb,
+          { icon: '🧭', label: 'Use it in Claude Code', hint: 'Four steps, with your paths' },
+          <Button
+            key="bill-guide"
+            label={`${bill.isGuideOpen ? '▾' : '▸'} Use it for Claude Code: 4 steps`}
+            plain
+            onPress={async () => {
+              await refreshBilling($).catch(() => undefined)
+              await update($, billing, prev => ({ ...prev, isGuideOpen: !prev.isGuideOpen }))
+            }}
+          />,
+        )}
         {bill.isGuideOpen ? <Text wrap="wrap" {...(isDark ? { color: c.text } : {})}>{guideText($.plugin.root, bill.mode)}</Text> : null}
       </Box>
     )
@@ -8367,21 +8445,6 @@ export const register: Register = (on, options) => {
         </Box>
       )
     })()
-    // One option: what it is (a label and its value, or a switch), its hint, then its controls.
-    const opt = (key: string, hintText: string, head: unknown, ...controls: unknown[]) => {
-      const shown = controls.filter(Boolean)
-      return (
-        <Box key={key} flexDirection="column">
-          {head as never}
-          <Box paddingLeft={2}>{muted(`${key}-hint`, hintText)}</Box>
-          {shown.length ? (
-            <Box key={`${key}-ctl`} flexDirection="row" flexWrap="wrap" columnGap={2} paddingLeft={2}>
-              {shown as never}
-            </Box>
-          ) : null}
-        </Box>
-      )
-    }
     // A card: a band in its colour (the title bold, the tagline after it), a frame in the same colour.
     const card = (key: string, section: SettingsSection, title: string, ...rows: unknown[]) => {
       const tone = tones[section]
@@ -8401,6 +8464,9 @@ export const register: Register = (on, options) => {
     // A dropdown's value is always one of its options: a stray one shows the first.
     const among = (value: string, options: readonly { value: string }[]): string => (options.some(o => o.value === value) ? value : options[0]?.value ?? value)
     const labelOf = (value: string, options: readonly { value: string; label?: string }[]): string => options.find(o => o.value === value)?.label ?? value
+    // "or type": a field beside the dropdown, its placeholder saying what to type and "set" to send it.
+    const typeField = (key: string, placeholder: string, submit: (v: string) => void) =>
+      Field ? <Field key={key} placeholder={`or type: ${placeholder}`} value="" submitLabel="set" onSubmit={(v: string) => submit(v)} /> : null
     const crewOptions = CREW_OPTIONS
     const shotValue = cleanOneShot(prefs.oneShot)
     const dailyOptions = stepOptions(DAILY_STEPS, prefs.dailyUsd, v => `${fmtCost(v)} a day`)
@@ -8413,224 +8479,199 @@ export const register: Register = (on, options) => {
     const maxNow = cleanMaxAgents(prefs.maxAgents)
     const isKillOn = cleanKillSwitch(prefs.killSwitch) === 'on'
     const ultraBy = cleanUltraBy(prefs.ultraBy)
+    const sym = CURRENCY.symbol || '$'
+    const tm = tones.money
     const money = card(
       'set-money',
       'money',
       '💰 Money',
-      opt('opt-autopilot', 'Read-only explorer agents run on Haiku, the cheapest model.', toggle('set-autopilot', 'Autopilot', prefs.autopilot, async () => setAutopilot($, !(await read($, settings)).autopilot))),
-      opt('opt-warm', 'Refreshes the prompt cache only when that costs less.', toggle('set-warm', 'Keep-Warm', prefs.keepWarm, async () => setKeepWarm($, !(await read($, settings)).keepWarm))),
-      opt(
+      switchRow('opt-autopilot', tm, '🤖', 'Autopilot', 'Haiku for read-only explorers', prefs.autopilot, async () => setAutopilot($, !(await read($, settings)).autopilot)),
+      switchRow('opt-warm', tm, '🔥', 'Keep-Warm', "Warms the cache when it's cheaper", prefs.keepWarm, async () => setKeepWarm($, !(await read($, settings)).keepWarm)),
+      row(
         'opt-daily',
-        'Warns at 80% of it, and again at the cap.',
-        choice('set-daily-now', 'Daily cap',
-          Pick ? (
-            <Pick key="set-daily-pick" value={among(String(prefs.dailyUsd), dailyOptions)} options={dailyOptions} onSelect={v => void setDailyCap($, Number(v) || 0)} />
-          ) : (
-            <Button key="set-daily" label={`Daily cap: ${prefs.dailyUsd ? `${fmtCost(prefs.dailyUsd)} a day` : 'off'} ▸`} plain onPress={async () => setDailyCap($, nextStep(DAILY_STEPS, (await read($, settings)).dailyUsd))} />
-          ),
+        tm,
+        { icon: '🧢', label: 'Daily cap', hint: 'Warns at 80% and at the cap' },
+        Pick ? (
+          <Pick key="set-daily-pick" value={among(String(prefs.dailyUsd), dailyOptions)} options={dailyOptions} onSelect={v => void setDailyCap($, Number(v) || 0)} />
+        ) : (
+          <Button key="set-daily" label={`Daily cap: ${prefs.dailyUsd ? `${fmtCost(prefs.dailyUsd)} a day` : 'off'} ▸`} plain onPress={async () => setDailyCap($, nextStep(DAILY_STEPS, (await read($, settings)).dailyUsd))} />
         ),
-        Field ? <Field key="set-daily-type" label="or type" placeholder={`${CURRENCY.symbol || '$'} amount, 0 = off`} value="" submitLabel="set" onSubmit={(v: string) => void typeMoney($, 'daily', v)} /> : null,
+        typeField('set-daily-type', `${sym}, 0 = off`, v => void typeMoney($, 'daily', v)),
       ),
-      opt(
+      row(
         'opt-budget',
-        'Warns when one task nears or passes it.',
-        choice('set-budget-now', 'Budget per task',
-          Pick ? (
-            <Pick key="set-budget-pick" value={among(String(prefs.budgetUsd), budgetOptions)} options={budgetOptions} onSelect={v => void setBudget($, Number(v) || 0)} />
-          ) : (
-            <Button key="set-budget" label={`Budget per task: ${prefs.budgetUsd ? fmtCost(prefs.budgetUsd) : 'off'} ▸`} plain onPress={async () => setBudget($, nextStep(BUDGET_STEPS, (await read($, settings)).budgetUsd))} />
-          ),
+        tm,
+        { icon: '🎯', label: 'Budget per task', hint: 'Warns when a task nears it' },
+        Pick ? (
+          <Pick key="set-budget-pick" value={among(String(prefs.budgetUsd), budgetOptions)} options={budgetOptions} onSelect={v => void setBudget($, Number(v) || 0)} />
+        ) : (
+          <Button key="set-budget" label={`Budget per task: ${prefs.budgetUsd ? fmtCost(prefs.budgetUsd) : 'off'} ▸`} plain onPress={async () => setBudget($, nextStep(BUDGET_STEPS, (await read($, settings)).budgetUsd))} />
         ),
-        Field ? <Field key="set-budget-type" label="or type" placeholder={`${CURRENCY.symbol || '$'} amount, 0 = off`} value="" submitLabel="set" onSubmit={(v: string) => void typeMoney($, 'budget', v)} /> : null,
+        typeField('set-budget-type', `${sym}, 0 = off`, v => void typeMoney($, 'budget', v)),
       ),
-      opt(
-        'opt-spend',
-        "Which days the main pane's spend card adds up.",
-        choice('set-spend-h', s.spend.period, spendControls, true),
+      row('opt-spend', tm, { icon: '📅', label: s.spend.period, hint: 'Days the spend card counts' }, spendControls),
+    )
+    const tg = tones.guard
+    const machine = card(
+      'set-guard',
+      'guard',
+      '🛡︎ Machine Guard',
+      row('opt-machine', tg, { icon: '💻', label: 'This computer', hint: 'What Mission Control found' }, <Text key="set-guard-machine" bold color={isDark ? c.text : undefined}>{`🖥︎ ${gd.line}`}</Text>),
+      row(
+        'opt-ram',
+        tg,
+        { icon: '🧠', label: 'RAM limit', hint: 'Memory Claude and its agents may use' },
+        Pick ? (
+          <Pick key="set-ram-pick" value={among(cleanRamLimit(prefs.ramLimit), ramOptions)} options={ramOptions} onSelect={v => void setRamLimit($, v)} />
+        ) : (
+          <Button key="set-ram" label={`RAM Claude may use: ${ramLabel} ▸`} plain onPress={async () => {
+            const now = (await read($, settings)).ramLimit
+            const opts = ramLimitOptions(now)
+            const i = opts.findIndex(o => o.value === cleanRamLimit(now))
+            await setRamLimit($, (opts[(i + 1) % opts.length] ?? opts[0])?.value ?? 'auto')
+          }} />
         ),
-      )
-      const machine = card(
-        'set-guard',
-        'guard',
-        '🛡︎ Machine Guard',
-        opt('opt-machine', 'What Mission Control found on this computer.', <Text key="set-guard-machine" bold color={isDark ? c.text : undefined}>{`🖥︎ ${gd.line}`}</Text>),
-        opt(
-          'opt-ram',
-          'How much memory Claude and all its agents may use together.',
-        choice('set-ram-now', 'RAM limit',
-          Pick ? (
-            <Pick key="set-ram-pick" value={among(cleanRamLimit(prefs.ramLimit), ramOptions)} options={ramOptions} onSelect={v => void setRamLimit($, v)} />
-          ) : (
-            <Button key="set-ram" label={`RAM Claude may use: ${ramLabel} ▸`} plain onPress={async () => {
-              const now = (await read($, settings)).ramLimit
-              const opts = ramLimitOptions(now)
-              const i = opts.findIndex(o => o.value === cleanRamLimit(now))
-              await setRamLimit($, (opts[(i + 1) % opts.length] ?? opts[0])?.value ?? 'auto')
-            }} />
-          ),
-        ),
-        Field ? <Field key="set-ram-type" label="or type" placeholder="GB, like 12" value="" submitLabel="set" onSubmit={(v: string) => void typeRamLimit($, v)} /> : null,
+        typeField('set-ram-type', 'GB, like 12', v => void typeRamLimit($, v)),
       ),
-      opt(
+      row(
         'opt-agents',
-        'Agents at once. Auto works it out from the RAM limit.',
-        choice('set-agents-now', 'Max agents',
-          Pick ? (
-            <Pick key="set-agents-pick" value={among(String(maxNow), agentOptions)} options={agentOptions} onSelect={v => void setMaxAgents($, Number(v) || 0)} />
-          ) : (
-            <Button key="set-agents" label={`Max agents at once: ${maxNow || gd.autoLabel} ▸`} plain onPress={async () => {
-              const now = cleanMaxAgents((await read($, settings)).maxAgents)
-              await setMaxAgents($, [0, ...MAX_AGENTS_STEPS].find(v => v > now) ?? 0)
-            }} />
-          ),
+        tg,
+        { icon: '👥', label: 'Max agents', hint: 'Auto works it out from RAM' },
+        Pick ? (
+          <Pick key="set-agents-pick" value={among(String(maxNow), agentOptions)} options={agentOptions} onSelect={v => void setMaxAgents($, Number(v) || 0)} />
+        ) : (
+          <Button key="set-agents" label={`Max agents at once: ${maxNow || gd.autoLabel} ▸`} plain onPress={async () => {
+            const now = cleanMaxAgents((await read($, settings)).maxAgents)
+            await setMaxAgents($, [0, ...MAX_AGENTS_STEPS].find(v => v > now) ?? 0)
+          }} />
         ),
-        Field ? <Field key="set-agents-type" label="or type" placeholder="agents, like 24" value="" submitLabel="set" onSubmit={(v: string) => void typeMaxAgents($, v)} /> : null,
+        typeField('set-agents-type', 'agents, like 24', v => void typeMaxAgents($, v)),
       ),
-      opt(
+      row(
         'opt-kill',
-        'Over the RAM limit? Stops its biggest heavy command (tsc, tests, builds).',
-        choice('set-kill-now', 'Kill switch',
-          Pick ? (
-            <Pick key="set-kill-pick" value={among(cleanKillSwitch(prefs.killSwitch), killChoices)} options={killChoices} onSelect={v => void setKillSwitch($, cleanKillSwitch(v))} />
-          ) : (
-            <Button key="set-kill" label={`Kill switch: ${isKillOn ? 'On' : 'Off'} ▸`} plain onPress={async () => setKillSwitch($, cleanKillSwitch((await read($, settings)).killSwitch) === 'on' ? 'off' : 'on')} />
-          ),
+        tg,
+        { icon: '🔪', label: 'Kill switch', hint: 'Over the limit? Stops big builds' },
+        Pick ? (
+          <Pick key="set-kill-pick" value={among(cleanKillSwitch(prefs.killSwitch), killChoices)} options={killChoices} onSelect={v => void setKillSwitch($, cleanKillSwitch(v))} />
+        ) : (
+          <Button key="set-kill" label={`Kill switch: ${isKillOn ? 'On' : 'Off'} ▸`} plain onPress={async () => setKillSwitch($, cleanKillSwitch((await read($, settings)).killSwitch) === 'on' ? 'off' : 'on')} />
         ),
       ),
-      opt(
+      row(
         'opt-agent-ram',
-        'Learned by watching agents run. Reset it if it looks wrong.',
-        <Box key="set-agent-ram-now" flexDirection="row" flexWrap="wrap" columnGap={1}>
-          {strong('set-agent-ram-l', 'RAM per agent')}
-          {chip('set-agent-ram', `🧮︎ ${gd.perAgent}`, tones.guard)}
-        </Box>,
-        <Button key="set-agent-ram-reset" label="↺ Reset learned RAM per agent" plain onPress={() => resetAgentRam($)} />,
+        tg,
+        { icon: '🧮', label: 'RAM per agent', hint: 'Learned from agents that ran' },
+        chip('set-agent-ram', `🧮︎ ${gd.perAgent}`, tg),
+        <Button key="set-agent-ram-reset" label="↺ Reset" plain onPress={() => resetAgentRam($)} />,
       ),
     )
     const tkName = tkStr().setting(tkNow.jobMin, tkNow.agentMin).split(':')[0] ?? 'Timekeeper'
+    const tc = tones.crew
     const crewCard = card(
       'set-crew-card',
       'crew',
       '🦀︎ Crew',
-      opt(
+      row(
         'opt-crew',
-        'Splits work across helper agents: big jobs, every job, or off.',
-        choice('set-crew-now', 'Crew mode',
-          Pick ? (
-            <Pick
-              key="set-crew-pick"
-              value={among(crewChoice, crewOptions)}
-              options={crewOptions}
-              onSelect={v => void setCrewChoice($, v === 'off' || v === 'every' ? v : 'big')}
-            />
-          ) : (
-            <Button
-              key="set-crew"
-              label={`${box(prefs.crewMode)} Crew mode: ${prefs.crewAlways ? 'every job' : 'big jobs'}`}
-              plain
-              onPress={async () => {
-                const auto = await readAutoCrew($)
-                const isOn = !auto.on
-                // The stored choice of every job survives off and on again.
-                const raw = (await $.store.get('autoCrew').catch(() => null)) as Partial<AutoCrew> | null
-                const always = raw?.always === true
-                await $.store.set('autoCrew', { ...auto, on: isOn, always }).catch(() => undefined)
-                if (!isOn) await update($, session, prev => ({ ...prev, crewMode: '' }))
-                await update($, settings, prev => ({ ...prev, crewMode: isOn, crewAlways: isOn && always }))
-              }}
-            />
-          ),
+        tc,
+        { icon: '🦀', label: 'Crew mode', hint: 'Splits work across helper agents' },
+        Pick ? (
+          <Pick
+            key="set-crew-pick"
+            value={among(crewChoice, crewOptions)}
+            options={crewOptions}
+            onSelect={v => void setCrewChoice($, v === 'off' || v === 'every' ? v : 'big')}
+          />
+        ) : (
+          <Button
+            key="set-crew"
+            label={`${box(prefs.crewMode)} Crew mode: ${prefs.crewAlways ? 'every job' : 'big jobs'}`}
+            plain
+            onPress={async () => {
+              const auto = await readAutoCrew($)
+              const isOn = !auto.on
+              // The stored choice of every job survives off and on again.
+              const raw = (await $.store.get('autoCrew').catch(() => null)) as Partial<AutoCrew> | null
+              const always = raw?.always === true
+              await $.store.set('autoCrew', { ...auto, on: isOn, always }).catch(() => undefined)
+              if (!isOn) await update($, session, prev => ({ ...prev, crewMode: '' }))
+              await update($, settings, prev => ({ ...prev, crewMode: isOn, crewAlways: isOn && always }))
+            }}
+          />
         ),
       ),
-      opt(
+      row(
         'opt-oneshot',
-        'Once you approve a plan: all of it, one part at a time, or ask.',
-        choice('set-oneshot-now', 'One-shot plans',
-          Pick ? (
-            <Pick key="set-oneshot-pick" value={among(shotValue, SHOT_OPTIONS)} options={SHOT_OPTIONS} onSelect={v => void setOneShot($, cleanOneShot(v))} />
-          ) : (
-            <Button key="set-oneshot" label={`One-shot plans: ${prefs.oneShot === 'on' ? 'on' : prefs.oneShot === 'off' ? 'off' : 'ask each time'} ▸`} plain onPress={async () => setOneShot($, nextOneShot(cleanOneShot((await read($, settings)).oneShot)))} />
-          ),
+        tc,
+        { icon: '⏩', label: 'One-shot plans', hint: 'Once you approve a plan' },
+        Pick ? (
+          <Pick key="set-oneshot-pick" value={among(shotValue, SHOT_OPTIONS)} options={SHOT_OPTIONS} onSelect={v => void setOneShot($, cleanOneShot(v))} />
+        ) : (
+          <Button key="set-oneshot" label={`One-shot plans: ${prefs.oneShot === 'on' ? 'on' : prefs.oneShot === 'off' ? 'off' : 'ask each time'} ▸`} plain onPress={async () => setOneShot($, nextOneShot(cleanOneShot((await read($, settings)).oneShot)))} />
         ),
       ),
-      opt(
+      row(
         'opt-ultra-by',
-        'Who gives agents max effort and a deep check.',
-        choice('set-ultraby-now', 'Ultra decided by',
-          Pick ? (
-            <Pick key="set-ultraby-pick" value={among(ultraBy, ULTRA_BY_OPTIONS)} options={ULTRA_BY_OPTIONS} onSelect={v => void setUltraBy($, cleanUltraBy(v))} />
-          ) : (
-            <Button key="set-ultraby" label={`Ultra decided by: ${ultraBy === 'manager' ? 'Manager' : 'Me'} ▸`} plain onPress={async () => setUltraBy($, cleanUltraBy((await read($, settings)).ultraBy) === 'manager' ? 'me' : 'manager')} />
-          ),
+        tc,
+        { icon: '⚡', label: 'Ultra decided by', hint: 'Who grants max effort' },
+        Pick ? (
+          <Pick key="set-ultraby-pick" value={among(ultraBy, ULTRA_BY_OPTIONS)} options={ULTRA_BY_OPTIONS} onSelect={v => void setUltraBy($, cleanUltraBy(v))} />
+        ) : (
+          <Button key="set-ultraby" label={`Ultra decided by: ${ultraBy === 'manager' ? 'Manager' : 'Me'} ▸`} plain onPress={async () => setUltraBy($, cleanUltraBy((await read($, settings)).ultraBy) === 'manager' ? 'me' : 'manager')} />
         ),
       ),
-      opt('opt-staffing', 'Each agent gets the model and effort its job needs.', toggle('set-staffing', 'Smart staffing', prefs.staffing, async () => setFlag($, 'staffing', !(await read($, settings)).staffing))),
-      opt(
+      switchRow('opt-staffing', tc, '🧩', 'Smart staffing', 'The right model per agent', prefs.staffing, async () => setFlag($, 'staffing', !(await read($, settings)).staffing)),
+      row(
         'opt-timekeeper',
-        'A time budget per job and per agent, with a nudge when one runs long.',
-        toggle(
-          'set-timekeeper',
-          tkName,
-          tkNow.on,
-          async () => setTimekeeper($, { on: !(await read($, timekeeper)).on }),
-          `${box(tkNow.on)} ${tkStr().setting(tkNow.jobMin, tkNow.agentMin)}`,
-          `ON · ${tkNow.jobMin} / ${tkNow.agentMin} min`,
+        tc,
+        { icon: '⏱', label: tkName, hint: 'Nudges when a job runs long', isOn: tkNow.on, onText: `ON · ${tkNow.jobMin}/${tkNow.agentMin} min` },
+        Svg ? (
+          <Button key="set-timekeeper" label={tkNow.on ? 'Turn off' : 'Turn on'} plain onPress={async () => setTimekeeper($, { on: !(await read($, timekeeper)).on })} />
+        ) : (
+          <Box key="set-timekeeper-box" flexDirection="row" columnGap={1}>
+            <Button key="set-timekeeper" label={`${box(tkNow.on)} ${tkStr().setting(tkNow.jobMin, tkNow.agentMin)}`} plain onPress={async () => setTimekeeper($, { on: !(await read($, timekeeper)).on })} />
+            {chip('set-timekeeper-v', tkNow.on ? 'ON' : 'OFF', tkNow.on ? c.done : OFF)}
+          </Box>
         ),
       ),
     )
+    const tl = tones.look
     const look = card(
       'set-look',
       'look',
       '🎨 Look and feel',
-      opt(
-        'opt-skin',
-        `Now: ${SKIN.name}, on this pane, the band and the chat.`,
-        <Box key="set-skin-now" flexDirection="row" flexWrap="wrap" columnGap={1}>
-          {strong('set-skin-now-l', 'Skin')}
-          {chip('set-skin-now-v', SKIN.name, tones.look)}
-          <Button key="set-skin" label="Change skin ▸" plain onPress={() => void showPane($, SKINS_PANE, SKIN.tabs.skins)} />
-        </Box>,
-      ),
-      opt(
+      row('opt-skin', tl, { icon: '👕', label: 'Skin', hint: 'Restyles the panes and the band', pill: SKIN.name }, <Button key="set-skin" label="Change skin ▸" plain onPress={() => void showPane($, SKINS_PANE, SKIN.tabs.skins)} />),
+      row(
         'opt-currency',
-        'The currency costs are shown in.',
-        choice('set-currency-now', 'Currency',
-          Pick ? (
-            <Pick key="set-currency-pick" value={among(CURRENCY.code, currencyOptions())} options={currencyOptions()} onSelect={v => void setCurrency($, CURRENCIES.find(cur => cur.code === v) ?? CURRENCY)} />
-          ) : (
-            <Button
-              key="set-currency"
-              label={`Currency: ${currencyLabel(currencyOf(prefs.currency, CURRENCY.code === prefs.currency ? CURRENCY.rate : undefined))} ▸`}
-              plain
-              onPress={async () => {
-                const i = CURRENCIES.findIndex(cur => cur.code === CURRENCY.code)
-                await setCurrency($, CURRENCIES[(i + 1) % CURRENCIES.length] as Currency)
-              }}
-            />
-          ),
+        tl,
+        { icon: '💵', label: 'Currency', hint: 'What costs are shown in' },
+        Pick ? (
+          <Pick key="set-currency-pick" value={among(CURRENCY.code, currencyOptions())} options={currencyOptions()} onSelect={v => void setCurrency($, CURRENCIES.find(cur => cur.code === v) ?? CURRENCY)} />
+        ) : (
+          <Button
+            key="set-currency"
+            label={`Currency: ${currencyLabel(currencyOf(prefs.currency, CURRENCY.code === prefs.currency ? CURRENCY.rate : undefined))} ▸`}
+            plain
+            onPress={async () => {
+              const i = CURRENCIES.findIndex(cur => cur.code === CURRENCY.code)
+              await setCurrency($, CURRENCIES[(i + 1) % CURRENCIES.length] as Currency)
+            }}
+          />
         ),
       ),
-      SKIN.cast ? null : opt('opt-simple', "The band in 3 rows: what's on, the crew, the cost.", toggle('set-simple', 'Simple band', prefs.simple, async () => setFlag($, 'simple', !(await read($, settings)).simple))),
-      opt('opt-calm', 'One status line instead of the band.', toggle('set-calm', 'Calm mode', prefs.calm, async () => setFlag($, 'calm', !(await read($, settings)).calm))),
-      opt(
-        'opt-sounds',
-        cyberOf() ? 'Chimes, blips and the MaxTac siren.' : 'A chime when a job is done.',
-        toggle('set-sounds', 'Sounds', prefs.sounds, async () => {
-          const isOn = !(await read($, settings)).sounds
-          await $.store.set('sounds', isOn).catch(() => undefined)
-          await update($, settings, prev => ({ ...prev, sounds: isOn }))
-        }),
-      ),
-      opt('opt-voice', 'Says out loud when a job is done and what it cost.', toggle('set-voice', 'Spoken status', prefs.voice, async () => setFlag($, 'voice', !(await read($, settings)).voice))),
-      opt(
-        'opt-open',
-        'Opens Mission Control each time Claude starts.',
-        toggle('set-open', 'Open on start', prefs.openOnStart, async () => {
-          const isOn = !(await read($, settings)).openOnStart
-          await $.store.set('openOnStart', isOn).catch(() => undefined)
-          await update($, settings, prev => ({ ...prev, openOnStart: isOn }))
-        }),
-      ),
+      SKIN.cast ? null : switchRow('opt-simple', tl, '📏', 'Simple band', 'The band in three rows', prefs.simple, async () => setFlag($, 'simple', !(await read($, settings)).simple)),
+      switchRow('opt-calm', tl, '🧘', 'Calm mode', 'One status line, no band', prefs.calm, async () => setFlag($, 'calm', !(await read($, settings)).calm)),
+      switchRow('opt-sounds', tl, '🔔', 'Sounds', cyberOf() ? 'Chimes, blips, the MaxTac siren' : "A chime when a job's done", prefs.sounds, async () => {
+        const isOn = !(await read($, settings)).sounds
+        await $.store.set('sounds', isOn).catch(() => undefined)
+        await update($, settings, prev => ({ ...prev, sounds: isOn }))
+      }),
+      switchRow('opt-voice', tl, '🗣', 'Spoken status', 'Says the result out loud', prefs.voice, async () => setFlag($, 'voice', !(await read($, settings)).voice)),
+      switchRow('opt-open', tl, '🚪', 'Open on start', 'Opens when Claude starts', prefs.openOnStart, async () => {
+        const isOn = !(await read($, settings)).openOnStart
+        await $.store.set('openOnStart', isOn).catch(() => undefined)
+        await update($, settings, prev => ({ ...prev, openOnStart: isOn }))
+      }),
     )
     // The banner: what is set now, at a glance, in the colours of the cards it comes from.
     const status = [
