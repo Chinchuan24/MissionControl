@@ -87,7 +87,13 @@ test('modes: the pane button switches both ways; the picker shows one Edgerunner
   base(on, QUIET)
   await start($, 'edgerunners-2')
   const ui = await $.ui.mount({ plugin: 'crab-progress', surface: 'desktop', component: 'Pane', requestId: 'crab-agents', props: pane })
+  // The secret stays a secret: no "Let Capri in" button until she has been found.
+  expect(await ui.find({ key: 'er2-mode' })).toBeUndefined()
+  await say($, '0+2=1')
+  expect(isCapri(await bandOf($))).toBe(true)
   expect(await ui.find({ key: 'er2-mode' })).toBeDefined()
+  await ui.press({ key: 'er2-mode' })
+  expect(isCapri(await bandOf($))).toBe(false)
   await ui.press({ key: 'er2-mode' })
   expect(isCapri(await bandOf($))).toBe(true)
   await ui.press({ key: 'er2-mode' })

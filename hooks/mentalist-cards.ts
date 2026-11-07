@@ -4,7 +4,7 @@
 // Pure SVG strings, no state and no I/O. The props keep their own colours (paper, manila,
 // cork): they are objects, not UI. Type is the skin's serif at weights 400 and 700 only.
 
-import { levelOf, xpFor } from './extras'
+import { levelOf, nextOf, veil, xpFor } from './extras'
 import type { Beat, Cred, Frame } from './extras'
 import { CBI_BADGES, RED, cbiRankOf } from './mentalist'
 
@@ -180,12 +180,13 @@ export const personnelFile = (W: number, c: Cred, t: CardTheme, font: string, fr
   s.push(`<text x="16" y="${ey - 2}" font-family="${font}" font-size="9.5" font-weight="700" letter-spacing=".8" fill="${t.muted}">EVIDENCE</text>`)
   const per = tagsPer(W)
   const cell = (W - 32 + TAG_GAP) / per
-  const next = CBI_BADGES.filter(b => !c.badges.includes(b.id)).sort((a, b) => b.progress(c) - a.progress(c))[0]
+  const tags = CBI_BADGES.map(b => veil(b, c.badges.includes(b.id)))
+  const next = nextOf(tags, c, true)
   for (let r = 0; r < Math.ceil(CBI_BADGES.length / per); r++) {
     const ly = ey + 10 + r * (TAG_H + 22)
     s.push(`<path d="M12 ${ly}Q${W / 2} ${ly + 5} ${W - 12} ${ly}" fill="none" stroke="${t.subtext}" stroke-opacity=".55"/>`)
     s.push(`<circle cx="12" cy="${ly}" r="2.5" fill="${t.muted}"/><circle cx="${W - 12}" cy="${ly}" r="2.5" fill="${t.muted}"/>`)
-    CBI_BADGES.slice(r * per, r * per + per).forEach((b, i) => {
+    tags.slice(r * per, r * per + per).forEach((b, i) => {
       const on = c.badges.includes(b.id)
       const tx = 16 + i * cell + (cell - TAG_W - TAG_GAP) / 2
       const ty = ly + 12

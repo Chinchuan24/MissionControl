@@ -93,7 +93,8 @@ test('edgerunners-2: NEURAL SYNC, NETRUN TRACE, CLOSED GIGS, the LINKED boot, th
   expect(bandSvg).not.toContain('CHIP HOT')
   expect(bandSvg).toContain('LINK') // the hex stream
   expect(ER2_EPISODES).toHaveLength(10)
-  expect(er2EpisodeAt(2 * 3_600_000)).toBe('EP 03 0+2=1')
+  expect(er2EpisodeAt(2 * 3_600_000)).toBe('EP 04 Someone That I Used to Know')
+  expect(er2EpisodeAt(2 * 3_600_000, true)).toBe('EP 03 0+2=1')
 })
 
 for (const [ctx, word, other] of [[88, 'CHIP HOT', "CAPRI'S AWAKE"], [96, "CAPRI'S AWAKE", 'CHIP HOT']] as const) {
@@ -354,7 +355,7 @@ test('sprites: rectangular, every letter in the palette, Capri has hair, eyes an
   expect(CASTS.edgerunners2?.crew).toHaveLength(3)
   for (const role of ['explore', 'fable', 'heavy', 'careful', 'medium', 'light', 'artist', 'writer', 'banker', 'other']) expect(CASTS.edgerunners2?.roles[role]).toBeDefined()
   expect(er2RankOf(1)).toBe('NO SIGNAL')
-  expect(er2RankOf(20)).toBe('0+2=1')
+  expect(er2RankOf(20)).toBe('ONE MIND')
 })
 
 test('sizes: the band with a walking Capri stays under the limit', async ($, on) => {
