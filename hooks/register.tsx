@@ -5202,12 +5202,15 @@ const settingsBannerSvg = (W: number, chips: readonly { text: string; tone: stri
     ? `${crab(10, 36, 'role:explore', false, false, 1.5)}${crab(46, 21, 'boss', false, false, 2)}${crab(104, 36, 'role:heavy', false, false, 1.5, true)}`
     : crab(10, 26, 'boss', false, false, 1.8)
   const x0 = isWide ? 164 : 76
+  // The chips at 12 px, or a size smaller when that lets all of them fit; what still does not fit is left out.
+  const widthAt = (size: number) => (chip: { text: string }) => Math.ceil(textWidth(chip.text, size) * 1.06) + (size > 11 ? 20 : 14)
+  const size = chips.map(widthAt(12)).reduce((sum, w) => sum + w + 6, x0) <= W - 12 ? 12 : 11
   let x = x0
   const pills: string[] = []
   for (const chip of chips) {
-    const w = Math.ceil(textWidth(chip.text, 12) * 1.06) + 20
+    const w = widthAt(size)(chip)
     if (x + w > W - 12) break
-    pills.push(`${cardShape(x, 50, w, 24, `fill="${chip.tone}"`, 12)}<text x="${r2(x + w / 2)}" y="66.5" text-anchor="middle" font-family="${FONT}" font-size="12" font-weight="700" fill="${inkOn(chip.tone)}">${xml(chip.text)}</text>`)
+    pills.push(`${cardShape(x, 50, w, 24, `fill="${chip.tone}"`, 12)}<text x="${r2(x + w / 2)}" y="${size > 11 ? 66.5 : 66}" text-anchor="middle" font-family="${FONT}" font-size="${size}" font-weight="700" fill="${inkOn(chip.tone)}">${xml(chip.text)}</text>`)
     x += w + 6
   }
   return stillSvg(
@@ -8093,9 +8096,10 @@ export const register: Register = (on, options) => {
     const typed = draft.get(clockNow)
     // The look: a banner with the skin's crew and what is set now, then one card per subject
     // under a band in its own colour of the skin's palette (settingslook.ts) with a tagline in
-    // the skin's voice. Each option leads with a short bold label and its value as a chip (on
-    // green, off grey), one short muted hint, then its controls. Dark skins paint the pane and
-    // the cards in their own colours, as the main pane does; every pill picks the ink that reads.
+    // the skin's voice. Each option shows its value once: a short bold label beside its dropdown,
+    // or a switch with an ON (green) / OFF (grey) pill, or a read-only value as a pill; then one
+    // short muted hint and any "or type" field. Dark skins paint the pane and the cards in their
+    // own colours, as the main pane does; every pill picks the ink that reads on it.
     const c = SKIN.colors
     const isDark = SKIN.dark
     const tones = settingsTones(c, SKIN.roles, SKIN.boss)
@@ -8105,11 +8109,13 @@ export const register: Register = (on, options) => {
     const strong = (key: string, text: string) => <Text key={key} bold {...(isDark ? { color: c.text } : {})}>{text}</Text>
     const chip = (key: string, text: string, fill: string) => <Text key={key} backgroundColor={fill} color={inkOn(fill)} bold>{` ${text} `}</Text>
     const box = (isOn: boolean) => (isOn ? '☑︎' : '☐')
-    // A label and its value: a chip in the card's colour, or a grey OFF.
-    const labelled = (key: string, text: string, value: string | null, fill: string) => (
-      <Box key={key} flexDirection="row" flexWrap="wrap" columnGap={1}>
-        {strong(`${key}-l`, text)}
-        {chip(`${key}-v`, value ?? 'OFF', value === null ? OFF : fill)}
+    // A label and the control that shows and changes its value, on one row: the value is drawn
+    // once, by the dropdown (the engine draws a Select in its own style; a Button cannot open
+    // one). Where the surface has no dropdown, the cycling button already names the setting.
+    const choice = (key: string, text: string, control: unknown, isNamed = false) => (
+      <Box key={key} flexDirection="row" flexWrap="wrap" columnGap={1} alignItems="center">
+        {Pick || isNamed ? strong(`${key}-l`, text) : null}
+        {control as never}
       </Box>
     )
     // A switch: the whole row presses, its state a green ON or a grey OFF pill.
@@ -8172,7 +8178,6 @@ export const register: Register = (on, options) => {
             <Box flexDirection={row} gap={2}>
               <Select
                 key="spend-period"
-                label={sw.period}
                 value={sp.period.kind}
                 options={SPEND_KINDS.map(k => ({ value: k, label: sw[k] }))}
                 onSelect={v => void pickSpendKind($, spendIo, (SPEND_KINDS as readonly string[]).includes(v) ? (v as SpendKind) : 'today')}
@@ -8262,78 +8267,79 @@ export const register: Register = (on, options) => {
       opt(
         'opt-daily',
         'Warns at 80% of it, and again at the cap.',
-        labelled('set-daily-now', 'Daily cap', prefs.dailyUsd ? `${fmtCost(prefs.dailyUsd)} / day` : null, tones.money),
-        Pick ? (
-          <Pick key="set-daily-pick" value={among(String(prefs.dailyUsd), dailyOptions)} options={dailyOptions} onSelect={v => void setDailyCap($, Number(v) || 0)} />
-        ) : (
-          <Button key="set-daily" label={`Daily cap: ${prefs.dailyUsd ? `${fmtCost(prefs.dailyUsd)} a day` : 'off'} ▸`} plain onPress={async () => setDailyCap($, nextStep(DAILY_STEPS, (await read($, settings)).dailyUsd))} />
+        choice('set-daily-now', 'Daily cap',
+          Pick ? (
+            <Pick key="set-daily-pick" value={among(String(prefs.dailyUsd), dailyOptions)} options={dailyOptions} onSelect={v => void setDailyCap($, Number(v) || 0)} />
+          ) : (
+            <Button key="set-daily" label={`Daily cap: ${prefs.dailyUsd ? `${fmtCost(prefs.dailyUsd)} a day` : 'off'} ▸`} plain onPress={async () => setDailyCap($, nextStep(DAILY_STEPS, (await read($, settings)).dailyUsd))} />
+          ),
         ),
         Field ? <Field key="set-daily-type" label="or type" placeholder={`${CURRENCY.symbol || '$'} amount, 0 = off`} value="" submitLabel="set" onSubmit={(v: string) => void typeMoney($, 'daily', v)} /> : null,
       ),
       opt(
         'opt-budget',
         'Warns when one task nears or passes it.',
-        labelled('set-budget-now', 'Budget per task', prefs.budgetUsd ? `${fmtCost(prefs.budgetUsd)} / task` : null, tones.money),
-        Pick ? (
-          <Pick key="set-budget-pick" value={among(String(prefs.budgetUsd), budgetOptions)} options={budgetOptions} onSelect={v => void setBudget($, Number(v) || 0)} />
-        ) : (
-          <Button key="set-budget" label={`Budget per task: ${prefs.budgetUsd ? fmtCost(prefs.budgetUsd) : 'off'} ▸`} plain onPress={async () => setBudget($, nextStep(BUDGET_STEPS, (await read($, settings)).budgetUsd))} />
+        choice('set-budget-now', 'Budget per task',
+          Pick ? (
+            <Pick key="set-budget-pick" value={among(String(prefs.budgetUsd), budgetOptions)} options={budgetOptions} onSelect={v => void setBudget($, Number(v) || 0)} />
+          ) : (
+            <Button key="set-budget" label={`Budget per task: ${prefs.budgetUsd ? fmtCost(prefs.budgetUsd) : 'off'} ▸`} plain onPress={async () => setBudget($, nextStep(BUDGET_STEPS, (await read($, settings)).budgetUsd))} />
+          ),
         ),
         Field ? <Field key="set-budget-type" label="or type" placeholder={`${CURRENCY.symbol || '$'} amount, 0 = off`} value="" submitLabel="set" onSubmit={(v: string) => void typeMoney($, 'budget', v)} /> : null,
       ),
       opt(
         'opt-spend',
         "Which days the main pane's spend card adds up.",
-        labelled('set-spend-h', s.spend.period, s.spend[sp.period.kind], tones.money),
-        spendControls,
-      ),
-    )
-    const machine = card(
-      'set-guard',
-      'guard',
-      '🛡︎ Machine Guard',
-      opt('opt-machine', 'What Mission Control found on this computer.', <Text key="set-guard-machine" bold color={isDark ? c.text : undefined}>{`🖥︎ ${gd.line}`}</Text>),
-      opt(
-        'opt-ram',
-        'How much memory Claude and all its agents may use together.',
-        labelled('set-ram-now', 'RAM limit', ramLabel, tones.guard),
-        Pick ? (
-          <Pick key="set-ram-pick" value={among(cleanRamLimit(prefs.ramLimit), ramOptions)} options={ramOptions} onSelect={v => void setRamLimit($, v)} />
-        ) : (
-          <Button key="set-ram" label={`RAM Claude may use: ${ramLabel} ▸`} plain onPress={async () => {
-            const now = (await read($, settings)).ramLimit
-            const opts = ramLimitOptions(now)
-            const i = opts.findIndex(o => o.value === cleanRamLimit(now))
-            await setRamLimit($, (opts[(i + 1) % opts.length] ?? opts[0])?.value ?? 'auto')
-          }} />
+        choice('set-spend-h', s.spend.period, spendControls, true),
+        ),
+      )
+      const machine = card(
+        'set-guard',
+        'guard',
+        '🛡︎ Machine Guard',
+        opt('opt-machine', 'What Mission Control found on this computer.', <Text key="set-guard-machine" bold color={isDark ? c.text : undefined}>{`🖥︎ ${gd.line}`}</Text>),
+        opt(
+          'opt-ram',
+          'How much memory Claude and all its agents may use together.',
+        choice('set-ram-now', 'RAM limit',
+          Pick ? (
+            <Pick key="set-ram-pick" value={among(cleanRamLimit(prefs.ramLimit), ramOptions)} options={ramOptions} onSelect={v => void setRamLimit($, v)} />
+          ) : (
+            <Button key="set-ram" label={`RAM Claude may use: ${ramLabel} ▸`} plain onPress={async () => {
+              const now = (await read($, settings)).ramLimit
+              const opts = ramLimitOptions(now)
+              const i = opts.findIndex(o => o.value === cleanRamLimit(now))
+              await setRamLimit($, (opts[(i + 1) % opts.length] ?? opts[0])?.value ?? 'auto')
+            }} />
+          ),
         ),
         Field ? <Field key="set-ram-type" label="or type" placeholder="GB, like 12" value="" submitLabel="set" onSubmit={(v: string) => void typeRamLimit($, v)} /> : null,
       ),
       opt(
         'opt-agents',
         'Agents at once. Auto works it out from the RAM limit.',
-        labelled('set-agents-now', 'Max agents', maxNow ? String(maxNow) : gd.autoLabel.replace(/\s*\(.*\)$/, ''), tones.guard),
-        Pick ? (
-          <Pick key="set-agents-pick" value={among(String(maxNow), agentOptions)} options={agentOptions} onSelect={v => void setMaxAgents($, Number(v) || 0)} />
-        ) : (
-          <Button key="set-agents" label={`Max agents at once: ${maxNow || gd.autoLabel} ▸`} plain onPress={async () => {
-            const now = cleanMaxAgents((await read($, settings)).maxAgents)
-            await setMaxAgents($, [0, ...MAX_AGENTS_STEPS].find(v => v > now) ?? 0)
-          }} />
+        choice('set-agents-now', 'Max agents',
+          Pick ? (
+            <Pick key="set-agents-pick" value={among(String(maxNow), agentOptions)} options={agentOptions} onSelect={v => void setMaxAgents($, Number(v) || 0)} />
+          ) : (
+            <Button key="set-agents" label={`Max agents at once: ${maxNow || gd.autoLabel} ▸`} plain onPress={async () => {
+              const now = cleanMaxAgents((await read($, settings)).maxAgents)
+              await setMaxAgents($, [0, ...MAX_AGENTS_STEPS].find(v => v > now) ?? 0)
+            }} />
+          ),
         ),
         Field ? <Field key="set-agents-type" label="or type" placeholder="agents, like 24" value="" submitLabel="set" onSubmit={(v: string) => void typeMaxAgents($, v)} /> : null,
       ),
       opt(
         'opt-kill',
         'Over the RAM limit? Stops its biggest heavy command (tsc, tests, builds).',
-        <Box key="set-kill-now" flexDirection="row" flexWrap="wrap" columnGap={1}>
-          {strong('set-kill-now-l', 'Kill switch')}
-          {chip('set-kill-now-v', isKillOn ? 'ON' : 'OFF', isKillOn ? c.done : c.alert)}
-        </Box>,
-        Pick ? (
-          <Pick key="set-kill-pick" value={among(cleanKillSwitch(prefs.killSwitch), killChoices)} options={killChoices} onSelect={v => void setKillSwitch($, cleanKillSwitch(v))} />
-        ) : (
-          <Button key="set-kill" label={`Kill switch: ${isKillOn ? 'On' : 'Off'} ▸`} plain onPress={async () => setKillSwitch($, cleanKillSwitch((await read($, settings)).killSwitch) === 'on' ? 'off' : 'on')} />
+        choice('set-kill-now', 'Kill switch',
+          Pick ? (
+            <Pick key="set-kill-pick" value={among(cleanKillSwitch(prefs.killSwitch), killChoices)} options={killChoices} onSelect={v => void setKillSwitch($, cleanKillSwitch(v))} />
+          ) : (
+            <Button key="set-kill" label={`Kill switch: ${isKillOn ? 'On' : 'Off'} ▸`} plain onPress={async () => setKillSwitch($, cleanKillSwitch((await read($, settings)).killSwitch) === 'on' ? 'off' : 'on')} />
+          ),
         ),
       ),
       opt(
@@ -8354,50 +8360,53 @@ export const register: Register = (on, options) => {
       opt(
         'opt-crew',
         'Splits work across helper agents: big jobs, every job, or off.',
-        labelled('set-crew-now', 'Crew mode', crewChoice === 'off' ? null : crewChoice === 'every' ? 'Every job' : 'Big jobs', tones.crew),
-        Pick ? (
-          <Pick
-            key="set-crew-pick"
-            value={among(crewChoice, crewOptions)}
-            options={crewOptions}
-            onSelect={v => void setCrewChoice($, v === 'off' || v === 'every' ? v : 'big')}
-          />
-        ) : (
-          <Button
-            key="set-crew"
-            label={`${box(prefs.crewMode)} Crew mode: ${prefs.crewAlways ? 'every job' : 'big jobs'}`}
-            plain
-            onPress={async () => {
-              const auto = await readAutoCrew($)
-              const isOn = !auto.on
-              // The stored choice of every job survives off and on again.
-              const raw = (await $.store.get('autoCrew').catch(() => null)) as Partial<AutoCrew> | null
-              const always = raw?.always === true
-              await $.store.set('autoCrew', { ...auto, on: isOn, always }).catch(() => undefined)
-              if (!isOn) await update($, session, prev => ({ ...prev, crewMode: '' }))
-              await update($, settings, prev => ({ ...prev, crewMode: isOn, crewAlways: isOn && always }))
-            }}
-          />
+        choice('set-crew-now', 'Crew mode',
+          Pick ? (
+            <Pick
+              key="set-crew-pick"
+              value={among(crewChoice, crewOptions)}
+              options={crewOptions}
+              onSelect={v => void setCrewChoice($, v === 'off' || v === 'every' ? v : 'big')}
+            />
+          ) : (
+            <Button
+              key="set-crew"
+              label={`${box(prefs.crewMode)} Crew mode: ${prefs.crewAlways ? 'every job' : 'big jobs'}`}
+              plain
+              onPress={async () => {
+                const auto = await readAutoCrew($)
+                const isOn = !auto.on
+                // The stored choice of every job survives off and on again.
+                const raw = (await $.store.get('autoCrew').catch(() => null)) as Partial<AutoCrew> | null
+                const always = raw?.always === true
+                await $.store.set('autoCrew', { ...auto, on: isOn, always }).catch(() => undefined)
+                if (!isOn) await update($, session, prev => ({ ...prev, crewMode: '' }))
+                await update($, settings, prev => ({ ...prev, crewMode: isOn, crewAlways: isOn && always }))
+              }}
+            />
+          ),
         ),
       ),
       opt(
         'opt-oneshot',
         'Once you approve a plan: all of it, one part at a time, or ask.',
-        labelled('set-oneshot-now', 'One-shot plans', shotValue === 'on' ? 'Whole plan' : shotValue === 'off' ? 'Step by step' : 'Ask each time', tones.crew),
-        Pick ? (
-          <Pick key="set-oneshot-pick" value={among(shotValue, SHOT_OPTIONS)} options={SHOT_OPTIONS} onSelect={v => void setOneShot($, cleanOneShot(v))} />
-        ) : (
-          <Button key="set-oneshot" label={`One-shot plans: ${prefs.oneShot === 'on' ? 'on' : prefs.oneShot === 'off' ? 'off' : 'ask each time'} ▸`} plain onPress={async () => setOneShot($, nextOneShot(cleanOneShot((await read($, settings)).oneShot)))} />
+        choice('set-oneshot-now', 'One-shot plans',
+          Pick ? (
+            <Pick key="set-oneshot-pick" value={among(shotValue, SHOT_OPTIONS)} options={SHOT_OPTIONS} onSelect={v => void setOneShot($, cleanOneShot(v))} />
+          ) : (
+            <Button key="set-oneshot" label={`One-shot plans: ${prefs.oneShot === 'on' ? 'on' : prefs.oneShot === 'off' ? 'off' : 'ask each time'} ▸`} plain onPress={async () => setOneShot($, nextOneShot(cleanOneShot((await read($, settings)).oneShot)))} />
+          ),
         ),
       ),
       opt(
         'opt-ultra-by',
         'Who gives agents max effort and a deep check.',
-        labelled('set-ultraby-now', 'Ultra decided by', ultraBy === 'manager' ? 'Manager' : 'Me', tones.crew),
-        Pick ? (
-          <Pick key="set-ultraby-pick" value={among(ultraBy, ULTRA_BY_OPTIONS)} options={ULTRA_BY_OPTIONS} onSelect={v => void setUltraBy($, cleanUltraBy(v))} />
-        ) : (
-          <Button key="set-ultraby" label={`Ultra decided by: ${ultraBy === 'manager' ? 'Manager' : 'Me'} ▸`} plain onPress={async () => setUltraBy($, cleanUltraBy((await read($, settings)).ultraBy) === 'manager' ? 'me' : 'manager')} />
+        choice('set-ultraby-now', 'Ultra decided by',
+          Pick ? (
+            <Pick key="set-ultraby-pick" value={among(ultraBy, ULTRA_BY_OPTIONS)} options={ULTRA_BY_OPTIONS} onSelect={v => void setUltraBy($, cleanUltraBy(v))} />
+          ) : (
+            <Button key="set-ultraby" label={`Ultra decided by: ${ultraBy === 'manager' ? 'Manager' : 'Me'} ▸`} plain onPress={async () => setUltraBy($, cleanUltraBy((await read($, settings)).ultraBy) === 'manager' ? 'me' : 'manager')} />
+          ),
         ),
       ),
       opt('opt-staffing', 'Each agent gets the model and effort its job needs.', toggle('set-staffing', 'Smart staffing', prefs.staffing, async () => setFlag($, 'staffing', !(await read($, settings)).staffing))),
@@ -8430,19 +8439,20 @@ export const register: Register = (on, options) => {
       opt(
         'opt-currency',
         'The currency costs are shown in.',
-        labelled('set-currency-now', 'Currency', CURRENCY.code, tones.look),
-        Pick ? (
-          <Pick key="set-currency-pick" value={among(CURRENCY.code, currencyOptions())} options={currencyOptions()} onSelect={v => void setCurrency($, CURRENCIES.find(cur => cur.code === v) ?? CURRENCY)} />
-        ) : (
-          <Button
-            key="set-currency"
-            label={`Currency: ${currencyLabel(currencyOf(prefs.currency, CURRENCY.code === prefs.currency ? CURRENCY.rate : undefined))} ▸`}
-            plain
-            onPress={async () => {
-              const i = CURRENCIES.findIndex(cur => cur.code === CURRENCY.code)
-              await setCurrency($, CURRENCIES[(i + 1) % CURRENCIES.length] as Currency)
-            }}
-          />
+        choice('set-currency-now', 'Currency',
+          Pick ? (
+            <Pick key="set-currency-pick" value={among(CURRENCY.code, currencyOptions())} options={currencyOptions()} onSelect={v => void setCurrency($, CURRENCIES.find(cur => cur.code === v) ?? CURRENCY)} />
+          ) : (
+            <Button
+              key="set-currency"
+              label={`Currency: ${currencyLabel(currencyOf(prefs.currency, CURRENCY.code === prefs.currency ? CURRENCY.rate : undefined))} ▸`}
+              plain
+              onPress={async () => {
+                const i = CURRENCIES.findIndex(cur => cur.code === CURRENCY.code)
+                await setCurrency($, CURRENCIES[(i + 1) % CURRENCIES.length] as Currency)
+              }}
+            />
+          ),
         ),
       ),
       SKIN.cast ? null : opt('opt-simple', "The band in 3 rows: what's on, the crew, the cost.", toggle('set-simple', 'Simple band', prefs.simple, async () => setFlag($, 'simple', !(await read($, settings)).simple))),
