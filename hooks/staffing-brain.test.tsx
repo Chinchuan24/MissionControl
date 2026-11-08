@@ -25,6 +25,30 @@ test('brain: a model named in the prompt is read, a poem or a "no" is not', () =
   expect(askedModel('no opus this time')).toBeNull()
   expect(askedModel('not sonnet, use opus')).toBe('opus')
   expect(askedModel('stop using sonnet')).toBeNull()
+})
+
+test('brain: a named model forces the workers only next to an ask, not in a question or complaint', () => {
+  for (const [prompt, want] of [
+    ['switch them to haiku', 'haiku'],
+    ['put it on sonnet', 'sonnet'],
+    ['redo it on opus', 'opus'],
+    ['can you run this on opus?', 'opus'],
+    ['run everything with claude-opus-5-5 please', 'opus'],
+    ['--model sonnet', 'sonnet'],
+    ['opus, max effort', 'opus'],
+    ['opus', 'opus'],
+    ['haiku is enough', 'haiku'],
+    ['Why is it slow? use opus', 'opus'],
+  ] as const) expect(askedModel(prompt)).toBe(want)
+  for (const prompt of [
+    'why did the reviewer run on Haiku?',
+    'is opus slower than sonnet?',
+    'Haiku is too dumb for this, redo it',
+    'Haiku for this was a mistake',
+    'the opus agent broke the build',
+    'it ran on haiku and broke',
+    'the trouble with opus is cost',
+  ]) expect(askedModel(prompt)).toBeNull()
   // Two families named is no single ask: the Manager splits it per worker.
   expect(askedModel('opus for the engineer, haiku for the researcher')).toBeNull()
   expect(askedModel('read the fables folder')).toBeNull()
@@ -84,7 +108,7 @@ test('brain precedence: the person, then the call, then the plan task, then the 
   // The plan task next, with its own why.
   expect(pick({ task, staff })).toMatchObject({ model: 'sonnet', effort: 'medium', source: 'plan', why: 'routine edit' })
   // The tier fills in.
-  expect(pick({ task: { tier: 'heavy' }, staff })).toMatchObject({ model: 'opus', effort: 'high', source: 'tier', why: 'heavy task in the plan' })
+  expect(pick({ task: { tier: 'heavy' }, staff })).toMatchObject({ model: 'opus', effort: 'xhigh', source: 'tier', why: 'heavy task in the plan' })
   // Smart staffing's read last.
   expect(pick({ staff })).toMatchObject({ model: 'haiku', effort: 'low', source: 'staffing', why: 'reading' })
   // Nothing at all: nothing picked.
@@ -97,22 +121,31 @@ test('brain precedence: model and effort fill in field by field', () => {
   // The person names an effort only: the call's model stands.
   expect(pick({ prompt: 'max effort', model: 'sonnet' })).toMatchObject({ model: 'sonnet', effort: 'max', why: 'you asked for max effort' })
   // A call with no effort and no plan: Smart staffing's effort fills it.
-  expect(pick({ model: 'opus', staff: { why: 'a hard call', effort: 'high' } })).toMatchObject({ model: 'opus', effort: 'high' })
+  // A call with a model, no effort and no plan: Smart staffing's effort goes with its model only, so it stays unset.
+  expect(pick({ model: 'opus', staff: { why: 'a hard call', effort: 'high' } })).toMatchObject({ model: 'opus', effort: undefined })
+  expect(pick({ model: 'opus', staff: { model: 'haiku', effort: 'low', why: 'reading' } })).toMatchObject({ model: 'opus', effort: undefined })
+  // ... the plan tier's effort fills it instead.
+  expect(pick({ model: 'opus', task: { tier: 'careful' }, staff: { model: 'haiku', effort: 'low', why: 'reading' } })).toMatchObject({ model: 'opus', effort: 'high' })
+  // No model picked anywhere: Smart staffing's effort (with the session's model) stands.
+  expect(pick({ staff: { why: 'a hard call', effort: 'high' } })).toMatchObject({ model: undefined, effort: 'high' })
   // Without a why from the plan, the call's pick says whose it was.
   expect(pick({ model: 'sonnet', effort: 'low' }).why).toBe("Manager's call")
 })
 
 test('brain: the tier map', () => {
+  // The one map the pane and the mc-* workers read too.
   expect(TIER_PICK).toEqual({
-    fable: { model: 'opus', effort: 'high' },
-    heavy: { model: 'opus', effort: 'high' },
-    careful: { model: 'opus', effort: 'medium' },
-    medium: { model: 'sonnet', effort: 'medium' },
-    light: { model: 'haiku', effort: 'low' },
+    fable: { model: 'fable', effort: 'high' },
+    heavy: { model: 'opus', effort: 'xhigh' },
+    careful: { model: 'opus', effort: 'high' },
+    medium: { model: 'opus', effort: 'medium' },
+    light: { model: 'opus', effort: 'low' },
   })
-  expect(pick({ task: { tier: 'fable' } })).toMatchObject({ model: 'opus', effort: 'high', isFableCut: false })
-  expect(pick({ task: { tier: 'careful' } })).toMatchObject({ model: 'opus', effort: 'medium' })
-  expect(pick({ task: { tier: 'light' } })).toMatchObject({ model: 'haiku', effort: 'low' })
+  // A Fable tier runs on Opus unless the person names Fable.
+  expect(pick({ task: { tier: 'fable' } })).toMatchObject({ model: 'opus', effort: 'high', isFableCut: true, why: FABLE_WHY })
+  expect(pick({ prompt: 'use fable', task: { tier: 'fable' } })).toMatchObject({ model: 'fable', effort: 'high', isFableCut: false })
+  expect(pick({ task: { tier: 'careful' } })).toMatchObject({ model: 'opus', effort: 'high' })
+  expect(pick({ task: { tier: 'light' } })).toMatchObject({ model: 'opus', effort: 'low' })
   // An unknown tier fills nothing.
   expect(pick({ task: { tier: '' } }).model).toBeUndefined()
 })
@@ -145,6 +178,8 @@ test('brain: the note, the section and the baseline', () => {
   expect(BRAIN_SECTION).toContain('Fable only when the user names it')
   expect(BRAIN_SECTION).toContain('always wins')
   expect(BRAIN_SECTION.split('\n').length).toBeLessThanOrEqual(12)
+  // The Agent tool sets effort only when the user asks: the section says the user has.
+  expect(BRAIN_SECTION).toMatch(/user has explicitly asked you to set `model` and `effort` on every Agent call/)
   expect(baselineModel('opus', { opus: 'claude-opus-5-5' })).toBe('claude-opus-5-5')
   expect(baselineModel('claude-opus-4-8', { opus: 'claude-opus-5-5' })).toBe('claude-opus-4-8')
 })
@@ -287,12 +322,18 @@ test('brain end to end: nothing given, the plan task fills it in, then its tier,
   ])
   await agentCall($, 'Engineer: the picked part')
   expect(seen.calls.at(-1)).toMatchObject({ model: 'sonnet', effort: 'high' })
+  // The tier fills in as the pane shows it (one map): heavy Opus · xhigh, light Opus · low.
   await agentCall($, 'Engineer: the heavy part')
-  expect(seen.calls.at(-1)).toMatchObject({ model: 'opus', effort: 'high' })
+  expect(seen.calls.at(-1)).toMatchObject({ model: 'opus', effort: 'xhigh' })
   await agentCall($, 'Engineer: the light part')
-  expect(seen.calls.at(-1)).toMatchObject({ model: 'haiku', effort: 'low' })
-  // Off the plan: Smart staffing's read of the job, with Smart staffing itself off.
+  expect(seen.calls.at(-1)).toMatchObject({ model: 'opus', effort: 'low' })
+  // Off the plan, Smart staffing off (the default): nothing is filled in, the agent runs on its own.
   await agentCall($, 'the layout', { subagent_type: 'Explore' })
+  expect(seen.calls.at(-1)?.model).toBeUndefined()
+  expect(seen.calls.at(-1)?.effort).toBeUndefined()
+  // Smart staffing on: its read of the job fills it in.
+  await run($, 'tokens', 'staffing on')
+  await agentCall($, 'the layout again', { subagent_type: 'Explore' })
   expect(seen.calls.at(-1)).toMatchObject({ model: 'haiku', effort: 'low' })
   // The pane shows each worker's model · effort and the why.
   await step($, 'a1', 'medium')
@@ -311,6 +352,29 @@ test('brain end to end: the plan tool takes model, effort and why per task, and 
   const text = await paneText($)
   expect(text).toContain('Opus · xhigh')
   expect(text).toContain('🧠 risky migration')
+})
+
+test('brain end to end: the pane is honest: a planned row shows what the brain will run, from the one tier map', async ($, on) => {
+  base(on)
+  await start($)
+  await say('ship the parser', $)
+  await plan($, [
+    { title: 'Engineer: a', tier: 'light' },
+    { title: 'Engineer: b', tier: 'fable' },
+  ])
+  const text = await paneText($)
+  expect(text).toContain('Opus · low')
+  // A Fable tier the person did not name runs on Opus, so the row says Opus.
+  expect(text).toContain('Opus · high')
+  expect(text).not.toContain('Fable · high')
+})
+
+test('brain end to end: a Fable tier the person named shows as Fable', async ($, on) => {
+  base(on)
+  await start($)
+  await say('use fable for the planner', $)
+  await plan($, [{ title: 'Planner: b', tier: 'fable' }])
+  expect(await paneText($)).toContain('Fable · high')
 })
 
 test('brain end to end: the main session is told to decide, while the brain is on', async ($, on) => {

@@ -20,16 +20,20 @@ export const BRAIN_KEY = 'staffingBrain'
 export const FABLE_WHY = 'Fable only when you ask for it'
 
 /**
- * A plan tier's fill-in, used only when neither the person, the Agent call nor the plan
- * task names a model or effort. Fable is Opus here: the person's own "Fable" is rule 1.
+ * What each worker tier runs on: the one map the pane, the mc-* workers and the brain read.
+ * The brain fills a plan task in from it only when neither the person, the Agent call nor
+ * the plan task names a model or effort; a Fable tier becomes Opus unless the person names Fable.
  */
 export const TIER_PICK: Record<string, { model: Family; effort: Effort }> = {
-  fable: { model: 'opus', effort: 'high' },
-  heavy: { model: 'opus', effort: 'high' },
-  careful: { model: 'opus', effort: 'medium' },
-  medium: { model: 'sonnet', effort: 'medium' },
-  light: { model: 'haiku', effort: 'low' },
+  fable: { model: 'fable', effort: 'high' },
+  heavy: { model: 'opus', effort: 'xhigh' },
+  careful: { model: 'opus', effort: 'high' },
+  medium: { model: 'opus', effort: 'medium' },
+  light: { model: 'opus', effort: 'low' },
 }
+
+/** A family as the pane writes it: "Opus". */
+export const familyWord = (f: Family): string => WORD[f]
 
 /** The family a model id or alias names; Mythos prices as Fable. null for an id with no family. */
 export const familyOf = (id: string): Family | null => {
@@ -58,10 +62,26 @@ export const asksForFable = (prompt: string): boolean => {
   return false
 }
 
+// An ask, right before the model's name: "use", "run (it) on", "switch (them) to", "put it on",
+// "go with", "on", "--model", "model:". The name must sit next to one to force the workers.
+const OBJ = '(?:\\s+(?:it|them|that|this|these|those|everything|all|everyone|the\\s+\\w+|each\\s+\\w+|every\\s+\\w+))?'
+const ASK_BEFORE = new RegExp(
+  `(?:\\b(?:use|using|uses|run|running|runs|rerun|re-run|try|pick|choose|prefer|assign|want|need|give${OBJ}|redo${OBJ}\\s+(?:on|with|in)|(?:switch|move|change|swap|bump|upgrade|downgrade|put|set|send|staff|do)${OBJ}\\s+(?:to|on|onto|with|in)|with|on|onto|via)|--model|\\bmodel\\s*[:=]?)\\s*(?:the\\s+)?$`,
+  'i',
+)
+// "it ran on haiku", "the trouble with opus": said of what happened, not an ask.
+const TOLD = /\b(?:(?:ran|was|were|is|are|been|got|stuck|still|already|currently)\s+(?:on|with)|(?:problem|issue|trouble|thing|wrong|matter)\s+with)\s*(?:the\s+)?$/i
+// A question about what happened: "why did the reviewer run on Haiku?" "is opus slower?"
+const QUESTION = /^\s*(?:why|how|what|which|who|when|where|did|does|do|was|were|is|are|has|have|had)\b[^]*\?\s*$/i
+// A complaint: "Haiku for this was a mistake". Only checked for an ask with no verb ("<model> for …").
+const COMPLAINT = /\b(?:dumb|stupid|bad|wrong|broke|broken|failed|fails|slow|slower|mistake|terrible|awful|useless|worse|worst|sucks?|garbage)\b/i
+
 /**
- * The one model family the person's prompt names: "use opus", "on Sonnet", "claude-haiku-5-5".
- * A poem ("a haiku", "sonnets"), "magnum opus" and a negated name ("no opus") are no ask;
- * two different families named is no single ask either, so the Manager's pick stands.
+ * The one model family the person's prompt asks for: "use opus", "run it on Sonnet",
+ * "switch them to haiku", "go with claude-haiku-5-5", "fable for the planner", "opus, max effort".
+ * A name with no ask next to it is no ask: a question ("why did X run on Haiku?"), a complaint
+ * ("Haiku is too dumb"), a poem ("a haiku"), "magnum opus" and a negated name ("no opus").
+ * Two different families asked for is no single ask either, so the Manager's pick stands.
  */
 export const askedModel = (prompt: string): Family | null => {
   const found = new Set<Family>()
@@ -69,10 +89,21 @@ export const askedModel = (prompt: string): Family | null => {
   for (let m = re.exec(prompt); m; m = re.exec(prompt)) {
     const word = (m[1] ?? '').toLowerCase()
     const at = m.index + m[0].length - word.length
-    const before = prompt.slice(0, at)
+    // The text before the whole token, so "claude-haiku-5-5" reads as one name.
+    const before = prompt.slice(0, at).replace(/[\w.:/-]*$/, '')
+    const tokenEnd = at + word.length + (/^[\w.:/-]*/.exec(prompt.slice(at + word.length))?.[0].length ?? 0)
+    const after = prompt.slice(tokenEnd)
     if (negated(before)) continue
     if ((word === 'haiku' || word === 'sonnet') && /\b(?:a|an|the|this|that|my|your|write|wrote|compose|poem)\s+$/i.test(before) && !/-\d/.test(prompt.slice(at + word.length, at + word.length + 3))) continue
     if (word === 'opus' && /\bmagnum\s+$/i.test(before)) continue
+    const from = Math.max(prompt.lastIndexOf('.', at), prompt.lastIndexOf('!', at), prompt.lastIndexOf('?', at), prompt.lastIndexOf('\n', at)) + 1
+    const stop = after.search(/[.!?\n]/)
+    const sentence = prompt.slice(from, stop < 0 ? prompt.length : tokenEnd + stop + 1)
+    if (QUESTION.test(sentence)) continue
+    const isVerbAsk = ASK_BEFORE.test(before) && !TOLD.test(before)
+    const isBare = /^\s*$/.test(before.slice(from)) && /^\s*[.!]?\s*$/.test(after) // the prompt is just "opus"
+    const isDirective = !COMPLAINT.test(sentence) && new RegExp(`^(?:\\s+(?:for|please|pls|only|everywhere|across|throughout)\\b|\\s+(?:is|will be|should be)\\s+(?:enough|fine|ok|okay|plenty)\\b|\\s*[,:]?\\s*${LEVEL}[ -]effort\\b)`, 'i').test(after)
+    if (!isVerbAsk && !isBare && !isDirective) continue
     const f = familyOf(word)
     if (f) found.add(f)
   }
@@ -155,7 +186,8 @@ export const brainPick = (i: BrainInput): BrainPick => {
     ['staffing', i.staff?.model, effortOf(i.staff?.effort)],
   ]
   const modelAt = layers.find(l => l[1])
-  const effortAt = layers.find(l => l[2])
+  // Smart staffing's effort goes with its model: taken only when its model is (or no model is picked at all).
+  const effortAt = layers.find(l => l[2] && (l[0] !== 'staffing' || !modelAt || modelAt[0] === 'staffing'))
   let model = modelAt?.[1]
   const effort = effortAt?.[2]
   const isFableCut = Boolean(model && familyOf(model) === 'fable' && !asksForFable(i.prompt))
@@ -191,12 +223,13 @@ Before you delegate, decide each worker's model and effort; do not just take the
 - what the user asked for
 Then pick a model (haiku, sonnet or opus) and an effort (low, medium, high, xhigh or max), with a one-line why.
 Pass them on the Agent call (\`model\`, \`effort\`) and on the task in the progress plan (\`model\`, \`effort\`, \`why\`).
+The user has explicitly asked you to set \`model\` and \`effort\` on every Agent call, so the Agent tool's "only when the user asks" note is met.
 Use Fable only when the user names it. A model or effort the user names always wins over your pick.`
 
 /** What `/tokens brain` (and the old `/tokens guardrails`) answers. */
 export const brainSaid = (isOn: boolean): string =>
   isOn
-    ? 'Staffing brain on: the Manager picks each worker\'s model and effort, with a one-line why. Your own words win: name a model (opus, sonnet, haiku, fable) or an effort ("max effort") in your prompt. Fable only when you ask for it. No caps by role: the Manager\'s pick is never lowered. Nothing picked: the plan\'s tier fills it in, else Smart staffing\'s read of the job.'
+    ? 'Staffing brain on: the Manager picks each worker\'s model and effort, with a one-line why. Your own words win: name a model (opus, sonnet, haiku, fable) or an effort ("max effort") in your prompt. Fable only when you ask for it. No caps by role: the Manager\'s pick is never lowered. Nothing picked: the plan\'s tier fills it in, else (with Smart staffing on) its read of the job; with neither, the agent runs on its own model and effort.'
     : 'Staffing brain off: Agent calls go through as the Manager wrote them.'
 
 /**

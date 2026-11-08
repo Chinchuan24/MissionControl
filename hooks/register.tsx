@@ -31,7 +31,7 @@ import { BEATS_KEPT, BLANK_CRED, BOOT_H, award, rockerRankOf, bdHeight, bootStri
 import type { Beat, Cred } from './extras'
 import { ONESHOT_KEY, ULTRA_BY_KEY, ULTRA_BY_OPTIONS, ULTRA_KEY, ULTRA_TASK_HINT, cleanUltraBy, managerPicks, parseUltraBy, ultraBySaid, ultraBySection, ultraPlanToast, type UltraBy, pillChip, oneShotChipWord, cleanOneShot, cleanUltraRules, isUltraAgent, matchUltra, nextOneShot, oneShotChip, oneShotSaid, oneShotSection, oneShotWord, parseOneShot, resolveEffort, ultraCommand, ultraLine, withUltraBrief } from './crewcontrol'
 import type { OneShot } from './crewcontrol'
-import { BRAIN_KEY, BRAIN_SECTION, baselineModel, brainNote, brainPick, brainSaid, effortOf, familyOf, type BrainPick } from './staffing-brain'
+import { BRAIN_KEY, BRAIN_SECTION, TIER_PICK, asksForFable, baselineModel, brainNote, brainPick, brainSaid, effortOf, familyOf, familyWord, type BrainPick } from './staffing-brain'
 import { hasInlineMath, inlineMath, mermaidChart, splitBlocks, texToUnicode, unifiedDiff } from './richtext'
 import { LIVE_N, glide, isNewReading, isSame, liveText, liveWidth, pin, sentLength, steady, steadyTree, wallMinute } from './smooth'
 import { COLOR_RE, FONT_BAD_RE, ID_RE, TOOL_KEY_RE, contrast, skinCheck, skinNew } from './skinkit'
@@ -3009,26 +3009,16 @@ const TIER_COLOR: Record<string, string> = {
 // What each worker tier runs on, for planned tasks that have no run yet.
 const colorOf = (tier: string): string => TIER_COLOR[tier] ?? '#888780'
 
-const TIER_MODEL: Record<string, [model: string, effort: string]> = {
-  fable: ['Fable', 'high'],
-  heavy: ['Opus', 'xhigh'],
-  careful: ['Opus', 'high'],
-  medium: ['Opus', 'medium'],
-  light: ['Opus', 'low'],
-}
+// One map (TIER_PICK in hooks/staffing-brain.ts) for the pane, the mc-* workers and the Staffing brain.
+const TIER_MODEL: Record<string, [model: string, effort: string]> = Object.fromEntries(Object.entries(TIER_PICK).map(([t, p]) => [t, [familyWord(p.model), p.effort]]))
 
-// "Opus · xhigh", with the effort word in the panel's language; '' for an unknown tier.
-const tierModel = (tier: string): string => {
-  const m = TIER_MODEL[tier]
-  return m ? `${m[0]} · ${effortWord(m[1])}` : ''
-}
-
-// A planned task's "Opus · high": the Manager's pick when the plan gives one, else its tier's.
+// A planned task's "Opus · high" in the panel's language: the Manager's pick when the plan gives one, else its tier's ('' for an unknown tier).
+// With the Staffing brain on, a Fable the person did not name shows as the Opus it will run on.
 const plannedModel = (p: Pick<PlannedTask, 'tier' | 'model' | 'effort'>): string => {
-  if (!p.model && !p.effort) return tierModel(p.tier in TIER_COLOR ? p.tier : 'other')
   const [tModel = '', tEffort = ''] = TIER_MODEL[p.tier] ?? []
-  const fam = familyOf(p.model ?? '')
-  return [fam ? `${fam[0]?.toUpperCase()}${fam.slice(1)}` : tModel, effortWord(p.effort ?? tEffort)].filter(Boolean).join(' · ')
+  const fam = familyOf(p.model ?? '') ?? familyOf(tModel)
+  const shown = fam === 'fable' && brainOn && !asksForFable(lastAsked) ? 'opus' : fam
+  return [shown ? familyWord(shown) : tModel, effortWord(p.effort ?? tEffort)].filter(Boolean).join(' · ')
 }
 
 // The effort a run works at: what its requests carried, else (an Ultra agent before its
@@ -3149,7 +3139,10 @@ async function brainFor($: EngineInterface, c: BrainCall): Promise<BrainPick> {
   const f = await read($, flow).catch(() => null)
   const task = planTaskFor(f && !f.isFinished ? f : null, c.description)
   if (isWorker(c.type)) return brainPick({ prompt: lastAsked, model: c.model ?? workerModel(c.type), effort: c.effort, task: task ? { effort: task.effort, why: task.why } : undefined, staff: null })
-  return brainPick({ prompt: lastAsked, model: c.model, effort: c.effort, task, staff: staffFor(c.type, c.description) })
+  // The last fill-in is one the person turned on: Smart staffing's read, else Autopilot's Haiku for a read-only explorer.
+  const isPiloted = !smartStaffing && c.type === 'Explore' && (await read($, watch).catch(() => null))?.autopilot === true
+  const staff = smartStaffing ? staffFor(c.type, c.description) : isPiloted ? { model: 'haiku', why: 'autopilot: read-only explorer' } : null
+  return brainPick({ prompt: lastAsked, model: c.model, effort: c.effort, task, staff })
 }
 type KeptPick = { pick: BrainPick; given: { model?: string; effort?: string } }
 const brainKey = (id: string | undefined, description: string): string[] => [...(id ? [`id:${id}`] : []), `d:${norm(description)}`]
@@ -7300,7 +7293,7 @@ export const register: Register = (on, options) => {
     // Autopilot: read-only explorers go to Haiku, unless a model was chosen for them.
     const w = await read($, watch)
     const isReadOnly = e.subagentType === 'Explore'
-    // While the Staffing brain is on it owns model and effort; Autopilot and Smart staffing fill in only with it off.
+    // While the Staffing brain is on it owns model and effort; Autopilot and Smart staffing are its last fill-in (brainFor).
     const piloted = !brainOn && w.autopilot && isReadOnly && !e.model ? { ...briefed, model: 'haiku' } : briefed
     if (piloted !== briefed) $.ui.toast(`Token Manager: "${clip(e.description, 30)}" runs on Haiku`)
     const staff = !brainOn && smartStaffing && !e.model && !isWorker(e.subagentType) && piloted === briefed ? staffFor(e.subagentType, e.description) : null
@@ -8793,7 +8786,7 @@ export const register: Register = (on, options) => {
       ),
       opt(
         'opt-staffing',
-        'With the Staffing brain off: an agent launched with no model gets one by its job.',
+        'An agent launched with no model gets one by its job. With the Staffing brain on, only where the Manager and the plan gave none.',
         <Button key="set-staffing" label={`${box(prefs.staffing)} Smart staffing`} plain onPress={async () => setFlag($, 'staffing', !(await read($, settings)).staffing)} />,
       ),
       opt(
