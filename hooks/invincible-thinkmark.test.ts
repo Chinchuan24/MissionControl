@@ -8,7 +8,7 @@ import { AHEAD_MS, THINK_RE, duelPlan, showdownPlan } from './invincible-eggs'
 import { BUBBLES, DRAW_BUDGET, SHOT_COUNT, TM_KIND, TM_MS, drawOf, frameOf, patchWindows, shotAt, thinkMarkFx, thinkMarkHolds, thinkMarkLive, thinkMarkPane, thinkMarkRedraws } from './invincible-thinkmark'
 import { HARD_CUTS, PATCHES, SHOT_TIMES } from './invincible-thinkmark-plan'
 import { clearThinkMarkTimers, pendingThinkMarkTimers, scheduleThinkMark } from './invincible-thinkmark-timers'
-import { PATCH_AT, TM, TM_NAMES } from './invincible-thinkmark-sprites'
+import { PATCH_AT, PLAN_SIZE, TM, TM_NAMES } from './invincible-thinkmark-sprites'
 import { mock } from 'claude-code/testing'
 
 const pane = { title: '', isFocused: false, bodyColumns: 100, placement: 'dock', scroll: { offset: 0, bodyRows: 60 }, view: {} } as const
@@ -118,6 +118,27 @@ test('think, mark: the sprite contract is all there (but the one patch the art l
   for (const n of TM_NAMES) if (TM[n] && !n.includes('_P_') && !n.includes('FX_')) expect(TM[n].rows.length).toBeGreaterThan(8)
   expect(THINK_RE.test('think, mark')).toBe(true)
   expect(TM_MS).toBe(65_000)
+})
+test('think, mark: the chest-up medium shots are wide (shoulders and cape edge to edge), bottom-anchored, and their patches land on the face', () => {
+  for (const n of ['TM_OMNI_MED', 'TM_OMNI_CRY', 'TM_OMNI_UP']) {
+    const sp = TM[n]!
+    const w = sp.rows[0]!.length
+    expect(w).toBeGreaterThanOrEqual(130)
+    expect(w).toBeLessThanOrEqual(160)
+    expect(sp.rows.length).toBeGreaterThanOrEqual(80)
+    expect(sp.rows.length).toBeLessThanOrEqual(90)
+    expect(PLAN_SIZE[n]).toEqual([w, sp.rows.length])
+    // the shoulders reach both edges on the bottom row
+    const bottom = sp.rows[sp.rows.length - 1]!
+    expect(bottom[0]).not.toBe('.')
+    expect(bottom[w - 1]).not.toBe('.')
+  }
+  // every face patch sits in the middle third, where the head is
+  for (const pd of PATCHES.filter(p => ['TM_OMNI_MED', 'TM_OMNI_CRY', 'TM_OMNI_UP'].includes(p.parent))) {
+    const at = PATCH_AT[pd.name]!
+    expect(at.x).toBeGreaterThan(53)
+    expect(at.x + pd.w).toBeLessThan(107)
+  }
 })
 test('think, mark: 24 shots at the plan\'s cut times; the hard cuts are the plan\'s eleven', () => {
   expect(SHOT_COUNT).toBe(24)

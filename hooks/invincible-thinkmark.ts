@@ -304,14 +304,17 @@ const picture = (id: string, PW: number, PH: number, px0: number, py: number, K:
     const [w, h] = dim(n)
     return figure(n, cx - (w * s) / 2, 90 - h * s, s, pw, extra)
   }
+  /** The bloody hands held up in front of the wide medium shot's chest, one over each shoulder, the sleeves running off the bottom edge (so the arms read as his). */
+  const HAND_L = (): [number, number] => fit('TM2_OMNI_HAND_L', 10, 44)
+  const HAND_R = (): [number, number] => fit('TM2_OMNI_HAND_R', 106, 44)
   const handsDone = (): string => {
-    const [lx, ly] = fit('TM2_OMNI_HAND_L', 8, 30)
-    const [rx, ry] = fit('TM2_OMNI_HAND_R', 108, 28)
+    const [lx, ly] = HAND_L()
+    const [rx, ry] = HAND_R()
     return use('TM2_OMNI_HAND_L', lx, ly) + use('TM2_OMNI_HAND_R', rx, ry)
   }
   const handsAt = (extra: string, riseFrom?: number): string => {
-    const [lx, ly] = fit('TM2_OMNI_HAND_L', 8, 30)
-    const [rx, ry] = fit('TM2_OMNI_HAND_R', 108, 28)
+    const [lx, ly] = HAND_L()
+    const [rx, ry] = HAND_R()
     if (riseFrom === undefined) return use('TM2_OMNI_HAND_L', lx, ly) + use('TM2_OMNI_HAND_R', rx, ry) + extra
     const t = riseFrom
     const up = (nm: string, lag: number): [number, string][] => [[0, 'transform:translateY(95px)'], [t + lag, `transform:translateY(95px);${EASE_OUT}`], [t + 0.7 + lag, 'transform:none']]
@@ -340,8 +343,8 @@ const picture = (id: string, PW: number, PH: number, px0: number, py: number, K:
     const inner = use('TM2_ROCK_CLOSE', 0, 0, full('TM2_ROCK_CLOSE')) + figure('TM2_MARK_CU_HEAD', 24 + hx * 1.25, 14 + hy * 1.25, 1.25, pws(i, 'TM2_P_MARK_BLINK', 'TM2_P_MARK_MOUTH_OPEN'))
     return shot(i, cam ? p.cam(g(SHOTS, i).t0, g(SHOTS, i).t1, { s: cam[0] }, { s: cam[1] }, 80, 45, inner) : inner)
   }
-  /** The medium shot's figure on the sky: sprite `n` at scale 1.3, bottom-anchored at the centre. */
-  const med = (n: string, pw: Record<string, [number, number][]>, extra = ''): string => standG(n, 80, 1.3, pw, extra)
+  /** The medium shot's figure on the sky: sprite `n` drawn 1:1 (it is as wide as the frame, shoulders and cape edge to edge), bottom-anchored at the centre. */
+  const med = (n: string, pw: Record<string, [number, number][]>, extra = ''): string => standG(n, 80, 1, pw, extra)
 
   const B: Record<number, () => string> = {}
   // 1-2: the close-ups
@@ -409,7 +412,12 @@ const picture = (id: string, PW: number, PH: number, px0: number, py: number, K:
   // 17-18: stunned, then the hands
   B[16] = () => shot(16, sky() + jig([[47.0, 47.5, 0, 1]], med('TM_OMNI_MED', { TM2_P_MED_MOUTH_AGAPE: hold(16, [[46.95, 48.0]]), TM2_P_MED_BLINK: hold(16, [[47.5, 47.62]]) })))
   B[17] = () => {
-    const d = tremble(48.7, E(17, 52.05), 0.3, 1, handsAt(drip(49.5, 24, 76, 52.05) + drip(50.4, 128, 74, 52.05) + drip(51.2, 24, 76, 52.05), 48.0))
+    // the drips run from the heel of each palm, just above the sleeve
+    const [lx, ly] = HAND_L()
+    const [rx, ry] = HAND_R()
+    const dl: [number, number] = [lx + 16, ly + 34]
+    const dr: [number, number] = [rx + 16, ry + 34]
+    const d = tremble(48.7, E(17, 52.05), 0.3, 1, handsAt(drip(49.5, ...dl, 52.05) + drip(50.4, ...dr, 52.05) + drip(51.2, ...dl, 52.05), 48.0))
     return shot(17, sky() + med('TM_OMNI_MED', { TM2_P_MED_MOUTH_AGAPE: hold(17, [[48.0, 52.05]]), TM2_P_MED_BLINK: hold(17, [[50.6, 50.72]]) }) + d)
   }
   // 19: the crater
@@ -426,14 +434,14 @@ const picture = (id: string, PW: number, PH: number, px0: number, py: number, K:
   B[21] = () => {
     const shut = hold(21, [[61.0, 61.6], [61.9, 62.1]])
     const quiver = hold(21, [[61.0, 61.2], [61.4, 61.6], [61.8, 62.0]])
-    const eyes = [26, 42]
-    const tears = eyes.map(ex => tear(61.0, ex, 30, 62.1) + tear(61.6, ex, 30, 62.1)).join('')
+    const eyes = [73, 88]
+    const tears = eyes.map(ex => tear(61.0, ex, 19, 62.1) + tear(61.6, ex, 19, 62.1)).join('')
     const sob: [number, string][] = [[0, 'transform:none'], [60.5, 'transform:none'], [61.0, 'transform:translateY(3px)']]
     for (let t = 61.0, j = 0; t < 62.1; t += 1 / 3, j++) sob.push([t, `transform:translateY(${j % 2 ? 3 : 4}px)`])
     return shot(21, sky() + p.move(sob, med('TM_OMNI_CRY', { TM2_P_CRY_EYES_SHUT: shut, TM2_P_CRY_MOUTH_QUIVER: quiver }, tears)))
   }
   B[22] = () => {
-    const track = [28, 44].map(x => use('TM2_FX_TEAR', x - 2, 21, 1, [3, 4])).join('')
+    const track = [72, 87].map(x => use('TM2_FX_TEAR', x - 2, 14, 1, [3, 4])).join('')
     return shot(22, sky() + med('TM_OMNI_UP', { TM2_P_UP_MOUTH_OPEN: hold(22, [[62.1, 62.8]]) }, p.show(hold(22, [[62.3, 63.35]]), track)))
   }
   // 24: he leaves
