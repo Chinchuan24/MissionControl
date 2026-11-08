@@ -20,7 +20,7 @@ import { TOASTS, bashToast, cmdKind, fxOf, mcgillNow, resultFailed, toastDue } f
 import type { BashState, Fx, ToastKey } from './bettercallsaul-fx'
 import { UNPLUG_GAP_MS, shouldUnplug } from './bettercallsaul-extra'
 import { CLASSIC_RE, GUARDIANS_RE, NEW_SUIT_RE, THINK_RE } from './invincible-eggs'
-import { TM_KIND, thinkMarkFx, thinkMarkLive, thinkMarkSolo } from './invincible-thinkmark'
+import { MOVIE_RESERVE, TM_KIND, thinkMarkFx, thinkMarkLive, thinkMarkSolo } from './invincible-thinkmark'
 import { clearThinkMarkTimers, scheduleThinkMark } from './invincible-thinkmark-timers'
 import { ERA1, ERA2, TITLE_WORDS as INV_WORDS } from './invincible'
 import { VERBS as INV_VERBS } from './invincible-cards'
@@ -8190,7 +8190,7 @@ export const register: Register = (on, options) => {
       // A theme's big eggs (THE FIGHT, the showdown) sit between `<!--dl-->` markers: not counted, a reserve is kept instead,
       // so the layout never changes as they come and go. Only while a job works (the fight plays only then), and only for
       // the theme that has them; THINK, MARK's reserve only for its 65 s. The steps below make room for it, a part at a time.
-      const reserve = Math.max(th?.paneReserve && (isWorking || boss.isWorking) ? th.paneReserve : 0, isInv() && thinkMarkLive(INV_FX, clockNow) ? 100_000 : 0)
+      const reserve = Math.max(th?.paneReserve && (isWorking || boss.isWorking) ? th.paneReserve : 0, isInv() && thinkMarkLive(INV_FX, clockNow) ? MOVIE_RESERVE : 0)
       const sent = new Map<string, number>()
       const lengthOf = (src: string): number => sent.get(src) ?? sent.set(src, sentLength(src.includes('<!--dl-->') ? src.replace(/<!--dl-->[\s\S]*?<!--\/dl-->/g, '') : src)).get(src) ?? src.length
       const sizeOf = (v: unknown): number => drawnChars(v, lengthOf)
