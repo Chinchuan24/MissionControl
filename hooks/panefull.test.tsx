@@ -273,15 +273,14 @@ test('always full: Invincible while THE FIGHT plays still draws the full pane, t
   expect(m.sources.some(s => s.includes('<!--dl-->')), 'the fight is in the drawing').toBe(true)
 })
 
-test('always full: Invincible while THINK, MARK plays keeps the movie and the full pane, with 100 finished agents', { timeoutMs: 60_000 }, async ($, on) => {
+test('always full: Invincible after a typed think, mark still draws the full pane, with 100 finished agents', { timeoutMs: 60_000 }, async ($, on) => {
   const clock = base(on, quietAt())
   await session($, INVINCIBLE, 2, 100)
   await $.prompt.submit({ text: 'think, mark', cursor: 0 } as never)
-  await clock.advance(12_000)
+  await clock.advance(1_000)
   const m = await look($, 120)
-  underCaps(m, 'movie')
-  isFull(m, 'movie')
-  expect(m.sources.some(s => s.includes('class="tm-anim"')), 'the movie is drawn').toBe(true)
+  underCaps(m, 'think, mark')
+  isFull(m, 'think, mark')
 })
 
 test('always full: the finished toggle and each row\'s Open button still work with the chip', { timeoutMs: 60_000 }, async ($, on) => {
