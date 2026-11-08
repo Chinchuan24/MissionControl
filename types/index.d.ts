@@ -8,6 +8,10 @@ export type PlannedTask = {
   minutes?: number
   /** The Manager's call: this task needs max effort and a deep self-check. */
   ultra?: boolean
+  /** The Staffing brain: the model, effort and one-line why the Manager picked for this task. */
+  model?: string
+  effort?: string
+  why?: string
 }
 
 export type Flow = {
@@ -65,6 +69,8 @@ export type AgentRun = {
   toolsInFlight?: number
   /** Runs at max effort with a deep-check brief: an Ultra rule matched, or the person pressed ⚡. */
   isUltra?: boolean
+  /** The Staffing brain's one-line why for this worker's model and effort. */
+  why?: string
   /** Ultra the Manager chose in its plan (not the person's ⚡ button or a role rule). */
   isUltraByManager?: boolean
 }

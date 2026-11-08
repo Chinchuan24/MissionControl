@@ -10,7 +10,8 @@ const base = (on: On, store: Record<string, unknown> = {}) => {
   const seen = { spawns: [] as Spawned[], efforts: [] as unknown[], toasts: [] as string[] }
   mock.clock(on, { now: Date.parse('2026-10-20T10:00:00Z') })
   mock.env(on, { LANG: 'en_US.UTF-8' })
-  mock.store(on, store)
+  // These pin Smart staffing and Ultra on their own: the Staffing brain, on by default, is off here (staffing-brain.test.tsx covers it).
+  mock.store(on, { staffingBrain: false, ...store })
   on('fs.exists', async () => ({ value: false }) as never)
   on('settings.read', async () => ({ value: {} }) as never)
   on('ui.open', async () => ({ value: { isPlaced: true } }) as never)
