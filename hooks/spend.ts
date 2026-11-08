@@ -251,7 +251,8 @@ export const parseSpendArgs = (words: readonly string[]): { period?: SpendPeriod
 /**
  * Pulls one tab-separated record per assistant message out of Claude Code's
  * transcripts: file, message id, model, the time of its first line, input, output,
- * cache writes, cache reads. A message is written once per content block it holds,
+ * cache writes, cache reads, then the cache writes by lifetime (5-minute, 1-hour; both 0
+ * where a transcript does not split them). A message is written once per content block it holds,
  * each line with the usage so far (the output count grows), so a message is one
  * record per file, with the largest count of each kind. POSIX awk, so it runs on
  * macOS's, gawk, mawk and BusyBox. The usage read is the line's last `"usage":{`
@@ -272,9 +273,9 @@ function max(a, b) { return a > b ? a : b }
 function flush(   i, id) {
   for (i = 1; i <= n; i++) {
     id = ord[i]
-    printf "%s\t%s\t%s\t%s\t%d\t%d\t%d\t%d\n", cur, id, mdl[id], ts[id], inp[id], out[id], cw[id], cr[id]
+    printf "%s\t%s\t%s\t%s\t%d\t%d\t%d\t%d\t%d\t%d\n", cur, id, mdl[id], ts[id], inp[id], out[id], cw[id], cr[id], cw5[id], cw1[id]
   }
-  split("", ord); split("", mdl); split("", ts); split("", inp); split("", out); split("", cw); split("", cr)
+  split("", ord); split("", mdl); split("", ts); split("", inp); split("", out); split("", cw); split("", cr); split("", cw5); split("", cw1)
   n = 0
 }
 FNR == 1 { flush(); cur = FILENAME }
@@ -300,6 +301,8 @@ index($0, "\"type\":\"assistant\"") && index($0, "\"usage\":{") {
   out[id] = max(out[id], num(us, "output_tokens"))
   cw[id] = max(cw[id], num(us, "cache_creation_input_tokens"))
   cr[id] = max(cr[id], num(us, "cache_read_input_tokens"))
+  cw5[id] = max(cw5[id], num(us, "ephemeral_5m_input_tokens"))
+  cw1[id] = max(cw1[id], num(us, "ephemeral_1h_input_tokens"))
 }
 END { flush() }`
 
@@ -313,17 +316,20 @@ export type SpendRecord = {
   output: number
   cacheWrite: number
   cacheRead: number
+  /** The writes by lifetime, 1.25x and 2x input; left out when the transcript did not split them. */
+  cacheWrite5m?: number
+  cacheWrite1h?: number
 }
 
 /** One extractor line, or null for anything else (a cut line, a message with no time). */
 export const parseRecord = (line: string): SpendRecord | null => {
   const f = line.replace(/\r$/, '').split('\t')
-  if (f.length !== 8) return null
+  if (f.length !== 8 && f.length !== 10) return null
   const at = Date.parse(f[3] ?? '')
   const n = f.slice(4).map(Number)
   if (!f[0] || !f[1] || !Number.isFinite(at) || n.some(x => !Number.isFinite(x) || x < 0)) return null
-  const [input, output, cacheWrite, cacheRead] = n as [number, number, number, number]
-  return { file: f[0], id: f[1], model: f[2] ?? '', at, input, output, cacheWrite, cacheRead }
+  const [input, output, cacheWrite, cacheRead, cacheWrite5m, cacheWrite1h] = n as [number, number, number, number, number | undefined, number | undefined]
+  return { file: f[0], id: f[1], model: f[2] ?? '', at, input, output, cacheWrite, cacheRead, ...(cacheWrite5m || cacheWrite1h ? { cacheWrite5m: cacheWrite5m ?? 0, cacheWrite1h: cacheWrite1h ?? 0 } : {}) }
 }
 
 /** Splits streamed text into whole lines: a line cut between two pieces waits for the rest. */
