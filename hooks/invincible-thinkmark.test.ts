@@ -5,7 +5,9 @@ import { camPlanOfSlot } from './invincible-cameos'
 import { CAM_SLOT_MS } from './invincible-cameos'
 import type { CamPlan } from './invincible-cameos'
 import { AHEAD_MS, THINK_RE, duelPlan, showdownPlan } from './invincible-eggs'
-import { BUBBLES, DRAW_BUDGET, SHOT_COUNT, TM_KIND, TM_MS, drawOf, frameOf, patchWindows, shotAt, thinkMarkFx, thinkMarkHolds, thinkMarkLive, thinkMarkPane, thinkMarkRedraws } from './invincible-thinkmark'
+import { BLOCK_RAW_MAX, BUBBLES, DRAW_BUDGET, MOVIE_RAW_MAX, RIG_CHUNKS, SHOT_COUNT, TM_KIND, TM_MS, drawOf, drawShot, frameOf, patchWindows, shotAt, thinkMarkFx, thinkMarkHolds, thinkMarkLive, thinkMarkPane, thinkMarkRedraws } from './invincible-thinkmark'
+import { TM3_ART } from './invincible-thinkmark-art3'
+import { TM3_CHUNKS } from './invincible-thinkmark-rig3'
 import { HARD_CUTS, PATCHES, SHOT_TIMES } from './invincible-thinkmark-plan'
 import { clearThinkMarkTimers, pendingThinkMarkTimers, scheduleThinkMark } from './invincible-thinkmark-timers'
 import { PATCH_AT, PLAN_SIZE, TM, TM_NAMES } from './invincible-thinkmark-sprites'
@@ -318,7 +320,7 @@ for (const era of [1, 2] as const) {
       if (playing(p).length === 3) {
         sawPlay++
         const cutscene = p.reduce((n, s) => n + (/<!--dl-->[\s\S]*<!--\/dl-->/.exec(s)?.[0].length ?? 0), 0)
-        expect(cutscene).toBeLessThan(95_000)
+        expect(cutscene).toBeLessThan(MOVIE_RAW_MAX)
         expect(cutscene).toBeGreaterThan(20_000)
       }
       seen.add(await sig($))
@@ -348,13 +350,18 @@ test('think, mark: every draw has at most two shots, fits its byte budget and ea
     for (let k = 0; k < SHOT_COUNT; k++) {
       const d = drawOf(W, H, k)
       expect(d.which.length).toBeLessThanOrEqual(2)
-      expect(d.which[0]).toBe(k)
+      expect(d.which[0]).toBe(drawShot(k))
       expect(d.defs.length).toBeLessThanOrEqual(DRAW_BUDGET)
     }
   }
   // each draw carries the current shot plus the next while they fit
   expect(drawOf(992, 384, 0).which).toEqual([0, 1])
   expect(drawOf(992, 384, 23).which).toEqual([23])
+  // the rigged window is three draws, taken at 7.2, 14.3 and 19.65 s (shots 4, 6 and 9): every shot inside it maps to its chunk's first shot
+  expect(RIG_CHUNKS.map(c => SHOT_TIMES[c[0]]![0])).toEqual([7.2, 14.3, 19.65])
+  expect([3, 4, 5, 6, 7, 8].map(drawShot)).toEqual([3, 3, 5, 5, 5, 8])
+  expect(drawOf(992, 384, 4)).toBe(drawOf(992, 384, 3))
+  expect(drawOf(992, 384, 7).which[0]).toBe(5)
   // the last shot of a draw holds its final frame to the end of the film (a late redraw changes only when the cut happens)
   expect(drawOf(992, 384, 23).css).toContain('100%')
 })
@@ -364,10 +371,12 @@ test('think, mark: the size sweep: every 0.5 s of all 24 shots at three sizes, e
   for (const [W, H] of [[992, 384], [496, 434], [360, 300], [600, 236]] as const) {
     for (let s = 0; s < 65; s += 0.5) {
       const cards = (['cred', 'task', 'log'] as const).map(c => thinkMarkPane(W, H, c, 0, s))
-      for (const c of cards) { expect(c.length).toBeLessThan(131072); worst = Math.max(worst, c.length) }
+      // the picture's own card carries about 18 kB of its own on top of the cutscene block
+      for (const c of cards) { expect(c.length).toBeLessThan(BLOCK_RAW_MAX); worst = Math.max(worst, c.length) }
       const sum = cards.reduce((n, c) => n + c.length, 0)
       worstCards = Math.max(worstCards, sum)
-      expect(sum).toBeLessThan(95_000)
+      // the three cutscene blocks together, as drawn: the pane reserves MOVIE_RESERVE for them (the app counts what is sent, compacted)
+      expect(sum).toBeLessThan(MOVIE_RAW_MAX)
     }
   }
   expect(worst).toBeGreaterThan(20_000)
@@ -400,10 +409,20 @@ test('think, mark: every patch sits inside its parent sprite, and a patch that w
 test('think, mark: the pane is redrawn after every cut: the schedule, the cancel on a new trigger and on a skin switch', async ($, on) => {
   const t0 = 1_000_000
   const times = thinkMarkRedraws(t0)
-  expect(times).toHaveLength(24)
-  for (let i = 0; i < 23; i++) expect(shotAt((times[i] as number - t0) / 1000)).toBe(i + 1)
-  for (let i = 0; i < 23; i++) expect(times[i]).toBe(Math.round(t0 + CUTS[i + 1]! * 1000 + 80))
-  expect(times[23]).toBe(t0 + 65_000 + 80)
+  // a redraw after every cut, except the three inside the rigged window (8.75, 16.1 and 18.1 s): its three draws carry them
+  const drawn = [...Array(23).keys()].map(i => i + 1).filter(i => drawShot(i) === i)
+  expect(drawn).not.toContain(4)
+  expect(drawn).not.toContain(6)
+  expect(drawn).not.toContain(7)
+  expect(times).toHaveLength(drawn.length + 1)
+  expect(times).toHaveLength(21)
+  drawn.forEach((shot, j) => {
+    expect(shotAt((times[j] as number - t0) / 1000)).toBe(shot)
+    expect(times[j]).toBe(Math.round(t0 + CUTS[shot]! * 1000 + 80))
+  })
+  expect(times[drawn.length]).toBe(t0 + 65_000 + 80)
+  // inside the window: exactly the plan's three (7.2, 14.3, 19.65), each a hair late
+  expect(times.filter(t => t > t0 + 7_000 && t < t0 + 25_000)).toEqual([7.2, 14.3, 19.65, 24.65].map(c => Math.round(t0 + c * 1000 + 80)))
   // the timers: one per cut ahead, cancelled by clear, replaced by a new trigger
   const log: string[] = []
   let n = 0
@@ -416,7 +435,7 @@ test('think, mark: the pane is redrawn after every cut: the schedule, the cancel
   expect(log.filter(l => l.startsWith('cancel'))).toHaveLength(due.length)
   scheduleThinkMark(after, t0, t0, () => undefined)
   scheduleThinkMark(after, t0, t0, () => undefined)
-  expect(pendingThinkMarkTimers()).toBe(24)
+  expect(pendingThinkMarkTimers()).toBe(21)
   clearThinkMarkTimers()
   clearThinkMarkTimers()
   expect(pendingThinkMarkTimers()).toBe(0)
@@ -443,7 +462,7 @@ test('think, mark: the pane is redrawn after every cut: the schedule, the cancel
   await $.command.run({ command: 'skin', args: 'mentalist' } as never)
   await clk.advance(45_000)
   expect(writes).not.toContain(cuts[12])
-  expect(writes).not.toContain(cuts[23])
+  expect(writes).not.toContain(cuts[cuts.length - 1])
 })
 
 // The crew grows past what the cards can hold: the pane falls back to its short view, which has no cards, and the movie used to be
@@ -457,7 +476,9 @@ for (const N of [1, 12, 28]) {
     await clock.advance(12_000)
     await type($)
     let at = 0
-    for (const cut of [...CUTS.slice(0, 24).map(c => c + 0.2), 30, 45, 64].sort((a, b) => a - b)) {
+    // every cut, the rigged window's three draws (7.2, 14.3 and 19.65 s, a hair after) and moments in the middle of its bursts (the swing, the shout, the rise, the face peaks)
+    const mid = [7.6, 8.1, 8.3, 14.45, 19.75, 21, 23.3]
+    for (const cut of [...CUTS.slice(0, 24).map(c => c + 0.2), ...[7.2, 14.3, 19.65].map(c => c + 0.09), ...mid, 30, 45, 64].sort((a, b) => a - b)) {
       await clock.advance(Math.round((cut - at) * 1000))
       at = cut
       const p = await svgs($, 'Pane')
@@ -467,3 +488,50 @@ for (const N of [1, 12, 28]) {
     }
   })
 }
+
+test('think, mark v3: the rigged window is three generated chunks (7.2, 14.3, 19.65 s) whose parts, ids and keyframes all line up', () => {
+  expect(TM3_CHUNKS.map(c => [c.key, c.t0, c.t1])).toEqual([['a', 7.2, 14.3], ['b', 14.3, 19.65], ['c', 19.65, 24.65]])
+  for (const c of TM3_CHUNKS) {
+    // every part the markup uses is a sprite of the art file, and is cut into the draw's defs under the id the markup references
+    expect(c.parts.length).toBeGreaterThan(15)
+    for (const n of c.parts) expect(TM3_ART[n], n).toBeDefined()
+    const refs = new Set([...c.body.matchAll(/href="#\{P\}s_([A-Za-z0-9_]+)"/g)].map(m => m[1] as string))
+    expect([...refs].sort()).toEqual([...c.parts].sort())
+    // every animation name has keyframes and every keyframes block is used; the percent stops rise
+    const used = new Set([...c.body.matchAll(/animation-name:(\{P\}[a-z0-9]+)/g)].map(m => m[1] as string))
+    const defined = [...c.css.matchAll(/@keyframes (\{P\}[a-z0-9]+)\{/g)].map(m => m[1] as string)
+    expect(new Set(defined).size).toBe(defined.length)
+    expect([...used].sort()).toEqual([...defined].sort())
+    for (const blk of c.css.split('@keyframes ').slice(1)) {
+      const pcs = [...blk.matchAll(/[{}](\d+(?:\.\d+)?)%\{/g)].map(m => Number(m[1]))
+      expect(pcs[0]).toBe(0)
+      expect(pcs[pcs.length - 1]).toBe(100)
+      for (let i = 1; i < pcs.length; i++) expect(pcs[i]!).toBeGreaterThan(pcs[i - 1]!)
+    }
+    // the art keeps to the plan's rules: a limited palette per part, no network, no external references
+    expect(c.body + c.css + c.defs).not.toMatch(/https?:|data:|@import/)
+  }
+  // the drawings swap on a strip track (steps), the motion is linear keyframes the browser interpolates every frame
+  expect(TM3_CHUNKS[0]!.css).toContain('translate(')
+  expect(TM3_CHUNKS[0]!.css).toContain('rotate(')
+  expect(TM3_CHUNKS[0]!.body).toContain('steps(1,end)')
+})
+test('think, mark v3: the bubbles in the window are the plan\'s, unchanged: same words, same moments, the pane keeps v2\'s bubble drawing', () => {
+  const inWin = BUBBLES.filter(b => b.start < 24.65 && b.end > 7.2)
+  expect(inWin.map(b => [b.n, b.start, b.end, b.text])).toEqual([
+    [3, 5.6, 7.9, "You'd keep fighting while they all drop?"],
+    [4, 8.0, 9.6, 'THINK, MARK!'],
+    [5, 9.9, 13.4, "They'll all be gone. You won't."],
+    [6, 14.5, 17.2, 'This planet will rot away around you.'],
+    [7, 20.0, 24.4, 'Every face you love will vanish.'],
+  ])
+  const pc = (t: number): string => `${+((t / 65) * 100).toFixed(3)}%`
+  for (const [at, ns] of [[7.3, [3, 4, 5]], [14.4, [6]], [19.7, [7]]] as const) {
+    const svg = thinkMarkPane(992, 384, 'cred', 0, at)
+    for (const n of ns) {
+      const b = inWin.find(x => x.n === n)!
+      expect(svg, `bubble ${n} text`).toContain(b.text.replace(/&/g, '&amp;'))
+      expect(svg, `bubble ${n} starts at ${b.start}`).toContain(`${pc(b.start)}{opacity:1;transform:scale(.85)}`)
+    }
+  }
+})
