@@ -1,7 +1,8 @@
 // Invincible: the big eggs besides THE FIGHT (invincible-fight.ts): THE GUARDIANS SHOWDOWN on the GDA WALL, the ERA SWAP
-// transition, THINK, MARK, and the plans that schedule them from the clock alone. Each act runs ONE CSS duration with its keyframes
-// in percent, so a single pinned delay (`pin(startAt)`) drives every piece: a redraw anywhere in the act resumes it, and a draw up
-// to AHEAD_MS before it schedules it (the delay is then positive). Cartoon, never gory: impact stars, flashes, KO swirl stars.
+// transition, THINK, MARK, THE MULTIVERSE (invincible-variants.ts), and the plans that schedule them from the clock alone. Each
+// act runs ONE CSS duration with its keyframes in percent, so a single pinned delay (`pin(startAt)`) drives every piece: a redraw
+// anywhere in the act resumes it, and a draw up to AHEAD_MS before it schedules it (the delay is then positive). Cartoon, never
+// gory: impact stars, flashes, KO swirl stars.
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { ACT_LEN, ACT_OFF, BAND_CUT, HOLE_END, fightAct, fightBand, fightHole, fightShake } from './invincible-fight'
 import type { ActIndex } from './invincible-fight'
@@ -23,6 +24,7 @@ export const DUEL_MS = Math.round(HOLE_END * 1000)
 export const SHOWDOWN_MS = 7_400
 export const SWAP_MS = 2_200
 export const THINK_MS = 3_200
+export const VARIANTS_MS = 8_000
 /** THE FIGHT: at most once per 6 minutes, 80 % of slots, so about one per 12-15 min; only drawn while a job is working. */
 export const duelPlan = (at: any, era: any) => slotPlan(era === 2 ? 'inv-duel-2' : 'inv-duel', at, 6, 0.8, DUEL_MS)
 /** THE SHOWDOWN: one seeded time a day (between 09:00 and 22:00 local), plus the typed trigger `guardians`. */
@@ -32,6 +34,29 @@ export const showdownPlan = (at: any, era: any) => {
   d0.setHours(9, 0, 0, 0)
   const startAt = d0.getTime() + Math.floor(unit(`inv-showdown|${era}|${day}`) * 13 * 3_600_000)
   return { on: true, startAt, endAt: startAt + SHOWDOWN_MS, bucket: day }
+}
+/** Would THE MULTIVERSE's window come within 10 s of THE FIGHT (when on) or THE SHOWDOWN, in either era? */
+export const variantsBlocked = (startAt: number, endAt: number): boolean => {
+  const near = (p: { startAt: number; endAt: number }): boolean => startAt < p.endAt + 10_000 && p.startAt < endAt + 10_000
+  for (const era of [1, 2] as const) {
+    for (const t of [startAt, endAt]) {
+      const d = duelPlan(t, era)
+      if ((d.on && near(d)) || near(showdownPlan(t, era))) return true
+    }
+  }
+  return false
+}
+/** THE MULTIVERSE: one seeded time a day between 10:00 and 21:00 local, never within 10 s of the fight or the showdown (either era). */
+export const variantsPlan = (at: number) => {
+  const day = Math.floor(at / 86_400_000)
+  const d0 = new Date(at)
+  d0.setHours(10, 0, 0, 0)
+  for (let i = 0; i < 6; i++) {
+    const startAt = d0.getTime() + Math.floor(unit(`inv-variants|${day}|${i}`) * 11 * 3_600_000)
+    const endAt = startAt + VARIANTS_MS
+    if (!variantsBlocked(startAt, endAt)) return { on: true, startAt, endAt, bucket: day }
+  }
+  return { on: false, startAt: 0, endAt: 0, bucket: day }
 }
 /** Should a draw at `at` include the act: live now, or starting within the look-ahead (an idle draw still shows it). */
 export const due = (p: any, at: any) => p.on && at < p.endAt && p.startAt <= at + AHEAD_MS
@@ -157,27 +182,47 @@ export const THINK_RE = /\bthink,?\s+mark\b/i
 export const NEW_SUIT_RE = /\b(?:new\s+suit|season\s*(?:3|three|4|four))\b/i
 export const CLASSIC_RE = /\b(?:classic\s+suit|old\s+suit|season\s*(?:1|one|2|two))\b/i
 export const GUARDIANS_RE = /\bguardians\b/i
+/** THE MULTIVERSE: `multiverse(s)` or `invincible war` anywhere, or a prompt that is only the S3E7 title `what have i done`. */
+export const VARIANTS_RE = /\b(?:multiverses?|invincible\s+war)\b/i
+export const VARIANTS_SOLO_RE = /^\s*what\s+have\s+i\s+done\s*[?!.]*\s*$/i
+export const isVariantsAsk = (t: string): boolean => VARIANTS_RE.test(t) || VARIANTS_SOLO_RE.test(t)
 
 // ---------------------------------------------------------------- what the theme's `extras` slot draws
 /** Which pane card carries which act: COVER STORY the catch, GDA WALL every angle, THE PAGE think, Mark. */
 export const ACT_OF: Record<PaneCard, ActIndex> = { cred: 0, task: 1, log: 2 }
-const liveAt = (since: number | undefined, at: number, ms: number): since is number => since !== undefined && since > 0 && at >= since - 1000 && at < since + ms
+export const liveAt = (since: number | undefined, at: number, ms: number): since is number => since !== undefined && since > 0 && at >= since - 1000 && at < since + ms
 const dly = (t: number): string => `calc(${pin(t)} + 0s)`
 const pin = (ms: number): string => `@@T${Math.round(ms)}@@`
 /** The showdown is on the GDA WALL for its 7.4 s: typed (`fx`), or the day's seeded time. */
 export const showdownDue = (at: number, era: Era, fx?: { kind: string; at: number }): number | undefined => {
   if (fx?.kind === 'showdown' && liveAt(fx.at, at, SHOWDOWN_MS)) return fx.at
+  if (fx?.kind === 'variants' && liveAt(fx.at, at, VARIANTS_MS)) return undefined
   const p = showdownPlan(at, era)
   return due(p, at) ? p.startAt : undefined
 }
-/** The fight's plan for a draw, or undefined: only while a job works, never with the swap, THINK, MARK or the showdown. */
+/** The fight's plan for a draw, or undefined: only while a job works, never with the swap, THINK, MARK, the showdown or THE MULTIVERSE. */
 export const fightDue = (at: number, era: Era, working: boolean | undefined, fx?: { kind: string; at: number }, swapAt?: number): number | undefined => {
   if (!working) return undefined
-  if (liveAt(swapAt, at, SWAP_MS + 500) || (fx && liveAt(fx.at, at, fx.kind === 'think' ? THINK_MS : fx.kind === 'showdown' ? SHOWDOWN_MS : 0))) return undefined
+  if (liveAt(swapAt, at, SWAP_MS + 500) || (fx && liveAt(fx.at, at, fx.kind === 'think' ? THINK_MS : fx.kind === 'showdown' ? SHOWDOWN_MS : fx.kind === 'variants' ? VARIANTS_MS : 0))) return undefined
   const p = duelPlan(at, era)
   if (!due(p, at)) return undefined
   if (showdownPlan(at, era).startAt < p.endAt + 5000 && showdownPlan(at, era).endAt > p.startAt - 5000) return undefined
+  const v = variantsPlan(p.startAt)
+  if (v.on && v.startAt < p.endAt + 5000 && v.endAt > p.startAt - 5000) return undefined
   return p.startAt
+}
+/**
+ * THE MULTIVERSE's start for a draw, or undefined: typed (`fx`; a draw up to 3 s before it already holds it, as when it waits for
+ * the swap typed with it), or the day's seeded time. The swap takes the stage (a swap typed mid-act cuts it); another typed egg
+ * keeps the daily one off for 10 s.
+ */
+export const variantsDue = (at: number, fx?: { kind: string; at: number }, swapAt?: number): number | undefined => {
+  const typed = fx?.kind === 'variants' && at >= fx.at - 3000 && at < fx.at + VARIANTS_MS ? fx.at : undefined
+  if (liveAt(swapAt, at, SWAP_MS + 500) && !(typed !== undefined && typed >= swapAt + SWAP_MS)) return undefined
+  if (typed !== undefined) return typed
+  if (fx && liveAt(fx.at, at, 10_000)) return undefined
+  const p = variantsPlan(at)
+  return due(p, at) ? p.startAt : undefined
 }
 /** The slot's hole, THE FIGHT's band cut and the pane acts, THE SHOWDOWN, the era swap and THINK, MARK for a panel. */
 export const invExtras = (era: Era, tile: string) => (o: ExtraArgs): string => {
