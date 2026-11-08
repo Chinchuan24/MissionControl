@@ -14,11 +14,13 @@ const lowered = (over: Partial<GuardInput>) => {
 }
 
 test('guardrails: a role is read from its "<Role>:" name, else its type, else its words', () => {
-  expect(guardRole('general-purpose', 'Checker: widths')).toBe('read')
-  expect(guardRole('general-purpose', 'Reviewer: the diff')).toBe('read')
+  expect(guardRole('general-purpose', 'Checker: widths')).toBe('review')
+  expect(guardRole('general-purpose', 'Reviewer: the diff')).toBe('review')
   expect(guardRole('general-purpose', 'Researcher: find the config')).toBe('read')
   expect(guardRole('Explore', 'anything')).toBe('read')
-  expect(guardRole('superpowers:code-reviewer', 'the auth change')).toBe('read')
+  expect(guardRole('superpowers:code-reviewer', 'the auth change')).toBe('review')
+  // Review beats reading when a job is both: it keeps the Sonnet floor.
+  expect(guardRole('general-purpose', 'Reviewer: find the bugs and research the fix')).toBe('review')
   expect(guardRole('general-purpose', 'Engineer: wire the parser')).toBe('engineer')
   expect(guardRole('general-purpose', 'Planner: map the work')).toBe('other')
   // A named role beats words further along: an Engineer who fixes a review comment is an engineer.
@@ -47,6 +49,15 @@ test('guardrails: checkers, reviewers, researchers and explorers are capped at S
   expect(lowered({ model: 'opus', type: 'Explore', description: 'the layout', staffModel: 'haiku' })).toBe('haiku')
   // Sonnet already: it stands.
   expect(lowered({ model: 'sonnet', description: 'Reviewer: the diff' })).toBeNull()
+})
+
+test('guardrails: reviewers and checkers are never capped below Sonnet, even when staffFor picks Haiku', () => {
+  for (const description of ['Reviewer: find the bugs in the diff', 'Checker: scan the widths']) {
+    expect(lowered({ model: 'opus', description, staffModel: 'haiku' })).toBe('sonnet')
+    expect(lowered({ model: 'fable', description, staffModel: 'haiku' })).toBe('sonnet')
+    expect(lowered({ model: 'sonnet', description, staffModel: 'haiku' })).toBeNull()
+  }
+  expect(lowered({ model: 'opus', type: 'superpowers:code-reviewer', description: 'the auth change', staffModel: 'haiku' })).toBe('sonnet')
 })
 
 test('guardrails: Haiku where staffFor picks it for light work', () => {
@@ -160,6 +171,9 @@ test('guardrails end to end: each role cap, and no upgrade', async ($, on) => {
   expect(await modelFor('Reviewer: the diff', 'claude-opus-5-5')).toBe('sonnet')
   expect(await modelFor('Researcher: find the config', 'opus')).toBe('haiku')
   expect(await modelFor('the layout', 'sonnet', 'Explore')).toBe('haiku')
+  // staffFor reads "find" as light work, but a reviewer or checker stops at Sonnet.
+  expect(await modelFor('Reviewer: find the bugs in the diff', 'opus')).toBe('sonnet')
+  expect(await modelFor('Checker: scan the widths', 'opus')).toBe('sonnet')
   expect(await modelFor('Engineer: wire the parser', 'opus')).toBe('sonnet')
   // Not raised: Haiku asked for stays Haiku, Sonnet for a planner stays Sonnet, no model stays none.
   expect(await modelFor('Engineer: wire the parser', 'haiku')).toBe('haiku')
@@ -168,7 +182,7 @@ test('guardrails end to end: each role cap, and no upgrade', async ($, on) => {
   expect(await modelFor('Planner: map the work', 'opus')).toBe('opus')
   await spawn($, 'Engineer: wire the parser')
   expect(seen.spawns.at(-1)?.model).toBeUndefined()
-  expect(seen.toasts.filter(t => t.startsWith('Guardrail:')).length).toBe(5)
+  expect(seen.toasts.filter(t => t.startsWith('Guardrail:')).length).toBe(7)
 })
 
 test('guardrails end to end: an engineer keeps its model when the plan marks the task heavy, fable-tier or Ultra', async ($, on) => {

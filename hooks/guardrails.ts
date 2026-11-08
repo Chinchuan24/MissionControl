@@ -23,9 +23,11 @@ export const familyOf = (id: string): Family | null => {
  */
 export const asksForFable = (prompt: string): boolean => /(?:^|[^a-z0-9])(?:fable|mythos)(?![a-z])/i.test(prompt)
 
-export type GuardRole = 'read' | 'engineer' | 'other'
+// 'review' (checkers, reviewers) is never capped below Sonnet; 'read' (researchers, explorers) may go to Haiku.
+export type GuardRole = 'review' | 'read' | 'engineer' | 'other'
 
-const READ_ROLE = /\b(?:check|checker|checkers|review|reviewer|reviewers|research|researcher|researchers|explore|explorer|explorers)\b/
+const REVIEW_ROLE = /\b(?:check|checker|checkers|review|reviewer|reviewers|code-reviewer)\b/
+const READ_ROLE = /\b(?:research|researcher|researchers|explore|explorer|explorers)\b/
 const ENGINEER_ROLE = /\b(?:engineer|engineers|developer|developers|implementer|coder)\b/
 const NAMED = /^([A-Za-z][A-Za-z -]{1,23}):\s+\S/
 
@@ -36,7 +38,7 @@ const NAMED = /^([A-Za-z][A-Za-z -]{1,23}):\s+\S/
 export const guardRole = (type: string, description: string): GuardRole => {
   const named = NAMED.exec(description)?.[1]?.toLowerCase() ?? ''
   const bare = (type.includes(':') ? (type.split(':').at(-1) ?? type) : type).toLowerCase()
-  const is = (text: string): GuardRole | null => (READ_ROLE.test(text) ? 'read' : ENGINEER_ROLE.test(text) ? 'engineer' : null)
+  const is = (text: string): GuardRole | null => (REVIEW_ROLE.test(text) ? 'review' : READ_ROLE.test(text) ? 'read' : ENGINEER_ROLE.test(text) ? 'engineer' : null)
   return (named && is(named)) || is(bare) || (named ? null : is(description.toLowerCase())) || 'other'
 }
 
@@ -45,7 +47,7 @@ export type GuardInput = {
   model: string
   type: string
   description: string
-  /** What `staffFor` picks for this job: 'haiku' marks light reading work. */
+  /** What `staffFor` picks for this job: 'haiku' marks light reading work (not for reviewers or checkers). */
   staffModel?: string
   /** The person's latest prompt names Fable. */
   askedFable: boolean
@@ -68,8 +70,9 @@ export const guardModel = (i: GuardInput): Guard | null => {
     why = 'you did not ask for Fable'
   }
   const role = guardRole(i.type, i.description)
-  if (role === 'read') {
-    const to: Family = i.staffModel === 'haiku' ? 'haiku' : 'sonnet'
+  if (role === 'review' || role === 'read') {
+    // Checking and reviewing keep Sonnet as the floor, whatever staffFor says; only reading work may go to Haiku.
+    const to: Family = role === 'read' && i.staffModel === 'haiku' ? 'haiku' : 'sonnet'
     if (RANK[to] < RANK[cap]) {
       cap = to
       why = to === 'haiku' ? 'light reading work' : 'checking and research need no more'

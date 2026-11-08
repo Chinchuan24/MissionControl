@@ -6969,6 +6969,7 @@ export const register: Register = (on, options) => {
     const autopilot = (await $.store.get('autopilot').catch(() => false)) === true
     smartStaffing = (await $.store.get(STAFF_KEY).catch(() => false)) === true
     modelGuard = (await $.store.get(GUARDRAILS_KEY).catch(() => undefined)) !== false
+    lastAsked = '' // a new session carries no earlier ask for Fable
     staffSaved = { session: staffSaved.session, total: Number(await $.store.get(STAFF_SAVED_KEY).catch(() => 0)) || 0 }
     ultraRules = cleanUltraRules(await $.store.get(ULTRA_KEY).catch(() => undefined))
     oneShotMode = cleanOneShot(await $.store.get(ONESHOT_KEY).catch(() => undefined))
@@ -7213,7 +7214,7 @@ export const register: Register = (on, options) => {
     // Manager mode: the plan's task with this description may carry the Manager's `ultra: true`.
     // Matched as the panel matches runs to tasks. The person's ⚡ button still beats it later.
     // The model guardrails read the same plan: a task marked heavy keeps its model.
-    const named = modelGuard && Boolean(e.model) && !isWorker(e.subagentType) && piloted === briefed
+    const named = modelGuard && Boolean(e.model) && !e.resume && !isWorker(e.subagentType) && piloted === briefed
     const plan = (ultraBy === 'manager' && !ultraRule) || named ? await read($, flow) : null
     const livePlan = plan && !plan.isFinished ? plan : null
     const planned = planTaskFor(livePlan, e.description)
