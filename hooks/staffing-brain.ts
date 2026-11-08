@@ -41,15 +41,22 @@ export const familyOf = (id: string): Family | null => {
 /** A known effort level, else undefined. */
 export const effortOf = (v: unknown): Effort | undefined => (typeof v === 'string' && (EFFORTS as readonly string[]).includes(v.trim().toLowerCase()) ? (v.trim().toLowerCase() as Effort) : undefined)
 
+// "no opus", "not Opus", "don't use opus", "without opus", "avoid opus", "instead of opus", "stop using opus".
+const NEGATED = /(?:\bno|\bnot|n't|\bnever|\bwithout|\bavoid|\binstead of|\bexcept|\bstop|\bquit)(?:\s+(?:use|using|run|running|on|with|the|a|any))*\s*$/i
+const negated = (before: string): boolean => NEGATED.test(before.slice(-40))
+
 /**
  * Whether the person's own prompt asks for Fable: it names Fable (or Mythos) as a word,
- * or a Fable model id such as `claude-fable-5-1` or `fable-5`. "fables" is no ask.
+ * or a Fable model id such as `claude-fable-5-1` or `fable-5`. "fables" is no ask, and
+ * neither is a negated name ("don't use fable", "no fable").
  */
-export const asksForFable = (prompt: string): boolean => /(?:^|[^a-z0-9])(?:fable|mythos)(?![a-z])/i.test(prompt)
-
-// "no opus", "not Opus", "don't use opus", "without opus", "avoid opus", "instead of opus".
-const NEGATED = /(?:\bno|\bnot|n't|\bnever|\bwithout|\bavoid|\binstead of|\bexcept)(?:\s+(?:use|using|run|running|on|with|the|a|any))*\s*$/i
-const negated = (before: string): boolean => NEGATED.test(before.slice(-40))
+export const asksForFable = (prompt: string): boolean => {
+  const re = /(?:^|[^a-z0-9])(fable|mythos)(?![a-z])/gi
+  for (let m = re.exec(prompt); m; m = re.exec(prompt)) {
+    if (!negated(prompt.slice(0, m.index + m[0].length - (m[1] ?? '').length))) return true
+  }
+  return false
+}
 
 /**
  * The one model family the person's prompt names: "use opus", "on Sonnet", "claude-haiku-5-5".
@@ -73,10 +80,10 @@ export const askedModel = (prompt: string): Family | null => {
 }
 
 // A level as people say it, next to the word "effort".
-const LEVEL = '(x-?high|extra[ -]high|very high|max(?:imum)?|highest|high|medium|med|moderate|low(?:est)?|min(?:imum)?)'
+const LEVEL = '(x-?high|extra[ -]high|(?:very|really|super|extremely) high(?:er)?|max(?:imum)?|highest|high|medium|med|moderate|low(?:est)?|min(?:imum)?)'
 const levelOf = (word: string): Effort => {
   const w = word.toLowerCase().replace(/[ -]/g, '')
-  if (w === 'xhigh' || w === 'extrahigh' || w === 'veryhigh') return 'xhigh'
+  if (w === 'xhigh' || w === 'extrahigh' || /^(?:very|really|super|extremely)high(?:er)?$/.test(w)) return 'xhigh'
   if (w.startsWith('max') || w === 'highest') return 'max'
   if (w === 'high') return 'high'
   if (w.startsWith('low') || w.startsWith('min')) return 'low'
@@ -94,8 +101,12 @@ export const askedEffort = (prompt: string): Effort | null => {
   const after = new RegExp(`\\beffort(?:\\s+level)?\\s*(?:[:=]|\\bto\\b|\\bat\\b|\\bof\\b)?\\s*${LEVEL}(?![a-z])`, 'gi')
   for (const re of [before, after]) {
     for (let m = re.exec(prompt); m; m = re.exec(prompt)) {
-      if (negated(prompt.slice(0, m.index + (m[0].length - m[0].trimStart().length)))) continue
-      found.add(levelOf(m[1] ?? ''))
+      const head = prompt.slice(0, m.index + (m[0].length - m[0].trimStart().length))
+      if (negated(head)) continue
+      const level = levelOf(m[1] ?? '')
+      // "a low effort fix", "that was low effort": a judgment of work, not an ask.
+      if (re === before && level === 'low' && /\b(?:a|an|such|so|too|was|were)\s*$/i.test(prompt.slice(0, m.index + 1))) continue
+      found.add(level)
     }
   }
   return found.size === 1 ? ([...found][0] ?? null) : null

@@ -24,6 +24,7 @@ test('brain: a model named in the prompt is read, a poem or a "no" is not', () =
   expect(askedModel("don't use opus")).toBeNull()
   expect(askedModel('no opus this time')).toBeNull()
   expect(askedModel('not sonnet, use opus')).toBe('opus')
+  expect(askedModel('stop using sonnet')).toBeNull()
   // Two families named is no single ask: the Manager splits it per worker.
   expect(askedModel('opus for the engineer, haiku for the researcher')).toBeNull()
   expect(askedModel('read the fables folder')).toBeNull()
@@ -43,6 +44,12 @@ test('brain: an effort is read only next to the word "effort"', () => {
   expect(askedEffort('set effort to medium')).toBe('medium')
   expect(askedEffort('lowest effort is fine')).toBe('low')
   expect(askedEffort('effort level max')).toBe('max')
+  expect(askedEffort('extremely higher effort')).toBe('xhigh')
+  expect(askedEffort('really high effort')).toBe('xhigh')
+  expect(askedEffort('go low effort on this')).toBe('low')
+  // "Low effort" said of work already done is a judgment, not an ask.
+  expect(askedEffort('that was a low effort fix, redo it')).toBeNull()
+  expect(askedEffort('a low-effort attempt')).toBeNull()
   // No word "effort", no ask.
   expect(askedEffort('high quality, low risk')).toBeNull()
   expect(askedEffort('do your best')).toBeNull()
@@ -57,6 +64,10 @@ test('brain: Fable is asked for by name or a Fable model id only', () => {
   expect(asksForFable('FABLE')).toBe(true)
   expect(asksForFable('read the fables folder')).toBe(false)
   expect(asksForFable('use opus')).toBe(false)
+  // A negated Fable is no ask: the Fable rule still cuts it.
+  expect(asksForFable("don't use fable")).toBe(false)
+  expect(asksForFable('no fable this time, opus is fine')).toBe(false)
+  expect(asksForFable('not opus, use fable')).toBe(true)
 })
 
 // ---- the order ------------------------------------------------------------------
