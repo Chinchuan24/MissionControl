@@ -125,6 +125,10 @@ test('transcript lines: one record each, a cut line kept for the next piece', ()
   const line = 'p/a.jsonl\tmsg_1\tclaude-opus-5-5\t2026-10-20T09:00:00.000Z\t10\t20\t30\t40'
   const r = parseRecord(line)
   expect(r).toEqual({ file: 'p/a.jsonl', id: 'msg_1', model: 'claude-opus-5-5', at: Date.parse('2026-10-20T09:00:00.000Z'), input: 10, output: 20, cacheWrite: 30, cacheRead: 40 })
+  // Ten fields: the writes by lifetime (5-minute, 1-hour) come after the eight.
+  expect(parseRecord(`${line}\t25\t5`)).toMatchObject({ cacheWrite: 30, cacheWrite5m: 25, cacheWrite1h: 5 })
+  expect(parseRecord(`${line}\t0\t0`)?.cacheWrite5m).toBeUndefined()
+  expect(parseRecord(`${line}\t25`)).toBeNull()
   expect(parseRecord('p/a.jsonl\tmsg_1\tclaude')).toBeNull()
   expect(parseRecord('p/a.jsonl\tmsg_1\tm\tnot a time\t1\t1\t1\t1')).toBeNull()
   expect(parseRecord('p/a.jsonl\tmsg_1\tm\t2026-10-20T09:00:00.000Z\t-1\t1\t1\t1')).toBeNull()
@@ -278,6 +282,24 @@ test('backfill: transcripts are read after the start and counted into the ledger
   let text = ''
   for (let i = 0; i < 50 && !text.includes('$4.00'); i++) text = await spendCmd($, 'tokens', 'spend today')
   expect(text).toContain('≈$4.00 · 1.0M tokens')
+})
+
+test('backfill: a transcript that splits its cache writes is priced 1.25x (5-minute) and 2x (1-hour); the aggregate alone stays at 2x', async ($, on) => {
+  base(on, {}, { LANG: 'en_US.UTF-8', HOME: '/home/me' })
+  // Opus 5.5, $4 in: 1M of 5-minute writes cost $5.00 and 1M of 1-hour writes $8.00; 1M aggregate-only writes cost $8.00.
+  history(
+    on,
+    [
+      `./proj/s.jsonl\tmsg_5m\tclaude-opus-5-5\t${when}\t0\t0\t1000000\t0\t1000000\t0`,
+      `./proj/s.jsonl\tmsg_1h\tclaude-opus-5-5\t${when}\t0\t0\t1000000\t0\t0\t1000000`,
+      `./proj/s.jsonl\tmsg_old\tclaude-opus-5-5\t${when}\t0\t0\t1000000\t0`,
+      '',
+    ].join('\n'),
+  )
+  await start($)
+  let text = ''
+  for (let i = 0; i < 50 && !text.includes('$21.0'); i++) text = await spendCmd($, 'tokens', 'spend today')
+  expect(text).toContain('≈$21.0 · 3.0M tokens')
 })
 
 test('/tokens export: the period as a CSV in Downloads, the path said', async ($, on) => {

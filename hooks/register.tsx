@@ -31,6 +31,7 @@ import { BEATS_KEPT, BLANK_CRED, BOOT_H, award, rockerRankOf, bdHeight, bootStri
 import type { Beat, Cred } from './extras'
 import { ONESHOT_KEY, ULTRA_BY_KEY, ULTRA_BY_OPTIONS, ULTRA_KEY, ULTRA_TASK_HINT, cleanUltraBy, managerPicks, parseUltraBy, ultraBySaid, ultraBySection, ultraPlanToast, type UltraBy, pillChip, oneShotChipWord, cleanOneShot, cleanUltraRules, isUltraAgent, matchUltra, nextOneShot, oneShotChip, oneShotSaid, oneShotSection, oneShotWord, parseOneShot, resolveEffort, ultraCommand, ultraLine, withUltraBrief } from './crewcontrol'
 import type { OneShot } from './crewcontrol'
+import { GUARDRAILS_KEY, asksForFable, baselineModel, guardModel, guardNote } from './guardrails'
 import { hasInlineMath, inlineMath, mermaidChart, splitBlocks, texToUnicode, unifiedDiff } from './richtext'
 import { LIVE_N, glide, isNewReading, isSame, liveText, liveWidth, pin, sentLength, steady, steadyTree, wallMinute } from './smooth'
 import { COLOR_RE, FONT_BAD_RE, ID_RE, TOOL_KEY_RE, contrast, skinCheck, skinNew } from './skinkit'
@@ -2047,7 +2048,7 @@ const bcsToast = ($: EngineInterface, key: ToastKey, now: number): void => {
   $.ui.toast(TOASTS[key])
 }
 // Settings the pane's checkboxes change: kept in the store, mirrored here to redraw.
-const settings = atom({ plugin: 'crab-progress', key: 'settings' } as const, { openOnStart: true, crewMode: true, crewAlways: false, currency: 'USD', sounds: true, simple: true, calm: false, voice: false, staffing: false, oneShot: 'ask' as OneShot, ultraBy: 'me' as UltraBy, dailyUsd: 0, autopilot: false, keepWarm: false, budgetUsd: 0, tkOn: true, tkJobMin: 60, tkAgentMin: 20, ramLimit: 'auto', maxAgents: 0, killSwitch: 'on' })
+const settings = atom({ plugin: 'crab-progress', key: 'settings' } as const, { openOnStart: true, crewMode: true, crewAlways: false, currency: 'USD', sounds: true, simple: true, calm: false, voice: false, staffing: false, guardrails: true, oneShot: 'ask' as OneShot, ultraBy: 'me' as UltraBy, dailyUsd: 0, autopilot: false, keepWarm: false, budgetUsd: 0, tkOn: true, tkJobMin: 60, tkAgentMin: 20, ramLimit: 'auto', maxAgents: 0, killSwitch: 'on' })
 // Machine Guard (hooks/machineguard.ts): what the Settings pane and the band draw. Written only when it changes.
 const guard = atom({ plugin: 'crab-progress', key: 'guard' } as const, { line: 'unknown machine', usedGb: -1, limitGb: 0, max: 4, calibrated: 4, autoLabel: 'Auto · 4 (machine unknown)', perAgent: '≈0.5 GB per agent (default)', isTight: false, others: 0, sessions: 1 })
 // The part of it the Settings pane shows. The RAM in use, the crew and the other sessions
@@ -2078,6 +2079,7 @@ const readSettings = async ($: EngineInterface) => {
     calm: (await $.store.get('calm').catch(() => undefined)) === true,
     voice: (await $.store.get('voice').catch(() => undefined)) === true,
     staffing: (await $.store.get(STAFF_KEY).catch(() => undefined)) === true,
+    guardrails: (await $.store.get(GUARDRAILS_KEY).catch(() => undefined)) !== false,
     oneShot: cleanOneShot(await $.store.get(ONESHOT_KEY).catch(() => undefined)),
     ultraBy: cleanUltraBy(await $.store.get(ULTRA_BY_KEY).catch(() => undefined)),
     dailyUsd: Number(await $.store.get(DAILY_KEY).catch(() => 0)) || 0,
@@ -2148,11 +2150,12 @@ async function setBudget($: EngineInterface, dollars: number): Promise<void> {
 }
 
 // One switch of the Settings section: the store keeps it, the atom redraws the pane.
-type Flag = 'simple' | 'calm' | 'voice' | 'staffing'
-const FLAG_KEY: Record<Flag, string> = { simple: 'simpleBand', calm: 'calm', voice: 'voice', staffing: 'smartStaffing' }
+type Flag = 'simple' | 'calm' | 'voice' | 'staffing' | 'guardrails'
+const FLAG_KEY: Record<Flag, string> = { simple: 'simpleBand', calm: 'calm', voice: 'voice', staffing: 'smartStaffing', guardrails: GUARDRAILS_KEY }
 async function setFlag($: EngineInterface, flag: Flag, isOn: boolean): Promise<void> {
   await $.store.set(FLAG_KEY[flag], isOn).catch(() => undefined)
   if (flag === 'staffing') smartStaffing = isOn
+  if (flag === 'guardrails') modelGuard = isOn
   if (flag === 'calm' && !isOn) $.ui.status(undefined)
   await update($, settings, prev => ({ ...prev, [flag]: isOn }))
 }
@@ -3029,9 +3032,10 @@ const runModel = (a: AgentRun): string => `${modelName(a.model)} · effort ${eff
 // USD per million tokens: input, output, cache read, cache write. The first row that
 // matches a model id wins, so a release sits above its family. Anthropic's list prices
 // as of 2026-10-06; Bedrock and Vertex bill their own rates, so there it is a guide.
-// The engine reports tokens, not money, so the panel's cost is an estimate. It reports
-// one cache-write count with no split by lifetime; writes are priced at the 1-hour
-// rate (2x input), which is what Claude Code writes on a subscription.
+// The engine reports tokens, not money, so the panel's cost is an estimate. A cache write
+// is 1.25x input for the 5-minute lifetime (most sub-agents) and 2x for the 1-hour one (the
+// main chat). Where the usage splits the writes by lifetime each is priced at its own rate;
+// with only the aggregate count, every write is priced at the 1-hour rate, as before.
 type Price = [input: number, output: number, cacheRead: number, cacheWrite: number]
 
 const PRICES: [RegExp, Price][] = [
@@ -3056,6 +3060,8 @@ type Usage = {
   output_tokens: number
   cache_read_input_tokens: number
   cache_creation_input_tokens: number
+  /** Cache writes by lifetime, where the engine reports them: 5-minute and 1-hour. */
+  cache_creation?: { ephemeral_5m_input_tokens?: number; ephemeral_1h_input_tokens?: number }
 }
 
 // A model id with no family in it (a Bedrock application inference profile ARN, a
@@ -3087,6 +3093,11 @@ async function loadModelAliases($: EngineInterface): Promise<void> {
 type Staff = { model?: string; effort: 'low' | 'medium' | 'high'; why: string }
 const STAFF_KEY = 'smartStaffing'
 let smartStaffing = false
+// Model guardrails: an Agent call that names a model is capped by role (hooks/guardrails.ts).
+// On unless the person turns it off (`/tokens guardrails off`). Its savings go in the same ledger.
+let modelGuard = true
+let guardCount = 0 // agents lowered this session
+let lastAsked = '' // the person's latest typed prompt: where an explicit "Fable" is read from
 const staffEffort = new Map<string, Staff['effort']>()
 // What Smart staffing saved: a staffed agent's requests priced at the model it would have
 // run on (the session's) less the model it ran on. Effort's savings are not counted.
@@ -3123,21 +3134,29 @@ const priceOf = (model: string, prompt: number): Price => {
 // `isRequest` says the usage is one model request, which is what a prompt-length price
 // is set by; a turn's sum is priced at the model's ordinary prices.
 const costOf = (model: string, u: Usage, isRequest: boolean): number => {
-  const prompt = isRequest ? (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0) : 0
+  const written = Math.max(0, u.cache_creation_input_tokens || 0)
+  const [five, hour] = [u.cache_creation?.ephemeral_5m_input_tokens, u.cache_creation?.ephemeral_1h_input_tokens]
+  // Split writes: 5-minute ones at 1.25x input; the 1-hour ones, and any of the aggregate
+  // the split does not account for, at the 1-hour rate. Only the aggregate: all 1-hour.
+  const w5 = typeof five === 'number' || typeof hour === 'number' ? Math.min(Math.max(0, five || 0), written || Infinity) : 0
+  const w1 = typeof five === 'number' || typeof hour === 'number' ? Math.max(Math.max(0, hour || 0), written - w5) : written
+  const prompt = isRequest ? (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + Math.max(written, w5 + w1) : 0
   const [i, o, r, w] = priceOf(model, prompt)
-  return (
-    ((u.input_tokens || 0) * i +
-      (u.output_tokens || 0) * o +
-      (u.cache_read_input_tokens || 0) * r +
-      (u.cache_creation_input_tokens || 0) * w) /
-    1e6
-  )
+  return ((u.input_tokens || 0) * i + (u.output_tokens || 0) * o + (u.cache_read_input_tokens || 0) * r + w5 * i * 1.25 + w1 * w) / 1e6
 }
 
 // The spend card reads Claude Code's own transcripts (hooks/spend.ts) and prices each
 // message as the panel prices one request.
 const spendIo: SpendIo = {
-  price: (r: SpendRecord) => costOf(r.model, { input_tokens: r.input, output_tokens: r.output, cache_read_input_tokens: r.cacheRead, cache_creation_input_tokens: r.cacheWrite }, true),
+  price: (r: SpendRecord) =>
+    costOf(r.model, {
+      input_tokens: r.input,
+      output_tokens: r.output,
+      cache_read_input_tokens: r.cacheRead,
+      cache_creation_input_tokens: r.cacheWrite,
+      // A transcript that splits its writes by lifetime; an older one has the aggregate alone.
+      ...(r.cacheWrite5m || r.cacheWrite1h ? { cache_creation: { ephemeral_5m_input_tokens: r.cacheWrite5m ?? 0, ephemeral_1h_input_tokens: r.cacheWrite1h ?? 0 } } : {}),
+    }, true),
   badDay: v => tr().spend.badDay(v),
 }
 // Claude Code's configuration folder (CLAUDE_CONFIG_DIR, else ~/.claude) and the home folder.
@@ -6811,7 +6830,7 @@ async function registerEntryPoints($: EngineInterface): Promise<void> {
   }).catch(() => undefined)
   await $.command.register({
     name: 'tokens',
-    description: 'Token Manager: /tokens for a report, budget <dollars|off>, daily <dollars|off>, autopilot <on|off>, staffing <on|off>, ultra <manager|me|add|remove|list|off> <role>, warm <on|off>, receipt, pr, whatif, rescue, spend today|week|month|<from> <to>, export [period], model <id> <model>',
+    description: 'Token Manager: /tokens for a report, budget <dollars|off>, daily <dollars|off>, autopilot <on|off>, staffing <on|off>, guardrails <on|off>, ultra <manager|me|add|remove|list|off> <role>, warm <on|off>, receipt, pr, whatif, rescue, spend today|week|month|<from> <to>, export [period], model <id> <model>',
   }).catch(() => undefined)
   await $.command.register(TIMEKEEPER_COMMAND).catch(() => undefined)
 }
@@ -6949,6 +6968,8 @@ export const register: Register = (on, options) => {
     await startTimekeeper($).catch(() => undefined)
     const autopilot = (await $.store.get('autopilot').catch(() => false)) === true
     smartStaffing = (await $.store.get(STAFF_KEY).catch(() => false)) === true
+    modelGuard = (await $.store.get(GUARDRAILS_KEY).catch(() => undefined)) !== false
+    lastAsked = '' // a new session carries no earlier ask for Fable
     staffSaved = { session: staffSaved.session, total: Number(await $.store.get(STAFF_SAVED_KEY).catch(() => 0)) || 0 }
     ultraRules = cleanUltraRules(await $.store.get(ULTRA_KEY).catch(() => undefined))
     oneShotMode = cleanOneShot(await $.store.get(ONESHOT_KEY).catch(() => undefined))
@@ -7190,11 +7211,26 @@ export const register: Register = (on, options) => {
     const staff = smartStaffing && !e.model && !isWorker(e.subagentType) && piloted === briefed ? staffFor(e.subagentType, e.description) : null
     // Ultra: a role with a rule gets a deep-check brief and max effort from its first request.
     const ultraRule = matchUltra(ultraRules, e.subagentType, e.description)
-    const routed0 = staff?.model ? { ...piloted, model: staff.model } : piloted
     // Manager mode: the plan's task with this description may carry the Manager's `ultra: true`.
     // Matched as the panel matches runs to tasks. The person's ⚡ button still beats it later.
-    const plan = ultraBy === 'manager' && !ultraRule ? await read($, flow) : null
+    // The model guardrails read the same plan: a task marked heavy keeps its model.
+    const named = modelGuard && Boolean(e.model) && !e.resume && !isWorker(e.subagentType) && piloted === briefed
+    const plan = (ultraBy === 'manager' && !ultraRule) || named ? await read($, flow) : null
     const livePlan = plan && !plan.isFinished ? plan : null
+    const planned = planTaskFor(livePlan, e.description)
+    // Model guardrails: a model named in the call is only ever lowered, by the same role
+    // reading that Smart staffing uses (`staffFor`). A worker's tier is the Manager's own choice.
+    const capped = named
+      ? guardModel({
+          model: e.model ?? '',
+          type: e.subagentType,
+          description: e.description,
+          staffModel: staffFor(e.subagentType, e.description)?.model,
+          askedFable: asksForFable(lastAsked),
+          isHeavy: Boolean(ultraRule) || planned?.tier === 'heavy' || planned?.tier === 'fable' || planned?.ultra === true,
+        })
+      : null
+    const routed0 = staff?.model ? { ...piloted, model: staff.model } : capped ? { ...piloted, model: capped.model } : piloted
     const byManager = managerPicks(ultraBy, planTaskFor(livePlan, e.description))
     const isUltraSpawn = Boolean(ultraRule) || byManager
     const routed = isUltraSpawn ? { ...routed0, prompt: withUltraBrief(routed0.prompt) } : routed0
@@ -7213,6 +7249,12 @@ export const register: Register = (on, options) => {
           $.ui.toast(ultraPlanToast(livePlan.tasks))
         }
       } else $.ui.toast(`⚡ Ultra: "${clip(e.description, 30)}" runs at max effort with a deep check`)
+    }
+    if (capped && started.agentId) {
+      // The saving is counted as for staffing: the requests priced at the model asked for, less the one it ran on.
+      staffBaseline.set(started.agentId, baselineModel(e.model ?? '', FAMILY_LATEST))
+      guardCount += 1
+      $.ui.toast(guardNote(clip(e.description, 30), capped))
     }
     if (staff && started.agentId) {
       staffEffort.set(started.agentId, staff.effort)
@@ -8158,6 +8200,8 @@ export const register: Register = (on, options) => {
     const isNote = e.origin?.kind === 'task-notification'
     if (isNote) await dropNotified($, e.text ?? '').catch(() => undefined)
     const asked = e.isMeta || e.command || !isPersons ? '' : e.text.trim()
+    // The person's latest typed prompt: the guardrails let a Fable agent through only if it names Fable.
+    if (asked) lastAsked = asked
     if (!e.isMeta) pendingCommand = isPersons && e.command ? `/${e.command.name}${e.command.args && !looksLikeKey(e.command.args) ? ` ${e.command.args}` : ''}` : '' // a pasted key never becomes a job's name
     // The hidden skin: "tyger tyger" typed while wearing The Mentalist. The prompt goes on unchanged.
     if (asked && SKIN.id === 'mentalist' && TYGER_RE.test(asked)) {
@@ -8644,6 +8688,11 @@ export const register: Register = (on, options) => {
         <Button key="set-staffing" label={`${box(prefs.staffing)} Smart staffing`} plain onPress={async () => setFlag($, 'staffing', !(await read($, settings)).staffing)} />,
       ),
       opt(
+        'opt-guardrails',
+        'Caps the model an agent is launched with: Fable to Opus unless you ask for Fable, checkers, reviewers and researchers to Sonnet, engineers to Sonnet unless the plan marks them heavy.',
+        <Button key="set-guardrails" label={`${box(prefs.guardrails)} Model guardrails`} plain onPress={async () => setFlag($, 'guardrails', !(await read($, settings)).guardrails)} />,
+      ),
+      opt(
         'opt-timekeeper',
         'A time budget for each job and each agent, with a nudge when one runs long.',
         <Button
@@ -8866,8 +8915,8 @@ export const register: Register = (on, options) => {
       return { text: `${v.label}: ≈${fmtCost(v.cost)} · ${fmtTokens(v.tokens)} ${tr().tokensWord}${note ? ` (${note})` : ''}` }
     }
     // Anything but a report, a budget or autopilot on|off gets the usage line.
-    if ((verb && verb !== 'autopilot' && verb !== 'budget' && verb !== 'warm' && verb !== 'staffing' && verb !== 'ultra' && verb !== 'daily' && verb !== 'receipt' && verb !== 'rescue' && verb !== 'whatif' && verb !== 'pr') || ((verb === 'autopilot' || verb === 'warm') && arg && arg !== 'on' && arg !== 'off')) {
-      return { text: 'Usage: /tokens for a report, /tokens budget <dollars|off>, /tokens autopilot <on|off>, /tokens warm <on|off>, /tokens staffing <on|off>, /tokens ultra <manager|me|add|remove|list|off> [role], /tokens daily <dollars|off>, /tokens receipt, /tokens pr, /tokens whatif, /tokens rescue, /tokens spend today|week|month [YYYY-MM]|<from YYYY-MM-DD> <to YYYY-MM-DD>, /tokens export [period], /tokens model <id> <model|off>' }
+    if ((verb && verb !== 'autopilot' && verb !== 'budget' && verb !== 'warm' && verb !== 'staffing' && verb !== 'guardrails' && verb !== 'ultra' && verb !== 'daily' && verb !== 'receipt' && verb !== 'rescue' && verb !== 'whatif' && verb !== 'pr') || ((verb === 'autopilot' || verb === 'warm') && arg && arg !== 'on' && arg !== 'off')) {
+      return { text: 'Usage: /tokens for a report, /tokens budget <dollars|off>, /tokens autopilot <on|off>, /tokens warm <on|off>, /tokens staffing <on|off>, /tokens guardrails <on|off>, /tokens ultra <manager|me|add|remove|list|off> [role], /tokens daily <dollars|off>, /tokens receipt, /tokens pr, /tokens whatif, /tokens rescue, /tokens spend today|week|month [YYYY-MM]|<from YYYY-MM-DD> <to YYYY-MM-DD>, /tokens export [period], /tokens model <id> <model|off>' }
     }
     if (verb === 'warm') {
       const isOn = arg !== 'off'
@@ -8940,6 +8989,11 @@ export const register: Register = (on, options) => {
       await setFlag($, 'staffing', arg !== 'off')
       return { text: smartStaffing ? 'Smart staffing on: agents launched without a model get one by job. Reading: Haiku, low effort. Routine edits: Sonnet, medium. Design, review, security and debugging: the session model, high.' : 'Smart staffing off.' }
     }
+    if (verb === 'guardrails') {
+      if (arg && arg !== 'on' && arg !== 'off') return { text: 'Usage: /tokens guardrails <on|off>' }
+      await setFlag($, 'guardrails', arg !== 'off')
+      return { text: modelGuard ? 'Model guardrails on: an Agent call that names a model is capped. Fable goes to Opus unless you ask for Fable; checkers, reviewers, researchers and explorers to Sonnet (Haiku for light reading); engineers to Sonnet unless the plan marks the task heavy or Ultra. Never raised.' : 'Model guardrails off.' }
+    }
     if (verb === 'autopilot') {
       const isOn = arg !== 'off'
       await setAutopilot($, isOn)
@@ -8965,6 +9019,7 @@ export const register: Register = (on, options) => {
         `Token Manager: ${MOOD_WORD[r.mood]}`,
         ...unpriced,
         `Smart staffing ${smartStaffing ? `on${staffSavedText()}` : `off (/tokens staffing on)${staffSavedText()}`} · autopilot ${watched.autopilot ? 'on' : 'off'}`,
+        `Model guardrails ${modelGuard ? `on${guardCount ? ` · ${guardCount} agent${guardCount === 1 ? '' : 's'} lowered this session (savings in the line above)` : ''}` : 'off (/tokens guardrails on)'}`,
         `${ultraLine((await read($, agents)).filter(a => a.status === 'running' && a.isUltra).length, ultraRules.length)} · decided by ${ultraBy === 'manager' ? 'the Manager (/tokens ultra me)' : 'you (/tokens ultra manager)'}`,
         ...(isApiCredits(BILLING) ? [`${modeChip(BILLING)} · ${spendLine(API_SPEND, dayOf(at), fmtCost)}`] : []),
         `Burn ${fmtTokens(r.burnPerMin)}/min · this task ${fmtTokens(r.taskTokens)} (≈${fmtCost(r.taskCost)})${r.cachedPct === null ? '' : ` · ${r.cachedPct}% cached`}`,
