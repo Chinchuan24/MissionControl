@@ -511,6 +511,19 @@ test('think, mark v3: the rigged window is three generated chunks (7.2, 14.3, 19
     // the art keeps to the plan's rules: a limited palette per part, no network, no external references
     expect(c.body + c.css + c.defs).not.toMatch(/https?:|data:|@import/)
   }
+  // the wide shot's camera (push-ins and shakes) never shows the edge of its 160 x 90 backdrop: every stop of its track covers the frame
+  // (the face close-up sits on a flat fill drawn outside the camera, so its shakes need no margin)
+  for (const c of TM3_CHUNKS.filter(x => x.sec === 'W')) {
+    const cam = new RegExp(`@keyframes \\{P\\}${c.key}cam\\{(.*?)\\}\\}`).exec(c.css)?.[1] ?? ''
+    const stops = [...cam.matchAll(/translate\((-?[\d.]+)px,(-?[\d.]+)px\) scale\(([\d.]+)\)/g)].map(m => m.slice(1).map(Number) as [number, number, number])
+    expect(stops.length, `${c.key} camera stops`).toBeGreaterThan(2)
+    for (const [x, y, sc] of stops) {
+      expect(x, `${c.key} left edge`).toBeLessThanOrEqual(0)
+      expect(y, `${c.key} top edge`).toBeLessThanOrEqual(0)
+      expect(x + 160 * sc, `${c.key} right edge`).toBeGreaterThanOrEqual(160)
+      expect(y + 90 * sc, `${c.key} bottom edge`).toBeGreaterThanOrEqual(90)
+    }
+  }
   // the drawings swap on a strip track (steps), the motion is linear keyframes the browser interpolates every frame
   expect(TM3_CHUNKS[0]!.css).toContain('translate(')
   expect(TM3_CHUNKS[0]!.css).toContain('rotate(')

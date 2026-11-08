@@ -206,13 +206,11 @@ function buildChunk(key, a, b) {
       // a single drawing: when absent frames exist they hide the whole group (alpha), so nothing else is needed
       own = use(distinct[0])
     } else if (distinct.length > 1) {
-      const hasBlank = partsSeries.some(p => p === null) && false
       const L = Math.max(...distinct.map(p => HALF[p].pivot[0]))
       const Rr = Math.max(...distinct.map(p => HALF[p].w - HALF[p].pivot[0]))
       const PY = Math.max(...distinct.map(p => HALF[p].pivot[1]))
       const Hh = Math.max(...distinct.map(p => HALF[p].h - HALF[p].pivot[1]))
       const CW = L + Rr + 2
-      void hasBlank
       const cells = distinct.map((p, i) => `<g transform="translate(${i * CW} 0)">${use(p)}</g>`).join('')
       const cid = `{P}${key}k${uid++}`
       defsExtra += `<clipPath id="${cid}"><rect x="${-L}" y="${-PY}" width="${L + Rr}" height="${PY + Hh}"/></clipPath>`

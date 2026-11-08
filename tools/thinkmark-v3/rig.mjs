@@ -45,10 +45,13 @@ const q = (t, fps) => Math.floor(t * fps + 1e-6) / fps
 const N = (id, o = {}, kids = []) => ({ id, x: 0, y: 0, r: 0, sx: 1, sy: 1, a: 1, part: null, ...o, kids })
 
 // ---------------------------------------------------------------- the world layout (320 x 180 canvas)
-const MARK_HIP = [196, 72]
-const MARK_ROT = -17
-const OMNI_HIP = [212, 128]
-const GROUND = 150
+// Mark lies ON the rock slope: his angle is the slope's (about 26 degrees) and his back rests on the lit rock tops, fitted
+// column by column against ENV_ROCKS (mean gap under the body under 3 px, no sky under him). Omni kneels on the rubble at
+// the foot of the big slab, beside Mark's waist, close enough that the slam, the point and the collar grab all land.
+const MARK_HIP = [164, 81]
+const MARK_ROT = -26
+const MARK_FEET = [-76, 14] // the heels in S_LYING (relative to its hip pivot): the lift pivots here, so the feet stay planted
+const OMNI_HIP = [188, 119]
 
 const rotp = (p, deg) => { const c = Math.cos(deg * D2R); const s = Math.sin(deg * D2R); return [p[0] * c - p[1] * s, p[0] * s + p[1] * c] }
 
@@ -113,15 +116,17 @@ export function makeScene(R, opts = {}) {
   const ang = v => Math.atan2(v[1], v[0]) / D2R
 
   const liftOf = t => K(t, [[18.1, 0], [18.7, 1, 'out'], [20, 1]])
-  /** Mark: where a point of S_LYING (its own px) is in the world. */
+  const feetW = (() => { const p = rotp(MARK_FEET, MARK_ROT); return [MARK_HIP[0] + p[0], MARK_HIP[1] + p[1]] })()
+  /** Mark: where a point of S_LYING (its own px) is in the world. The lift and the collar tugs tilt him up about his heels
+   * (they stay on the rock); the slam presses him 1.5 px into it; the breath is half a pixel. */
   const markXf = t => {
     const lift = liftOf(t)
-    const rot = MARK_ROT + 4 * lift
-    const dx = 6 * lift
-    const dy = 1.5 * pulse(t, 8.06, 0.35) + 9 * lift + 0.5 * Math.sin(t * 2.2)
     // the pulls on the collar at 17.0 and 17.6
     const pull = pulse(t, 17.0, 0.3) + pulse(t, 17.6, 0.3)
-    return { rot, pos: [MARK_HIP[0] + dx + 1.5 * pull, MARK_HIP[1] + dy - 1 * pull] }
+    const rot = MARK_ROT - 3 * lift - 0.8 * pull
+    const p = rotp(MARK_FEET, rot)
+    const dy = 1.5 * pulse(t, 8.06, 0.35) + 0.5 * Math.sin(t * 2.2)
+    return { rot, pos: [feetW[0] - p[0], feetW[1] - p[1] + dy] }
   }
   const markPt = (t, lx, ly) => { const m = markXf(t); const p = rotp([lx - 82, ly - 16], m.rot); return [m.pos[0] + p[0], m.pos[1] + p[1]] }
 
@@ -169,8 +174,9 @@ export function makeScene(R, opts = {}) {
     const tremor = inW(t, [[14.8, 16.0]]) ? 0.6 * Math.sin(t * 2 * Math.PI * 7) : 0
     const torsoR = swing + lean + tremor * 0.5
     const lf = liftOf(t)
-    const hipX = OMNI_HIP[0] + 26 * lf
-    const hipY = OMNI_HIP[1] + recoil - 16 * lf + (post === 'H' ? 0 : -2) + pulse(t, 16.25, 0.3) * 1
+    // the lift: he straightens on his knees (upright torso, hip up 3 px); the knees stay on the rubble
+    const hipX = OMNI_HIP[0] + 2 * lf
+    const hipY = OMNI_HIP[1] + recoil - 3 * lf + (post === 'H' ? 0 : -2) + pulse(t, 16.25, 0.3) * 1
 
     // ---- world -> torso frame for arm targets (the root is mirrored, so local x = hipX - world x)
     const toL = ([wx, wy]) => [hipX - wx, wy - hipY]
@@ -316,9 +322,10 @@ export function makeScene(R, opts = {}) {
 
   // ---------------------------------------------------------------- camera
   const cam = t => {
-    // pushes in just ahead of the first shake, so a jolt never shows the edge of the picture
-    const s = K(t, [[7.2, 1.0], [7.95, 1.0], [8.1, 1.04, 'out'], [14.3, 1.07], [16.1, 1.07], [18.1, 1.08], [19.65, 1.13, 'in2']])
-    const c = K(t, [[7.2, [176, 92]], [8.0, [176, 92]], [8.75, [196, 90], 'out2'], [14.3, [208, 88]], [18.1, [216, 84], 'io'], [19.65, [222, 76], 'in2']])
+    // never below 1.04: the clamp below keeps a 4 px / 3 px margin for the shake, which needs s >= 1.035 (at 1.0 the
+    // picture's left and top edges showed). Pushes in a little more just ahead of the first shake.
+    const s = K(t, [[7.2, 1.04], [7.95, 1.04], [8.1, 1.06, 'out'], [14.3, 1.08], [16.1, 1.08], [18.1, 1.09], [19.65, 1.14, 'in2']])
+    const c = K(t, [[7.2, [166, 92]], [8.0, [166, 92]], [8.75, [170, 90], 'out2'], [14.3, [172, 88]], [18.1, [180, 84], 'io'], [19.65, [200, 70], 'in2']])
     return { cx: clamp(c[0], 160 / s + 4, 320 - 160 / s - 4), cy: clamp(c[1], 90 / s + 3, 180 - 90 / s - 3), s, rot: 0 }
   }
   const SHAKE = [[8.05, 0.2, 3], [8.25, 0.15, 1], [14.5, 0.1, 1]]
@@ -345,14 +352,14 @@ export function makeScene(R, opts = {}) {
       ...(t >= 8.2 ? [N('splat', { x: (SR[0] + SL[0]) / 2, y: (SR[1] + SL[1]) / 2 + 12, a: t < 8.3 ? 0.6 : 0.95, part: t < 8.3 ? 'FX_BLOOD_SPLAT_1' : 'FX_BLOOD_SPLAT_2' })] : []),
       ...dust(t, 8.08, SR[0], SR[1] + 4),
       ...dust(t, 8.1, SL[0], SL[1] + 4, -1),
-      ...dust(t, 16.25, OMNI_HIP[0] - 20, 152),
+      ...dust(t, 16.25, OMNI_HIP[0] - 20, OMNI_HIP[1] + 36),
       ...debris(t, 8.08, (SR[0] + SL[0]) / 2, (SR[1] + SL[1]) / 2, 4, 40, 70),
     ]
     const fxFront = [
       ...shock(t, 8.08, (SR[0] + SL[0]) / 2, (SR[1] + SL[1]) / 2 + 2),
       ...drip(t, 12.0, OMNI_HIP[0] + 31, OMNI_HIP[1] + 20, 14),
       ...drip(t, 13.8, OMNI_HIP[0] + 33, OMNI_HIP[1] + 20, 14),
-      ...drip(t, 18.9, OMNI_HIP[0] + 39, OMNI_HIP[1] - 42, 16),
+      ...drip(t, 18.9, ...markPt(18.9, 150, 26), 16),
     ]
     return N('world', {}, [
       N('sky', { part: 'ENV_SKY' }),

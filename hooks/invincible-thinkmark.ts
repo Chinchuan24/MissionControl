@@ -527,10 +527,11 @@ export const frameOf = (W: number, H: number): { PW: number; PH: number; x: numb
   const PH = Math.round((PW * 9) / 16)
   return { PW, PH, x: Math.round((W - PW) / 2), y: Math.round((H - PH) / 2) }
 }
-/** The shots a draw during shot `k` carries: this one and the next when the pair fits, else this one (full palette either way;
- *  a single shot too big for the budget is cut to 12 colours, never to a lower resolution). */
 /** Bytes one draw's picture may be in all (its defs, keyframes and markup): the cap is 131,072 per Svg and the cards and bubbles come on top. */
 export const CARD_BUDGET = 104_000
+/** The shots a draw during shot `k` carries: this one and the next when the pair fits, else this one (full palette either way;
+ *  a single shot too big for the budget is cut to 12 colours, never to a lower resolution). Inside the rigged window `k` is first
+ *  mapped to its chunk's first shot, and "the next" is the shot after the chunk. */
 export const drawOf = (W: number, H: number, k0: number): Drawn => {
   const k = drawShot(k0)
   const key = `${W}x${H}|${k}`
