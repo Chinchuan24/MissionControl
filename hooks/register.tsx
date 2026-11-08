@@ -20,7 +20,7 @@ import { TOASTS, bashToast, cmdKind, fxOf, mcgillNow, resultFailed, toastDue } f
 import type { BashState, Fx, ToastKey } from './bettercallsaul-fx'
 import { UNPLUG_GAP_MS, shouldUnplug } from './bettercallsaul-extra'
 import { CLASSIC_RE, GUARDIANS_RE, NEW_SUIT_RE, THINK_RE } from './invincible-eggs'
-import { TM_KIND, thinkMarkFx, thinkMarkLive } from './invincible-thinkmark'
+import { TM_KIND, thinkMarkFx, thinkMarkLive, thinkMarkSolo } from './invincible-thinkmark'
 import { clearThinkMarkTimers, scheduleThinkMark } from './invincible-thinkmark-timers'
 import { ERA1, ERA2, TITLE_WORDS as INV_WORDS } from './invincible'
 import { VERBS as INV_VERBS } from './invincible-cards'
@@ -7925,14 +7925,17 @@ export const register: Register = (on, options) => {
       )
       // The short view. Forced when the full one is too big for the app to draw: it
       // keeps the crew's picture and offers the ways back to the full view.
+      // THINK, MARK keeps the stage here too: the short view has no cards to carry it, so the picture comes first as an Svg of its own.
+      const movie = isInv() ? thinkMarkSolo(INV_FX, clockNow, W) : ''
       const compactView = (picture?: string) => (
         <Box flexDirection="column" gap={1} alignItems={align} {...(SKIN.backdrop.fill ? { backgroundColor: SKIN.backdrop.fill } : {})}>
+          {movie ? <Svg key="think-mark" source={movie} alt="THINK, MARK" /> : null}
           <Svg source={compactSvg(W, list, planned, t, clockNow)} alt={`${list.length} ${s.agentsCount}${quietCount ? `, ⚠ ${quietCount} quiet` : ''}, ${summary}`} />
           {picture === undefined ? (
             toggleCompact
           ) : (
             <Box flexDirection="column">
-              <Text dimColor>Too many agents to draw in full: this is the short view.</Text>
+              <Text dimColor>Too much to draw in full at once: this is the short view.</Text>
               <Box flexDirection="row" gap={2}>
                 {opened.size > 0 && <Button key="fold-all" label="Fold the opened agents" plain onPress={() => setPaneView($, () => ({ expanded: [] }))} />}
                 {finished.length > 0 && !p.isDoneCollapsed && toggleDone}
@@ -8131,7 +8134,8 @@ export const register: Register = (on, options) => {
       // Measured as sent, each source compacted once per drawing however many fallbacks hold it.
       const sent = new Map<string, number>()
       // A theme's big eggs (THE FIGHT, the showdown) sit between `<!--dl-->` markers: not counted, a reserve is kept instead while a job works.
-      const reserve = th?.paneReserve && (isWorking || boss.isWorking) ? th.paneReserve : 0
+      // The cutscene plays with or without a job, and its cards are not counted either: it keeps its reserve for all of its 65 s.
+      const reserve = Math.max(th?.paneReserve && (isWorking || boss.isWorking) ? th.paneReserve : 0, isInv() && thinkMarkLive(INV_FX, clockNow) ? 100_000 : 0)
       const lengthOf = (src: string): number => sent.get(src) ?? sent.set(src, sentLength(src.includes('<!--dl-->') ? src.replace(/<!--dl-->[\s\S]*?<!--\/dl-->/g, '') : src)).get(src) ?? src.length
       const sizeOf = (v: unknown): number => drawnChars(v, lengthOf)
       // Level `level` of the fallbacks fits: with room to spare when richer than the last drawn.

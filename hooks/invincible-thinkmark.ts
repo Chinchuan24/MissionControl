@@ -576,3 +576,14 @@ export const thinkMarkExtras = (o: ExtraArgs, era: Era): string | undefined => {
   if (!o.card || o.W < 200 || o.H < 120) return ''
   return thinkMarkPane(o.W, o.H, o.card, start, clamp((o.at - start) / 1000, 0, TM_S - 0.001))
 }
+
+/**
+ * The picture alone, as its own Svg of width `W`: what the pane draws under the movie when the crew is too big for the cards
+ * (the short view has no cards to carry it). '' when the cutscene is not playing at `at` or the pane is too narrow.
+ */
+export const thinkMarkSolo = (fx: Fx, at: number, W: number): string => {
+  if (!thinkMarkLive(fx, at) || W < 200) return ''
+  const start = (fx as { at: number }).at
+  const H = Math.round((W * 9) / 16) + 8
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${thinkMarkPane(W, H, 'cred', start, clamp((at - start) / 1000, 0, TM_S - 0.001))}</svg>`
+}
