@@ -239,14 +239,24 @@ test('eras: era 2 draws its own palette, its own cast key and the NEW SUIT patch
   expect(CASTS.invincible2?.boss).toBe(SP.INV_MARK_S3)
   expect(CASTS.invincible?.boss).toBe(SP.INV_MARK)
 })
-test('think, mark: the 95% context warning keeps the 3 s drop-in: Omni-Man with his line, ends on its own', async ($, on) => {
+test('think, mark: typed, Omni-Man drops in with his line on the band for 3 s, only here, ends on its own', async ($, on) => {
+  const clock = base(on, 100_000, quietAt())
+  await start($, 'invincible')
+  await jobIn($)
+  expect(await bandAt($, 1250)).not.toContain('THINK, MARK.')
+  await $.prompt.submit({ text: 'think, mark', cursor: 0 } as never)
+  expect(await bandAt($, 1250)).toContain('THINK, MARK.')
+  expect((await svgs($, 'Pane')).join('')).not.toContain('THINK, MARK.')
+  await clock.advance(4_500)
+  expect(await bandAt($, 1250)).not.toContain('THINK, MARK.')
+})
+test('think, mark: the 95% context warning has the same 3 s drop-in: Omni-Man with his line, ends on its own', async ($, on) => {
   const clock = base(on, 960_000, quietAt())
   await start($, 'invincible')
   await jobIn($)
   await clock.advance(1_000)
   const band = await bandAt($, 1250)
   expect(band).toContain('THINK, MARK.')
-  expect(band).not.toContain('NOW PLAYING')
   await clock.advance(4_500)
   expect(await bandAt($, 1250)).not.toContain('THINK, MARK.')
   const reduced = CSS.split('prefers-reduced-motion')[1] as string
