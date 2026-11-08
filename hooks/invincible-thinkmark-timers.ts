@@ -1,5 +1,7 @@
 // THINK, MARK: the pane redraws that carry the film. A draw holds only the shot playing and (when it fits) the next, so the pane
 // is drawn again just after every cut; the engine's timers do it. Kept here so the schedule is one small, testable thing.
+// v3: inside the rigged window (7.2 to 24.65 s) the drawings and the motion are keyframes of three draws, so the only redraws there are at
+// 7.2, 14.3 and 19.65 s (and 24.65 s, the next shot): thinkMarkRedraws leaves out the cuts the draws already carry.
 import { thinkMarkRedraws } from './invincible-thinkmark'
 
 export type TimerLike = { cancel: () => void }
