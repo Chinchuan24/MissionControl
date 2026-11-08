@@ -424,3 +424,25 @@ test('think, mark: the pane is redrawn after every cut: the schedule, the cancel
   expect(writes).not.toContain(cuts[12])
   expect(writes).not.toContain(cuts[23])
 })
+
+// The crew grows past what the cards can hold: the pane falls back to its short view, which has no cards, and the movie used to be
+// dropped there (Chin's cutscene stopped at ~25 s when the crew grew). It must be drawn at every cut, with a plan and 1 to 28 agents.
+for (const N of [1, 12, 28]) {
+  test(`think, mark: with a plan and ${N} agents the movie is drawn at every cut and stays under the app's caps`, { timeoutMs: 180_000 }, async ($, on) => {
+    const clock = base(on, 880_000, quietAt())
+    await start($, 'invincible')
+    await jobIn($)
+    for (let i = 0; i < N; i++) await $.agent.spawn({ tool_use_id: `t${i}`, prompt: 'p', description: `Engineer ${i}: a long task number ${i}`, subagentType: 'general-purpose', provider: 'engine', parentModel: 'x', background: false, fork: false } as never)
+    await clock.advance(12_000)
+    await type($)
+    let at = 0
+    for (const cut of [...CUTS.slice(0, 24).map(c => c + 0.2), 30, 45, 64].sort((a, b) => a - b)) {
+      await clock.advance(Math.round((cut - at) * 1000))
+      at = cut
+      const p = await svgs($, 'Pane')
+      expect(playing(p).length, `movie missing at ${cut} s`).toBeGreaterThanOrEqual(1)
+      for (const x of p) expect(x.length).toBeLessThan(131072)
+      expect(p.reduce((n, x) => n + x.length, 0)).toBeLessThan(262_144)
+    }
+  })
+}
