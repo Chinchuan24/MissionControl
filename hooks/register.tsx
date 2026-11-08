@@ -31,7 +31,7 @@ import { BEATS_KEPT, BLANK_CRED, BOOT_H, award, rockerRankOf, bdHeight, bootStri
 import type { Beat, Cred } from './extras'
 import { ONESHOT_KEY, ULTRA_BY_KEY, ULTRA_BY_OPTIONS, ULTRA_KEY, ULTRA_TASK_HINT, cleanUltraBy, managerPicks, parseUltraBy, ultraBySaid, ultraBySection, ultraPlanToast, type UltraBy, pillChip, oneShotChipWord, cleanOneShot, cleanUltraRules, isUltraAgent, matchUltra, nextOneShot, oneShotChip, oneShotSaid, oneShotSection, oneShotWord, parseOneShot, resolveEffort, ultraCommand, ultraLine, withUltraBrief } from './crewcontrol'
 import type { OneShot } from './crewcontrol'
-import { GUARDRAILS_KEY, asksForFable, baselineModel, guardModel, guardNote } from './guardrails'
+import { BRAIN_KEY, BRAIN_SECTION, TIER_PICK, asksForFable, baselineModel, brainNote, brainPick, brainSaid, effortOf, familyOf, familyWord, type BrainPick } from './staffing-brain'
 import { hasInlineMath, inlineMath, mermaidChart, splitBlocks, texToUnicode, unifiedDiff } from './richtext'
 import { LIVE_N, glide, isNewReading, isSame, liveText, liveWidth, pin, sentLength, steady, steadyTree, wallMinute } from './smooth'
 import { COLOR_RE, FONT_BAD_RE, ID_RE, TOOL_KEY_RE, contrast, skinCheck, skinNew } from './skinkit'
@@ -1325,7 +1325,7 @@ type ProgressInput = {
   done?: number
   phase?: Phase
   finished?: boolean
-  tasks?: { title?: string; tier?: string; after?: number[]; minutes?: number; ultra?: boolean }[]
+  tasks?: { title?: string; tier?: string; after?: number[]; minutes?: number; ultra?: boolean; model?: string; effort?: string; why?: string }[]
   minutes?: number
 }
 
@@ -2048,7 +2048,7 @@ const bcsToast = ($: EngineInterface, key: ToastKey, now: number): void => {
   $.ui.toast(TOASTS[key])
 }
 // Settings the pane's checkboxes change: kept in the store, mirrored here to redraw.
-const settings = atom({ plugin: 'crab-progress', key: 'settings' } as const, { openOnStart: true, crewMode: true, crewAlways: false, currency: 'USD', sounds: true, simple: true, calm: false, voice: false, staffing: false, guardrails: true, oneShot: 'ask' as OneShot, ultraBy: 'me' as UltraBy, dailyUsd: 0, autopilot: false, keepWarm: false, budgetUsd: 0, tkOn: true, tkJobMin: 60, tkAgentMin: 20, ramLimit: 'auto', maxAgents: 0, killSwitch: 'on' })
+const settings = atom({ plugin: 'crab-progress', key: 'settings' } as const, { openOnStart: true, crewMode: true, crewAlways: false, currency: 'USD', sounds: true, simple: true, calm: false, voice: false, staffing: false, brain: true, oneShot: 'ask' as OneShot, ultraBy: 'me' as UltraBy, dailyUsd: 0, autopilot: false, keepWarm: false, budgetUsd: 0, tkOn: true, tkJobMin: 60, tkAgentMin: 20, ramLimit: 'auto', maxAgents: 0, killSwitch: 'on' })
 // Machine Guard (hooks/machineguard.ts): what the Settings pane and the band draw. Written only when it changes.
 const guard = atom({ plugin: 'crab-progress', key: 'guard' } as const, { line: 'unknown machine', usedGb: -1, limitGb: 0, max: 4, calibrated: 4, autoLabel: 'Auto · 4 (machine unknown)', perAgent: '≈0.5 GB per agent (default)', isTight: false, others: 0, sessions: 1 })
 // The part of it the Settings pane shows. The RAM in use, the crew and the other sessions
@@ -2079,7 +2079,7 @@ const readSettings = async ($: EngineInterface) => {
     calm: (await $.store.get('calm').catch(() => undefined)) === true,
     voice: (await $.store.get('voice').catch(() => undefined)) === true,
     staffing: (await $.store.get(STAFF_KEY).catch(() => undefined)) === true,
-    guardrails: (await $.store.get(GUARDRAILS_KEY).catch(() => undefined)) !== false,
+    brain: (await $.store.get(BRAIN_KEY).catch(() => undefined)) !== false,
     oneShot: cleanOneShot(await $.store.get(ONESHOT_KEY).catch(() => undefined)),
     ultraBy: cleanUltraBy(await $.store.get(ULTRA_BY_KEY).catch(() => undefined)),
     dailyUsd: Number(await $.store.get(DAILY_KEY).catch(() => 0)) || 0,
@@ -2150,12 +2150,12 @@ async function setBudget($: EngineInterface, dollars: number): Promise<void> {
 }
 
 // One switch of the Settings section: the store keeps it, the atom redraws the pane.
-type Flag = 'simple' | 'calm' | 'voice' | 'staffing' | 'guardrails'
-const FLAG_KEY: Record<Flag, string> = { simple: 'simpleBand', calm: 'calm', voice: 'voice', staffing: 'smartStaffing', guardrails: GUARDRAILS_KEY }
+type Flag = 'simple' | 'calm' | 'voice' | 'staffing' | 'brain'
+const FLAG_KEY: Record<Flag, string> = { simple: 'simpleBand', calm: 'calm', voice: 'voice', staffing: 'smartStaffing', brain: BRAIN_KEY }
 async function setFlag($: EngineInterface, flag: Flag, isOn: boolean): Promise<void> {
   await $.store.set(FLAG_KEY[flag], isOn).catch(() => undefined)
   if (flag === 'staffing') smartStaffing = isOn
-  if (flag === 'guardrails') modelGuard = isOn
+  if (flag === 'brain') brainOn = isOn
   if (flag === 'calm' && !isOn) $.ui.status(undefined)
   await update($, settings, prev => ({ ...prev, [flag]: isOn }))
 }
@@ -2795,6 +2795,9 @@ const cleanTasks = (tasks: ProgressInput['tasks']): PlannedTask[] | undefined =>
       after: (t.after ?? []).filter(n => Number.isInteger(n) && n > 0).slice(0, MAX_AFTER),
       ...(cleanMin(t.minutes) ? { minutes: cleanMin(t.minutes) } : {}),
       ...(t.ultra === true ? { ultra: true } : {}),
+      ...(typeof t.model === 'string' && familyOf(t.model) ? { model: t.model.trim().toLowerCase() } : {}),
+      ...(effortOf(t.effort) ? { effort: effortOf(t.effort) } : {}),
+      ...(typeof t.why === 'string' && t.why.trim() ? { why: clip(t.why.trim(), 80) } : {}),
     }))
 
 const merge = (prev: Flow | null, input: ProgressInput): Flow => {
@@ -3006,18 +3009,16 @@ const TIER_COLOR: Record<string, string> = {
 // What each worker tier runs on, for planned tasks that have no run yet.
 const colorOf = (tier: string): string => TIER_COLOR[tier] ?? '#888780'
 
-const TIER_MODEL: Record<string, [model: string, effort: string]> = {
-  fable: ['Fable', 'high'],
-  heavy: ['Opus', 'xhigh'],
-  careful: ['Opus', 'high'],
-  medium: ['Opus', 'medium'],
-  light: ['Opus', 'low'],
-}
+// One map (TIER_PICK in hooks/staffing-brain.ts) for the pane, the mc-* workers and the Staffing brain.
+const TIER_MODEL: Record<string, [model: string, effort: string]> = Object.fromEntries(Object.entries(TIER_PICK).map(([t, p]) => [t, [familyWord(p.model), p.effort]]))
 
-// "Opus · xhigh", with the effort word in the panel's language; '' for an unknown tier.
-const tierModel = (tier: string): string => {
-  const m = TIER_MODEL[tier]
-  return m ? `${m[0]} · ${effortWord(m[1])}` : ''
+// A planned task's "Opus · high" in the panel's language: the Manager's pick when the plan gives one, else its tier's ('' for an unknown tier).
+// With the Staffing brain on, a Fable the person did not name shows as the Opus it will run on.
+const plannedModel = (p: Pick<PlannedTask, 'tier' | 'model' | 'effort'>): string => {
+  const [tModel = '', tEffort = ''] = TIER_MODEL[p.tier] ?? []
+  const fam = familyOf(p.model ?? '') ?? familyOf(tModel)
+  const shown = fam === 'fable' && brainOn && !asksForFable(lastAsked) ? 'opus' : fam
+  return [shown ? familyWord(shown) : tModel, effortWord(p.effort ?? tEffort)].filter(Boolean).join(' · ')
 }
 
 // The effort a run works at: what its requests carried, else (an Ultra agent before its
@@ -3093,12 +3094,15 @@ async function loadModelAliases($: EngineInterface): Promise<void> {
 type Staff = { model?: string; effort: 'low' | 'medium' | 'high'; why: string }
 const STAFF_KEY = 'smartStaffing'
 let smartStaffing = false
-// Model guardrails: an Agent call that names a model is capped by role (hooks/guardrails.ts).
-// On unless the person turns it off (`/tokens guardrails off`). Its savings go in the same ledger.
-let modelGuard = true
-let guardCount = 0 // agents lowered this session
-let lastAsked = '' // the person's latest typed prompt: where an explicit "Fable" is read from
-const staffEffort = new Map<string, Staff['effort']>()
+// Staffing brain: each worker's model and effort, picked by the Manager, with the person's
+// own words first (hooks/staffing-brain.ts). On unless the person turns it off
+// (`/tokens brain off`). A model it changes or fills in goes in the same savings ledger.
+let brainOn = true
+let brainCount = 0 // agents the brain staffed this session
+let lastAsked = '' // the person's latest typed prompt: where a named model or effort is read from
+// The pick made as the Agent tool was called, kept for its spawn: by tool_use_id, else by description.
+const brainPicks = new Map<string, KeptPick>()
+const staffEffort = new Map<string, string>() // the effort a staffed agent asks for: Smart staffing's or the Staffing brain's
 // What Smart staffing saved: a staffed agent's requests priced at the model it would have
 // run on (the session's) less the model it ran on. Effort's savings are not counted.
 const STAFF_SAVED_KEY = 'staffSavedUsd'
@@ -3123,6 +3127,31 @@ const staffFor = (type: string, description: string): Staff | null => {
   if (/\b(security|architect|architecture|design|plan|planner|review|reviewer|debug|refactor|audit|verify|judge|migrate)\b/.test(text)) return { effort: 'high', why: 'a hard call' }
   if (/\b(test|tests|tester|write|writer|edit|fix|implement|build|engineer|doc|docs|readme|copy|rename|format)\b/.test(text)) return { model: 'sonnet', effort: 'medium', why: 'routine work' }
   return null
+}
+
+// The Staffing brain's pick for one Agent call: the person's latest prompt, the call, the
+// plan task it matches, then the tier and Smart staffing's read to fill in. A mc-* worker's
+// tier is the Manager's own pick: its definition's model stands for the call's, and only the
+// person's word, the plan task's own effort and the Fable rule change it.
+type BrainCall = { model?: string; effort?: string; type: string; description: string }
+const workerModel = (type: string): string | undefined => (isWorker(type) ? TIER_MODEL[tierOf(type)]?.[0]?.toLowerCase() : undefined)
+async function brainFor($: EngineInterface, c: BrainCall): Promise<BrainPick> {
+  const f = await read($, flow).catch(() => null)
+  const task = planTaskFor(f && !f.isFinished ? f : null, c.description)
+  if (isWorker(c.type)) return brainPick({ prompt: lastAsked, model: c.model ?? workerModel(c.type), effort: c.effort, task: task ? { effort: task.effort, why: task.why } : undefined, staff: null })
+  // The last fill-in is one the person turned on: Smart staffing's read, else Autopilot's Haiku for a read-only explorer.
+  const isPiloted = !smartStaffing && c.type === 'Explore' && (await read($, watch).catch(() => null))?.autopilot === true
+  const staff = smartStaffing ? staffFor(c.type, c.description) : isPiloted ? { model: 'haiku', why: 'autopilot: read-only explorer' } : null
+  return brainPick({ prompt: lastAsked, model: c.model, effort: c.effort, task, staff })
+}
+type KeptPick = { pick: BrainPick; given: { model?: string; effort?: string } }
+const brainKey = (id: string | undefined, description: string): string[] => [...(id ? [`id:${id}`] : []), `d:${norm(description)}`]
+// The pick the Agent call made, taken once by its spawn.
+const takeBrainPick = (id: string | undefined, description: string): KeptPick | undefined => {
+  const keys = brainKey(id, description)
+  const kept = keys.map(k => brainPicks.get(k)).find(Boolean)
+  if (kept) for (const k of brainKey(undefined, description).concat(keys)) brainPicks.delete(k)
+  return kept
 }
 
 const priceOf = (model: string, prompt: number): Price => {
@@ -3799,6 +3828,8 @@ const agentSvg = (W: number, a: AgentRun, at: number, hasRule = true): string =>
   const textW = W - 42 - 22
   const H = AGENT_INNER_H
   const sub = [tier === 'other' ? a.type : tierWord(tier)]
+  // The Staffing brain's why, short: the Model and Effort tiles below say what it picked.
+  if (a.why) sub.push(`🧠\uFE0E ${clip(a.why, 32)}`)
   // Over budget is flagged first, so a long activity line never cuts it off.
   if (isOver(a)) sub.push(`⏱\uFE0E ${tkStr().overWord}`)
   // Whole minutes: a reading that changed each second would draw the card again each second.
@@ -3825,7 +3856,8 @@ const plannedSvg = (W: number, p: Planned): string => {
   const tier = p.tier in TIER_COLOR ? p.tier : 'other'
   const color = colorOf(tier)
   const textW = W - 42 - 22
-  const meta = [tierModel(tier)]
+  const meta = [plannedModel(p)]
+  if (p.why) meta.push(`🧠\uFE0E ${clip(p.why, 32)}`)
   if (p.after.length) meta.push(`${tr().after} ${p.after.join(', ')}`)
   return svg(
     W,
@@ -6814,6 +6846,9 @@ async function registerEntryPoints($: EngineInterface): Promise<void> {
               tier: { type: 'string', enum: [...TIERS], description: 'Worker size: fable, heavy, careful, medium or light.' },
               after: { type: 'array', items: { type: 'integer' }, description: 'Numbers of the tasks this one waits for.' },
               ultra: { type: 'boolean', description: ULTRA_TASK_HINT },
+              model: { type: 'string', enum: ['haiku', 'sonnet', 'opus', 'fable'], description: 'The model you picked for this worker (fable only when the user named it). Pass the same on the Agent call.' },
+              effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh', 'max'], description: 'The effort you picked for this worker. Pass the same on the Agent call.' },
+              why: { type: 'string', description: 'One short line: why this model and effort.' },
               minutes: { type: 'integer', minimum: 1, description: "Time budget for this task, in minutes; its sub-agent is flagged once it runs past it. Without the plan's own `minutes`, the tasks' sum is the job's budget." },
             },
             required: ['title', 'tier'],
@@ -6862,7 +6897,7 @@ async function registerEntryPoints($: EngineInterface): Promise<void> {
   }).catch(() => undefined)
   await $.command.register({
     name: 'tokens',
-    description: 'Token Manager: /tokens for a report, budget <dollars|off>, daily <dollars|off>, autopilot <on|off>, staffing <on|off>, guardrails <on|off>, ultra <manager|me|add|remove|list|off> <role>, warm <on|off>, receipt, pr, whatif, rescue, spend today|week|month|<from> <to>, export [period], model <id> <model>',
+    description: 'Token Manager: /tokens for a report, budget <dollars|off>, daily <dollars|off>, autopilot <on|off>, staffing <on|off>, brain <on|off>, ultra <manager|me|add|remove|list|off> <role>, warm <on|off>, receipt, pr, whatif, rescue, spend today|week|month|<from> <to>, export [period], model <id> <model>',
   }).catch(() => undefined)
   await $.command.register(TIMEKEEPER_COMMAND).catch(() => undefined)
 }
@@ -7000,8 +7035,9 @@ export const register: Register = (on, options) => {
     await startTimekeeper($).catch(() => undefined)
     const autopilot = (await $.store.get('autopilot').catch(() => false)) === true
     smartStaffing = (await $.store.get(STAFF_KEY).catch(() => false)) === true
-    modelGuard = (await $.store.get(GUARDRAILS_KEY).catch(() => undefined)) !== false
-    lastAsked = '' // a new session carries no earlier ask for Fable
+    brainOn = (await $.store.get(BRAIN_KEY).catch(() => undefined)) !== false
+    lastAsked = '' // a new session carries no earlier ask for a model or effort
+    brainPicks.clear()
     staffSaved = { session: staffSaved.session, total: Number(await $.store.get(STAFF_SAVED_KEY).catch(() => 0)) || 0 }
     ultraRules = cleanUltraRules(await $.store.get(ULTRA_KEY).catch(() => undefined))
     oneShotMode = cleanOneShot(await $.store.get(ONESHOT_KEY).catch(() => undefined))
@@ -7212,6 +7248,25 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
+  // Staffing brain: the Agent call is where its effort is seen. The pick is made here, set on
+  // the call (model and effort), and kept for the spawn. Off: the call goes through untouched.
+  on('tool.call', { tool: 'Agent' }, async ($, e, next) => {
+    const call = e as unknown as { model?: string; effort?: string; description?: string; subagent_type?: string; tool_use_id?: string }
+    const type = String(call.subagent_type ?? 'general-purpose')
+    if (!brainOn || type === 'fork') return next(e)
+    const description = String(call.description ?? '')
+    const given = { model: call.model, effort: call.effort }
+    const pick = await brainFor($, { model: given.model, effort: given.effort, type, description }).catch(() => undefined)
+    if (!pick) return next(e)
+    for (const k of brainKey(call.tool_use_id, description)) brainPicks.set(k, { pick, given })
+    // The tool takes an alias; a full id the Manager gave and kept stays as it was.
+    const alias = pick.model && familyOf(pick.model) === pick.model ? pick.model : undefined
+    const was = given.model ?? workerModel(type)
+    const model = alias && alias !== was ? alias : undefined
+    const effort = pick.effort && pick.effort !== given.effort ? pick.effort : undefined
+    return next(model || effort ? ({ ...e, ...(model ? { model } : {}), ...(effort ? { effort } : {}) } as typeof e) : e)
+  })
+
   // Safety net: mc-* launches move the faint layer even if the main session forgets to report.
   on('tool.call', { tool: 'Agent' }, async ($, e, next) => {
     const type = String(e.subagent_type ?? '')
@@ -7238,31 +7293,28 @@ export const register: Register = (on, options) => {
     // Autopilot: read-only explorers go to Haiku, unless a model was chosen for them.
     const w = await read($, watch)
     const isReadOnly = e.subagentType === 'Explore'
-    const piloted = w.autopilot && isReadOnly && !e.model ? { ...briefed, model: 'haiku' } : briefed
+    // While the Staffing brain is on it owns model and effort; Autopilot and Smart staffing are its last fill-in (brainFor).
+    const piloted = !brainOn && w.autopilot && isReadOnly && !e.model ? { ...briefed, model: 'haiku' } : briefed
     if (piloted !== briefed) $.ui.toast(`Token Manager: "${clip(e.description, 30)}" runs on Haiku`)
-    const staff = smartStaffing && !e.model && !isWorker(e.subagentType) && piloted === briefed ? staffFor(e.subagentType, e.description) : null
+    const staff = !brainOn && smartStaffing && !e.model && !isWorker(e.subagentType) && piloted === briefed ? staffFor(e.subagentType, e.description) : null
     // Ultra: a role with a rule gets a deep-check brief and max effort from its first request.
     const ultraRule = matchUltra(ultraRules, e.subagentType, e.description)
     // Manager mode: the plan's task with this description may carry the Manager's `ultra: true`.
     // Matched as the panel matches runs to tasks. The person's ⚡ button still beats it later.
-    // The model guardrails read the same plan: a task marked heavy keeps its model.
-    const named = modelGuard && Boolean(e.model) && !e.resume && !isWorker(e.subagentType) && piloted === briefed
-    const plan = (ultraBy === 'manager' && !ultraRule) || named ? await read($, flow) : null
+    const plan = ultraBy === 'manager' && !ultraRule ? await read($, flow) : null
     const livePlan = plan && !plan.isFinished ? plan : null
-    const planned = planTaskFor(livePlan, e.description)
-    // Model guardrails: a model named in the call is only ever lowered, by the same role
-    // reading that Smart staffing uses (`staffFor`). A worker's tier is the Manager's own choice.
-    const capped = named
-      ? guardModel({
-          model: e.model ?? '',
-          type: e.subagentType,
-          description: e.description,
-          staffModel: staffFor(e.subagentType, e.description)?.model,
-          askedFable: asksForFable(lastAsked),
-          isHeavy: Boolean(ultraRule) || planned?.tier === 'heavy' || planned?.tier === 'fable' || planned?.ultra === true,
-        })
-      : null
-    const routed0 = staff?.model ? { ...piloted, model: staff.model } : capped ? { ...piloted, model: capped.model } : piloted
+    // Staffing brain: the pick the Agent call made (it saw the call's effort), else one made
+    // here (a plugin's or a workflow's spawn). Never for a resumed agent or a fork, which inherits.
+    const useBrain = brainOn && !e.resume && !e.fork
+    // A kept pick is this spawn's only if the model came through as the call had it, or as the pick set it.
+    const took = useBrain ? takeBrainPick(e.tool_use_id, e.description) : undefined
+    const kept = took && (e.model === took.given.model || e.model === took.pick.model) ? took : undefined
+    const given = kept?.given ?? { model: e.model }
+    const pick = useBrain ? (kept?.pick ?? (await brainFor($, { model: e.model, type: e.subagentType, description: e.description }).catch(() => undefined))) : undefined
+    const was = given.model ?? workerModel(e.subagentType)
+    const brainModel = pick?.model && pick.model !== was ? pick.model : undefined
+    const isBrainChange = Boolean(brainModel) || Boolean(pick?.effort && pick.effort !== given.effort)
+    const routed0 = brainModel ? { ...piloted, model: brainModel } : staff?.model ? { ...piloted, model: staff.model } : piloted
     const byManager = managerPicks(ultraBy, planTaskFor(livePlan, e.description))
     const isUltraSpawn = Boolean(ultraRule) || byManager
     const routed = isUltraSpawn ? { ...routed0, prompt: withUltraBrief(routed0.prompt) } : routed0
@@ -7282,11 +7334,18 @@ export const register: Register = (on, options) => {
         }
       } else $.ui.toast(`⚡ Ultra: "${clip(e.description, 30)}" runs at max effort with a deep check`)
     }
-    if (capped && started.agentId) {
-      // The saving is counted as for staffing: the requests priced at the model asked for, less the one it ran on.
-      staffBaseline.set(started.agentId, baselineModel(e.model ?? '', FAMILY_LATEST))
-      guardCount += 1
-      $.ui.toast(guardNote(clip(e.description, 30), capped))
+    if (pick && started.agentId) {
+      // Its effort rides every request (turn.step); the person's ⚡ and an Ultra rule still beat it.
+      if (pick.effort) staffEffort.set(started.agentId, pick.effort)
+      if (brainModel) {
+        // Counted as for staffing: the requests priced at the model the call (or the session) would have used, less the one it ran on.
+        const base = was ? baselineModel(was, FAMILY_LATEST) : (await read($, env)).model || (await read($, session)).model
+        if (base) staffBaseline.set(started.agentId, base)
+      }
+      if (isBrainChange) {
+        brainCount += 1
+        $.ui.toast(brainNote(clip(e.description, 30), pick))
+      }
     }
     if (staff && started.agentId) {
       staffEffort.set(started.agentId, staff.effort)
@@ -7332,6 +7391,8 @@ export const register: Register = (on, options) => {
         parentAgentId: e.parentAgentId,
         ...(isUltraSpawn ? { isUltra: true } : {}),
         ...(byManager ? { isUltraByManager: true } : {}),
+        ...(pick?.effort ? { effort: pick.effort } : {}),
+        ...(pick?.why ? { why: pick.why } : {}),
         // Its end queues a report the main loop answers in a turn of its own (one an
         // agent started reports to that agent, a workflow's to its script).
         ...(e.background && !e.workflow && !e.parentAgentId ? { isBackground: true } : {}),
@@ -7382,7 +7443,7 @@ export const register: Register = (on, options) => {
     if (warmTurns.has(e.turnId)) return yield* next(e)
     // A staffed agent asks for the effort its job was given (where the model takes one).
     const staffed = e.agentId ? staffEffort.get(e.agentId) : undefined
-    // Order: the person's ⚡ button > an Ultra rule > Smart staffing > the engine's own.
+    // Order: the person's ⚡ button > an Ultra rule > the Staffing brain (or Smart staffing) > the engine's own.
     const ultra = e.agentId ? isUltraAgent(ultraExplicit.get(e.agentId), ultraFlag.get(e.agentId) === true) : false
     const wanted = resolveEffort(e.effort, staffed, ultra)
     // Timed from the response's first chunk, so the wait for the first token is left out.
@@ -8036,6 +8097,7 @@ export const register: Register = (on, options) => {
           <Text dimColor wrap="truncate-end">
             {'  '}
             {tier === 'other' ? a.type : tierWord(tier)} · {model} · {fmtTokens(a.tokens)} tokens used
+            {a.why ? ` · 🧠 ${clip(a.why, 32)}` : ''}
             {isQuiet(a) ? ` · ⚠ quiet ${fmtTime(at - (a.lastProgressAt ?? a.startedAt))}` : a.status === 'running' && a.activity ? ` · ▸ ${a.activity}` : ''}
             {a.budgetMin ? ` · ⏱ ${budgetLabel(elapsed(a, at), a.budgetMin)}${isOver(a) ? ` ${tkStr().overWord}` : ''}` : ''}
             {a.round > 1 ? ` · ${s.round} ${a.round}` : ''}
@@ -8201,7 +8263,8 @@ export const register: Register = (on, options) => {
                   </Text>
                   <Text dimColor wrap="truncate-end">
                     {'  '}
-                    {tierWord(tier)} · {tierModel(tier)}
+                    {tierWord(tier)} · {plannedModel(pl)}
+                    {pl.why ? ` · 🧠 ${clip(pl.why, 32)}` : ''}
                     {pl.after.length ? ` · ${s.after} ${pl.after.join(', ')}` : ''}
                   </Text>
                 </Box>
@@ -8237,7 +8300,7 @@ export const register: Register = (on, options) => {
     const isNote = e.origin?.kind === 'task-notification'
     if (isNote) await dropNotified($, e.text ?? '').catch(() => undefined)
     const asked = e.isMeta || e.command || !isPersons ? '' : e.text.trim()
-    // The person's latest typed prompt: the guardrails let a Fable agent through only if it names Fable.
+    // The person's latest typed prompt: the Staffing brain reads a named model or effort from it, and lets Fable through only if it names Fable.
     if (asked) lastAsked = asked
     if (!e.isMeta) pendingCommand = isPersons && e.command ? `/${e.command.name}${e.command.args && !looksLikeKey(e.command.args) ? ` ${e.command.args}` : ''}` : '' // a pasted key never becomes a job's name
     // The hidden skin: "tyger tyger" typed while wearing The Mentalist. The prompt goes on unchanged.
@@ -8381,6 +8444,8 @@ export const register: Register = (on, options) => {
     if (e.tools.includes('Agent') && e.tools.length >= mostTools * 0.9) {
       sections.push(oneShotSection(cleanOneShot((await read($, settings)).oneShot ?? oneShotMode)))
       if (ultraBy === 'manager') sections.push(ultraBySection())
+      // The Staffing brain: the Manager decides each worker's model and effort, with a why.
+      if (brainOn) sections.push({ id: 'crab-progress:brain', text: BRAIN_SECTION, scope: 'session' as const })
     }
     return sections.length === composed.sections.length ? composed : { ...composed, sections }
   })
@@ -8721,13 +8786,13 @@ export const register: Register = (on, options) => {
       ),
       opt(
         'opt-staffing',
-        'Each agent gets the model and effort its job needs.',
+        'An agent launched with no model gets one by its job. With the Staffing brain on, only where the Manager and the plan gave none.',
         <Button key="set-staffing" label={`${box(prefs.staffing)} Smart staffing`} plain onPress={async () => setFlag($, 'staffing', !(await read($, settings)).staffing)} />,
       ),
       opt(
-        'opt-guardrails',
-        'Caps the model an agent is launched with: Fable to Opus unless you ask for Fable, checkers, reviewers and researchers to Sonnet, engineers to Sonnet unless the plan marks them heavy.',
-        <Button key="set-guardrails" label={`${box(prefs.guardrails)} Model guardrails`} plain onPress={async () => setFlag($, 'guardrails', !(await read($, settings)).guardrails)} />,
+        'opt-brain',
+        'Picks model + effort per task: the Manager weighs each task and says why. Your own words win; Fable only when you ask for it.',
+        <Button key="set-brain" label={`${box(prefs.brain)} 🧠 Staffing brain`} plain onPress={async () => setFlag($, 'brain', !(await read($, settings)).brain)} />,
       ),
       opt(
         'opt-timekeeper',
@@ -8952,8 +9017,8 @@ export const register: Register = (on, options) => {
       return { text: `${v.label}: ≈${fmtCost(v.cost)} · ${fmtTokens(v.tokens)} ${tr().tokensWord}${note ? ` (${note})` : ''}` }
     }
     // Anything but a report, a budget or autopilot on|off gets the usage line.
-    if ((verb && verb !== 'autopilot' && verb !== 'budget' && verb !== 'warm' && verb !== 'staffing' && verb !== 'guardrails' && verb !== 'ultra' && verb !== 'daily' && verb !== 'receipt' && verb !== 'rescue' && verb !== 'whatif' && verb !== 'pr') || ((verb === 'autopilot' || verb === 'warm') && arg && arg !== 'on' && arg !== 'off')) {
-      return { text: 'Usage: /tokens for a report, /tokens budget <dollars|off>, /tokens autopilot <on|off>, /tokens warm <on|off>, /tokens staffing <on|off>, /tokens guardrails <on|off>, /tokens ultra <manager|me|add|remove|list|off> [role], /tokens daily <dollars|off>, /tokens receipt, /tokens pr, /tokens whatif, /tokens rescue, /tokens spend today|week|month [YYYY-MM]|<from YYYY-MM-DD> <to YYYY-MM-DD>, /tokens export [period], /tokens model <id> <model|off>' }
+    if ((verb && verb !== 'autopilot' && verb !== 'budget' && verb !== 'warm' && verb !== 'staffing' && verb !== 'brain' && verb !== 'guardrails' && verb !== 'ultra' && verb !== 'daily' && verb !== 'receipt' && verb !== 'rescue' && verb !== 'whatif' && verb !== 'pr') || ((verb === 'autopilot' || verb === 'warm') && arg && arg !== 'on' && arg !== 'off')) {
+      return { text: 'Usage: /tokens for a report, /tokens budget <dollars|off>, /tokens autopilot <on|off>, /tokens warm <on|off>, /tokens staffing <on|off>, /tokens brain <on|off>, /tokens ultra <manager|me|add|remove|list|off> [role], /tokens daily <dollars|off>, /tokens receipt, /tokens pr, /tokens whatif, /tokens rescue, /tokens spend today|week|month [YYYY-MM]|<from YYYY-MM-DD> <to YYYY-MM-DD>, /tokens export [period], /tokens model <id> <model|off>' }
     }
     if (verb === 'warm') {
       const isOn = arg !== 'off'
@@ -9024,12 +9089,14 @@ export const register: Register = (on, options) => {
     if (verb === 'staffing') {
       if (arg && arg !== 'on' && arg !== 'off') return { text: 'Usage: /tokens staffing <on|off>' }
       await setFlag($, 'staffing', arg !== 'off')
-      return { text: smartStaffing ? 'Smart staffing on: agents launched without a model get one by job. Reading: Haiku, low effort. Routine edits: Sonnet, medium. Design, review, security and debugging: the session model, high.' : 'Smart staffing off.' }
+      return { text: smartStaffing ? `Smart staffing on: agents launched without a model get one by job. Reading: Haiku, low effort. Routine edits: Sonnet, medium. Design, review, security and debugging: the session model, high.${brainOn ? ' The Staffing brain is on, so it decides first and uses this read only to fill in.' : ''}` : 'Smart staffing off.' }
     }
-    if (verb === 'guardrails') {
-      if (arg && arg !== 'on' && arg !== 'off') return { text: 'Usage: /tokens guardrails <on|off>' }
-      await setFlag($, 'guardrails', arg !== 'off')
-      return { text: modelGuard ? 'Model guardrails on: an Agent call that names a model is capped. Fable goes to Opus unless you ask for Fable; checkers, reviewers, researchers and explorers to Sonnet (Haiku for light reading); engineers to Sonnet unless the plan marks the task heavy or Ultra. Never raised.' : 'Model guardrails off.' }
+    // `guardrails` is the old name: it sets the Staffing brain and says so.
+    if (verb === 'brain' || verb === 'guardrails') {
+      if (arg && arg !== 'on' && arg !== 'off') return { text: `Usage: /tokens ${verb} <on|off>` }
+      if (arg) await setFlag($, 'brain', arg === 'on')
+      const said = brainSaid(brainOn)
+      return { text: verb === 'guardrails' ? `Model guardrails are now the Staffing brain (/tokens brain ${brainOn ? 'off' : 'on'}). ${said}` : said }
     }
     if (verb === 'autopilot') {
       const isOn = arg !== 'off'
@@ -9056,7 +9123,7 @@ export const register: Register = (on, options) => {
         `Token Manager: ${MOOD_WORD[r.mood]}`,
         ...unpriced,
         `Smart staffing ${smartStaffing ? `on${staffSavedText()}` : `off (/tokens staffing on)${staffSavedText()}`} · autopilot ${watched.autopilot ? 'on' : 'off'}`,
-        `Model guardrails ${modelGuard ? `on${guardCount ? ` · ${guardCount} agent${guardCount === 1 ? '' : 's'} lowered this session (savings in the line above)` : ''}` : 'off (/tokens guardrails on)'}`,
+        `🧠 Staffing brain ${brainOn ? `on${brainCount ? ` · ${brainCount} agent${brainCount === 1 ? '' : 's'} staffed this session (savings in the line above)` : ''}` : 'off (/tokens brain on)'}`,
         `${ultraLine((await read($, agents)).filter(a => a.status === 'running' && a.isUltra).length, ultraRules.length)} · decided by ${ultraBy === 'manager' ? 'the Manager (/tokens ultra me)' : 'you (/tokens ultra manager)'}`,
         ...(isApiCredits(BILLING) ? [`${modeChip(BILLING)} · ${spendLine(API_SPEND, dayOf(at), fmtCost)}`] : []),
         `Burn ${fmtTokens(r.burnPerMin)}/min · this task ${fmtTokens(r.taskTokens)} (≈${fmtCost(r.taskCost)})${r.cachedPct === null ? '' : ` · ${r.cachedPct}% cached`}`,
