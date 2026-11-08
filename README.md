@@ -100,7 +100,7 @@ Claude works in steps, calls tools and spins up sub-agents. Mission Control show
 | **Workflow** | The plan's steps, live |
 | **Manager** | The boss card: model, effort, sub-agents, cost and time |
 | **Token Manager** | Burn rate, cost per task, cache hits, budget warnings, optional Haiku autopilot and Smart Keep-Warm |
-| **Crew** | Every agent by role in one long list, however big the crew, plus a hierarchy from the manager down. **Collapse** folds the whole list into a short view; **▾ Finished** folds finished agents and steps into one line each. Both are remembered. |
+| **Crew** | Every agent at work by role in one long list, however big the crew, the newest finished ones beside them and one "+N more finished" row for the rest of a long session, plus a hierarchy from the manager down. When a skin's cards add up to more than the app can draw, the pane gives up its decoration a part at a time (replay log first), never the whole pane. **Collapse** folds the whole list into a short view; **▾ Finished** folds finished agents and steps into one line each. Both are remembered. |
 | **Memory** | Answer rules Claude follows in every session (`/prefs`) |
 | **Settings** | ☑ open on start · ☑ crew mode · currency · ☑ sounds · change skin |
 

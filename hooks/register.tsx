@@ -3838,6 +3838,8 @@ ${statusMark(mx(W, W - 8), 16, 'planned', color)}
   )
 }
 
+// What the short view's crabs may weigh together, in characters.
+const COMPACT_MAX = 60_000
 const compactSvg = (W: number, list: AgentRun[], planned: Planned[], t: ReturnType<typeof totals>, at = 0): string => {
   const icons = [
     ...list.filter(a => a.status === 'running').map(a => ({ k: costumeOf(a.type), c: colorOf(tierOf(a.type)), s: isQuiet(a) ? 'quiet' : 'running', dim: false })),
@@ -3845,19 +3847,25 @@ const compactSvg = (W: number, list: AgentRun[], planned: Planned[], t: ReturnTy
     ...planned.map(p => ({ k: p.tier in TIER_COLOR ? p.tier : 'other', c: colorOf(p.tier), s: 'planned', dim: true })),
   ]
   const fit = Math.max(1, Math.floor((W - 150) / 36))
-  const shown = icons.slice(0, fit)
+  // A themed crab can weigh several kB: the row stops adding them at COMPACT_MAX, whatever the width, so the short
+  // view (the very last resort) never goes past what one drawing may hold.
+  let spent = 0
+  const parts: string[] = []
+  for (const [i, ic] of icons.slice(0, fit).entries()) {
+    const part =
+      rowCrab(W, i * 36, 0, ic.k, ic.dim, ic.s === 'running') +
+      (ic.s === 'running'
+        ? `<circle class="live" cx="${mx(W, i * 36 + 32)}" cy="4" r="3" fill="${ic.c}"/>`
+        : ic.s === 'quiet'
+          ? `<circle cx="${mx(W, i * 36 + 15)}" cy="16" r="15" fill="none" stroke="#E5675E" stroke-width="2"/><text x="${mx(W, i * 36 + 32)}" y="8" text-anchor="middle" font-size="9" fill="#E5675E">⚠\uFE0E</text>`
+          : '')
+    if (parts.length && spent + part.length > COMPACT_MAX) break
+    spent += part.length
+    parts.push(part)
+  }
+  const shown = parts
   const more = icons.length - shown.length
-  const body = shown
-    .map(
-      (ic, i) =>
-        rowCrab(W, i * 36, 0, ic.k, ic.dim, ic.s === 'running') +
-        (ic.s === 'running'
-          ? `<circle class="live" cx="${mx(W, i * 36 + 32)}" cy="4" r="3" fill="${ic.c}"/>`
-          : ic.s === 'quiet'
-            ? `<circle cx="${mx(W, i * 36 + 15)}" cy="16" r="15" fill="none" stroke="#E5675E" stroke-width="2"/><text x="${mx(W, i * 36 + 32)}" y="8" text-anchor="middle" font-size="9" fill="#E5675E">⚠\uFE0E</text>`
-            : ''),
-    )
-    .join('')
+  const body = parts.join('')
   const x = shown.length * 36 + (more ? 4 : 0)
   return svg(
     W,
@@ -4072,6 +4080,30 @@ const rowHeight = (r: TreeRow): number => (r.kind === 'role' ? ROLE_H : isSlim(r
 const MAX_CARDS = 4
 // When the finished rows must fold into one, this many stay to be opened.
 const KEEP_DONE = 3
+// Finished agents that keep a row of their own; the rest of a long session are one "+N more finished" chip.
+const DONE_SHOWN = 8
+// The pane's fallbacks, richest first: the first that fits what the app can draw is drawn. A part goes only when the one
+// before it was not enough. `cards` is how many running agents keep a full card, `keep` how many finished ones a row of
+// their own, `org` which hierarchy drawing, `drop` the sections left out.
+type PaneStep = { lite: boolean; cards: number; keep: number; org: 'rich' | 'light' | ''; drop: readonly string[] }
+const NO_DROP: ReadonlySet<string> = new Set()
+const PANE_STEPS: readonly PaneStep[] = (() => {
+  const steps: PaneStep[] = [{ lite: false, cards: MAX_CARDS, keep: DONE_SHOWN, org: 'rich', drop: [] }]
+  const then = (change: Partial<PaneStep>) => steps.push({ ...(steps[steps.length - 1] as PaneStep), ...change })
+  then({ lite: true })
+  then({ cards: 2 })
+  then({ cards: 0 })
+  steps.push({ lite: true, cards: MAX_CARDS, keep: DONE_SHOWN, org: 'light', drop: [] })
+  then({ cards: 2 })
+  then({ cards: 0 })
+  then({ keep: KEEP_DONE })
+  then({ drop: ['log', 'legends', 'boot'] })
+  then({ drop: ['log', 'legends', 'boot', 'cred', 'breach'] })
+  then({ drop: ['log', 'legends', 'boot', 'cred', 'breach', 'today'] })
+  then({ org: '', drop: ['log', 'legends', 'boot', 'cred', 'breach', 'today', 'session'] })
+  then({ drop: ['log', 'legends', 'boot', 'cred', 'breach', 'today', 'session', 'tokens', 'status'] })
+  return steps
+})()
 // Past this many slim rows each costs too much with its crab: they are drawn without.
 const MAX_CRAB_ROWS = 20
 
@@ -7602,14 +7634,33 @@ export const register: Register = (on, options) => {
     // gets a slim live row, so a big crew stays listed in full and under the app's
     // size limit. A card that ends hands its place to the next. A running agent the
     // person opened keeps its card over and above those.
-    const treeWith = (cards: number): TreeRow[] => {
+    // The finished rows kept in a row of their own: the newest few (and any opened, or standing over work
+    // still going); the rest are one "+N more finished" chip, so a long session does not grow the pane.
+    const recency = new Map(finished.map((a, i) => [a.id, i]))
+    const trimDone = (all: TreeRow[], keep: number): TreeRow[] => {
+      const units: { id: string; rank: number }[] = []
+      let reach = -1
+      all.forEach((r, i) => {
+        if (i <= reach || r.kind !== 'agent' || !r.folded) return
+        const end = all.findIndex((n, j) => j > i && n.depth <= r.depth)
+        const under = all.slice(i + 1, end < 0 ? undefined : end)
+        if (!under.every(n => n.kind === 'agent' && n.folded)) return
+        reach = end < 0 ? all.length : end - 1
+        units.push({ id: r.a.id, rank: Math.min(...[r, ...under].map(n => (n.kind === 'agent' ? recency.get(n.a.id) ?? 0 : 0))) })
+      })
+      const drop = new Set(units.sort((a, b) => a.rank - b.rank).slice(keep).map(u => u.id))
+      return drop.size ? withoutRows(all, drop) : all
+    }
+    const treeWith = (cards: number, keep = DONE_SHOWN): TreeRow[] => {
       const slim = new Set(e.surface === 'desktop' ? rows.flatMap(r => (r.kind === 'agent' && r.a.status === 'running' && !opened.has(r.a.id) ? [r.a.id] : [])).slice(cards) : [])
-      return rows.map(r => (r.kind === 'agent' ? { ...r, folded: r.a.status !== 'running' && !opened.has(r.a.id), slim: slim.has(r.a.id) } : r))
+      return trimDone(rows.map(r => (r.kind === 'agent' ? { ...r, folded: r.a.status !== 'running' && !opened.has(r.a.id), slim: slim.has(r.a.id) } : r)), keep)
     }
     const tree = treeWith(MAX_CARDS)
-    // Finished agents folded away by the person: one summary line stands for them.
-    const listed = new Set(rows.flatMap(r => (r.kind === 'agent' ? [r.a.id] : [])))
-    const hiddenDone = p.isDoneCollapsed ? finished.filter(a => !listed.has(a.id)) : []
+    // Finished agents with no row of their own (folded away by the person, or past the newest few): one summary chip stands for them.
+    const missingDone = (shown: TreeRow[]): AgentRun[] => {
+      const listed = new Set(shown.flatMap(r => (r.kind === 'agent' ? [r.a.id] : [])))
+      return finished.filter(a => !listed.has(a.id))
+    }
     const toggleOpen = (id: string) =>
       setPaneView($, prev => {
         const set = new Set(prev.expanded ?? [])
@@ -7759,10 +7810,11 @@ export const register: Register = (on, options) => {
         some.length > 0 && <Svg key={isLive ? 'more-working' : 'more-done'} source={moreSvg(W, some, isLive)} alt={moreAlt(some, isLive)} />
       // The cards stack in plain flow: the desktop pane draws nothing for a tree that
       // lays them over a full-height grid with an absolute Box.
-      const full = (picture: string, shown: TreeRow[], done: AgentRun[], lite = false) => (
+      const full = (picture: string, shown: TreeRow[], lite = false, drop: ReadonlySet<string> = NO_DROP) => (
         <Box flexDirection="column" {...(fill ? { backgroundColor: fill } : {})}>
           <Box flexDirection="column" alignItems={align}>
-            {egg ? (
+            {movie && drop.has('cred') ? <Svg key="think-mark" source={movie} alt="THINK, MARK" /> : null}
+            {egg && !drop.has('boot') ? (
               <Box key="boot" marginBottom={1}>
                 <Svg
                   source={th ? (th.bootDraw ? th.bootDraw(W) : bootStrip(W, SKIN.colors, FONT, ...th.boot)) : bootStrip(W, SKIN.colors, FONT, 'JACKING IN…', egg === 'corpo' ? 'ARASAKA NETWORK › IDENTITY VERIFIED › ACCESS GRANTED' : egg === 'samurai' ? 'WAKE UP, SAMURAI › AMPS ON › LIVE AT THE ATLANTIS' : egg === 'netrun' ? 'JACKED IN › DIVING THE NET › ICE BYPASSED' : 'LINK ESTABLISHED › NEURAL HANDSHAKE OK › ICE BYPASSED')}
@@ -7776,13 +7828,13 @@ export const register: Register = (on, options) => {
                 alt={usageAlt(info)}
               />
             </Box>
-            <Box key="today" flexDirection="column" marginBottom={1}>
+            {drop.has('today') ? null : <Box key="today" flexDirection="column" marginBottom={1}>
               <Svg
                 source={todaySvg(W, day, spent)}
                 alt={`${spent.isToday ? `Today: ${day.tasks} tasks, ${day.agents} agents, ${fmtTokens(day.tokens)} tokens, ≈${fmtCost(day.costUsd)}` : `${spent.label}: ≈${fmtCost(spent.cost)}, ${fmtTokens(spent.tokens)} ${s.tokensWord}, ${spent.days} ${s.spend.days.toLowerCase()}`}${spent.isReading ? `. ${s.spend.reading}` : ''}`}
               />
-            </Box>
-            {egg ? (
+            </Box>}
+            {egg && !drop.has('cred') ? (
               <Box key="cred" marginBottom={1} flexDirection="column">
                 <Svg
                   source={th ? paneFinish(((src: string) => (th.roamer ? overlayInto(src, th, { at: clockNow, ctxPct: info.contextPct, party: (boss.celebrateUntil ?? 0) > clockNow }) : src))(th.cred.card ? th.cred.card(W, streetCred, SKIN.colors, FONT, cardShape) : credCard(W, streetCred, SKIN.colors, FONT, cardShape, th.cred.title, '', th.cred.ranks, th.cred.words)), th, 'cred', clockNow, info.contextPct, (boss.celebrateUntil ?? 0) > clockNow, boss.isWorking) : credCard(W, streetCred, SKIN.colors, FONT, cardShape, egg === 'samurai' ? 'ROCKERBOY CRED' : 'STREET CRED', 'ストリートクレッド', egg === 'samurai' ? rockerRankOf : rankOf)}
@@ -7799,16 +7851,16 @@ export const register: Register = (on, options) => {
                 alt={`Workflow: ${steps.map(st => `${st.title} ${st.state}`).join(', ') || 'nothing running'}`}
               />
             </Box>
-            <Box key="status" flexDirection="row" flexWrap="wrap" gap={2} marginBottom={1}>
+            {drop.has('status') ? null : <Box key="status" flexDirection="row" flexWrap="wrap" gap={2} marginBottom={1}>
               <Svg source={shotChip.svg} alt={`Plan mode: ${oneShotChipWord(shotMode)}`} width={shotChip.W} height={24} />
               <Svg source={guardChip.svg} alt={guardText} width={guardChip.W} height={24} />
-            </Box>
-            {bg.length > 0 && (
+            </Box>}
+            {bg.length > 0 && !drop.has('status') && (
               <Box key="background" marginBottom={1}>
                 <Svg source={bgSvg(W, bg, ago)} alt={bgAlt(bg, ago)} />
               </Box>
             )}
-            {egg ? (
+            {egg && !drop.has('breach') ? (
               <Box key="breach" marginBottom={1}>
                 <Svg
                   source={th ? paneCard(th.card.draw(W, boss.task, boss.isWorking, steps.filter(st => st.state === 'done').length, steps.length, SKIN.colors, FONT, cardShape, legends, steps.map(st => ({ title: st.title, state: st.state, note: st.note }))), th, 'task', clockNow, info.contextPct, (boss.celebrateUntil ?? 0) > clockNow, boss.isWorking) : breachCard(W, steps.filter(st => st.state === 'done').length, steps.length, boss.isWorking, egg, FONT, cardShape)}
@@ -7816,7 +7868,7 @@ export const register: Register = (on, options) => {
                 />
               </Box>
             ) : null}
-            {egg && !th?.legends.hidden ? (
+            {egg && !th?.legends.hidden && !drop.has('legends') ? (
               <Box key="legends" marginBottom={1}>
                 <Svg
                   source={legendsCard(W, legends, egg, FONT, fmtCost, cardShape)}
@@ -7824,7 +7876,7 @@ export const register: Register = (on, options) => {
                 />
               </Box>
             ) : null}
-            {egg ? (
+            {egg && !drop.has('log') ? (
               <Box key="bd" flexDirection="column" marginBottom={1}>
                 <Svg
                   source={th ? paneCard(hackInto(th.log.draw(W, beats, pick, SKIN.colors, FONT, cardShape), th, { at: clockNow, ctxPct: info.contextPct, card: 'log', party: (boss.celebrateUntil ?? 0) > clockNow }), th, 'log', clockNow, info.contextPct, (boss.celebrateUntil ?? 0) > clockNow, boss.isWorking) : braindanceCard(W, beats, pick, SKIN.colors, FONT, cardShape, egg === 'samurai' ? 'SETLIST' : 'BRAINDANCE')}
@@ -7843,12 +7895,12 @@ export const register: Register = (on, options) => {
               source={managerSvg(W, bossCard, info, title, t, list.length, clockNow, managerProgress(f, list, boss, clockNow), waitingOn, managerEstimate(f, list, boss, clockNow))}
               alt={`Manager: ${boss.task || 'idle'}${bossCard.isWorking ? ', working' : waitingOn ? `, ${s.bgWaiting(waitingOn)}` : outcomeWord(boss) ? `, ${outcomeWord(boss).toLowerCase()}` : ''}. ${summary}`}
             />
-            <Box key="tokens" marginTop={1} marginBottom={1}>
+            {drop.has('tokens') ? null : <Box key="tokens" marginTop={1} marginBottom={1}>
               <Svg
                 source={tokenSvg(W, report, boss.isWorking)}
                 alt={`Token Manager: ${MOOD_WORD[report.mood]}. ${report.tips.map(tp => tp.text).join('. ')}`}
               />
-            </Box>
+            </Box>}
             {boss.task ? (
               <Box key="receipt" flexDirection="row" gap={2} marginBottom={1}>
                 <Button
@@ -7914,27 +7966,31 @@ export const register: Register = (on, options) => {
                 </Box>
               ),
             )}
-            {moreRow([...done, ...hiddenDone], false)}
+            {moreRow(missingDone(shown), false)}
             {isEmpty && (SKIN.dark ? <Text color={SKIN.colors.subtext}>No sub-agents yet. They show up here, under the manager, by role.</Text> : <Text dimColor>No sub-agents yet. They show up here, under the manager, by role.</Text>)}
-            {section('h-org', 'Hierarchy')}
-            {orgPicture(picture)}
-            {section('h-session', 'Memory')}
-            <Svg key="session" source={sessionSvg(W, info, rules, isWorking)} alt={sessionAlt(info, rules)} />
+            {picture ? section('h-org', 'Hierarchy') : null}
+            {picture ? orgPicture(picture) : null}
+            {drop.has('session') ? null : section('h-session', 'Memory')}
+            {drop.has('session') ? null : <Svg key="session" source={sessionSvg(W, info, rules, isWorking)} alt={sessionAlt(info, rules)} />}
             {settingsLinks}
           </Box>
         </Box>
       )
-      // The app draws a blank pane for a tree past its size limit: the first that fits
-      // wins, every agent kept in a row of its own for as long as one can be. Everything;
-      // then the slim rows without their crabs; then the hierarchy's light drawing;
-      // then fewer cards; then the finished rows folded into one (all but the first
-      // few, the opened ones and any with a card under them); at last the short view.
+      // The app draws a blank pane for a tree past its size limit, so the pane steps down, one part at a time, to the
+      // first layout that fits: every running agent stays in a row of its own for as long as one can be, the finished
+      // ones are the newest few and a "+N more finished" chip. Down the steps: the slim rows without their crabs; fewer
+      // cards; the hierarchy's light drawing; fewer finished rows; then the least important sections go, one group
+      // at a time (the replay log, the legends and the boot line; the level and task cards; today; the hierarchy and
+      // the memory card; the token manager and the status chips); the short view is the very last resort.
       const rich = orgSource(W, org)
+      let lightOrg: string | undefined
+      const light = (): string => (lightOrg ??= orgSvg(W, org, true))
       // Measured as sent, each source compacted once per drawing however many fallbacks hold it.
-      const sent = new Map<string, number>()
-      // A theme's big eggs (THE FIGHT, the showdown) sit between `<!--dl-->` markers: not counted, a reserve is kept instead while a job works.
-      // The cutscene plays with or without a job, and its cards are not counted either: it keeps its reserve for all of its 65 s.
+      // A theme's big eggs (THE FIGHT, the showdown) sit between `<!--dl-->` markers: not counted, a reserve is kept instead,
+      // so the layout never changes as they come and go. Only while a job works (the fight plays only then), and only for
+      // the theme that has them; THINK, MARK's reserve only for its 65 s. The steps below make room for it, a part at a time.
       const reserve = Math.max(th?.paneReserve && (isWorking || boss.isWorking) ? th.paneReserve : 0, isInv() && thinkMarkLive(INV_FX, clockNow) ? 100_000 : 0)
+      const sent = new Map<string, number>()
       const lengthOf = (src: string): number => sent.get(src) ?? sent.set(src, sentLength(src.includes('<!--dl-->') ? src.replace(/<!--dl-->[\s\S]*?<!--\/dl-->/g, '') : src)).get(src) ?? src.length
       const sizeOf = (v: unknown): number => drawnChars(v, lengthOf)
       // Level `level` of the fallbacks fits: with room to spare when richer than the last drawn.
@@ -7943,42 +7999,19 @@ export const register: Register = (on, options) => {
         paneLevel = level
         return keep(v)
       }
+      const stepView = (st: PaneStep) => full(st.org === 'rich' ? rich : st.org === 'light' ? light() : '', treeWith(st.cards, st.keep), st.lite, new Set(st.drop))
       // A crew with more slim rows than crabs can fit skips drawing them all to measure.
       const isCrowd = tree.filter(isSlim).length > MAX_CRAB_ROWS
-      const view = isCrowd ? null : full(rich, tree, [])
-      if (view && fits(0, sizeOf(view))) return take(0, view)
-      const lite = full(rich, tree, [], true)
-      const liteSize = sizeOf(lite)
-      if (fits(1, liteSize)) return take(1, lite)
-      const fewer = [2, 0].map(cards => full(rich, treeWith(cards), [], true))
-      const fewerSize = fewer.map(sizeOf)
-      for (const [i, v] of fewer.entries()) if (fits(2 + i, fewerSize[i] ?? Infinity)) return take(2 + i, v)
-      const light = orgSvg(W, org, true)
-      if (fits(4, liteSize - lengthOf(rich) + lengthOf(light))) return take(4, full(light, tree, [], true))
-      for (const [i, cards] of [2, 0].entries())
-        if (fits(5 + i, (fewerSize[i] ?? Infinity) - lengthOf(rich) + lengthOf(light))) return take(5 + i, full(light, treeWith(cards), [], true))
-      const foldFinished = (rows: TreeRow[]) => {
-        const fold = new Set(
-          rows.flatMap((r, i) => {
-            if (r.kind !== 'agent' || !r.folded) return []
-            const end = rows.findIndex((n, j) => j > i && n.depth <= r.depth)
-            const under = rows.slice(i + 1, end < 0 ? undefined : end)
-            return under.every(n => n.kind === 'agent' && n.folded) ? [r.a.id] : []
-          }).slice(KEEP_DONE),
-        )
-        const shown = fold.size ? withoutRows(rows, fold) : rows
-        const kept = new Set(shown.flatMap(r => (r.kind === 'agent' ? [r.a.id] : [])))
-        return { isFolded: fold.size > 0, shown, done: rows.flatMap(r => (r.kind === 'agent' && !kept.has(r.a.id) ? [r.a] : [])) }
+      for (const [level, st] of PANE_STEPS.entries()) {
+        if (level === 0 && isCrowd) continue
+        const view = stepView(st)
+        if (fits(level, sizeOf(view))) return take(level, view)
       }
-      const lean = foldFinished(treeWith(0))
-      if (lean.isFolded) {
-        const leanView = full(light, lean.shown, lean.done, true)
-        if (fits(7, sizeOf(leanView))) return take(7, leanView)
-      }
+      const base = PANE_STEPS.length
       const short = compactView(rich)
-      if (fits(8, sizeOf(short))) return take(8, short)
-      const shorter = compactView(light)
-      return fits(9, sizeOf(shorter)) ? take(9, shorter) : take(10, compactView(''))
+      if (fits(base, sizeOf(short))) return take(base, short)
+      const shorter = compactView(light())
+      return fits(base + 1, sizeOf(shorter)) ? take(base + 1, shorter) : take(base + 2, compactView(''))
     }
 
     // Terminal: the same content in text rows.
