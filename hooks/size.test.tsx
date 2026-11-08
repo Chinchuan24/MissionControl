@@ -105,32 +105,29 @@ for (const skin of ['cyberpunk-2077', 'default'])
         expect(s.buttons).toContain('Collapse')
       })
 
-test('a finished crew opened card by card stays drawable, down to the short view and back', async ($, on) => {
+test('a finished crew opened card by card stays drawable and stays the full view, giving up its decoration a part at a time', async ($, on) => {
   await crew($, on, 'cyberpunk-2077', 12)
   for (let i = 1; i <= 12; i++) await $.turn.complete({ agentId: `a${i}`, reason: 'answer', answer: 'ok' } as never)
   const ui = await mount($, 120)
-  // Open every folded agent, one by one, while the pane offers one.
+  // Open every folded agent, one by one, while the pane offers one (the newest few finished have a row; the rest are one chip).
   let opened = 0
   for (; opened < 12; opened++) {
     const s = size(await ui.drawn())
     fits(s)
-    expect(s.alts.some(a => a.startsWith('Hierarchy:'))).toBe(true)
+    // Never the short view: the usage card and the finished toggle stay.
+    expect(s.alts.some(a => a.startsWith('Usage:'))).toBe(true)
     const open = (await ui.findAll({ type: 'Button' })).find(b => String(b.props.label) === 'Open ▸')
     if (!open) break
     await ui.press({ key: String(open.props.key) })
   }
   expect(opened).toBeGreaterThan(2)
-  // Too many cards for the app: the short view, with the crew's picture and a way back.
-  const short = size(await ui.drawn())
-  fits(short)
-  expect(short.alts.some(a => a.startsWith('Usage:'))).toBe(false)
-  expect(short.alts.some(a => a.startsWith('Hierarchy:'))).toBe(true)
-  expect(short.buttons).toContain('Fold the opened agents')
-  await ui.press({ key: 'fold-all' })
-  const back = size(await ui.drawn())
+  // Eight cards open: the pane has given up parts of its decoration, not the full view.
+  const last = size(await ui.drawn())
+  fits(last)
+  expect(last.alts.some(a => a.startsWith('Usage:'))).toBe(true)
+  expect(last.alts.filter(a => a.startsWith('Task number')).length).toBeGreaterThanOrEqual(8)
+  expect(last.alts.some(a => a.startsWith('Manager:'))).toBe(true)
   await ui.unmount()
-  fits(back)
-  expect(back.alts.some(a => a.startsWith('Usage:'))).toBe(true)
 })
 
 // A folded (finished) row and its "Open ▸" button end at the pane's edge, as the running
