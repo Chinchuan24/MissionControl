@@ -16,8 +16,6 @@ import { TOASTS, bashToast, cmdKind, fxOf, mcgillNow, resultFailed, toastDue } f
 import type { BashState, Fx, ToastKey } from './bettercallsaul-fx'
 import { UNPLUG_GAP_MS, shouldUnplug } from './bettercallsaul-extra'
 import { CLASSIC_RE, GUARDIANS_RE, NEW_SUIT_RE, THINK_RE } from './invincible-eggs'
-import { MOVIE_RESERVE, TM_KIND, thinkMarkFx, thinkMarkLive, thinkMarkSolo } from './invincible-thinkmark'
-import { clearThinkMarkTimers, scheduleThinkMark } from './invincible-thinkmark-timers'
 import { ERA1, ERA2, TITLE_WORDS as INV_WORDS } from './invincible'
 import { VERBS as INV_VERBS } from './invincible-cards'
 import { BYE_CAPRI_RE, CAPRICORN_RE, CAPRI_WORD_RE, ER2_FONT, ER2_TOOLS, ER2_WORDS } from './edgerunners2'
@@ -2025,7 +2023,7 @@ const readAppLight = async ($: EngineInterface): Promise<boolean> => {
 }
 const calFace = (): 'dark' | 'light' => (CAL_MODE.mode === 'auto' ? (APP_LIGHT ? 'light' : 'dark') : CAL_MODE.mode)
 const calNext = (): CalMode => (CAL_MODE.mode === 'dark' ? 'light' : CAL_MODE.mode === 'light' ? 'auto' : 'dark')
-// The last typed Invincible word that draws something (`think, mark`, `guardians`), and the context last seen (THINK, MARK plays by itself when it first passes 95%).
+// The last typed Invincible word that draws something (`think, mark`, `guardians`), and the context last seen (Omni-Man drops in by himself when it first passes 95%).
 let INV_FX: { kind: string; at: number } | undefined
 let INV_CTX = 0
 const isInv = (): boolean => SKIN.id === 'invincible'
@@ -2359,11 +2357,6 @@ async function loadSkins($: EngineInterface): Promise<{ folder: string; loaded: 
 function applySkin(k: Skin): void {
   // The reveal belongs to the unlock; any other switch drops it.
   if (k.id !== 'heisenberg') BB_REVEAL_AT = 0
-  // Leaving Invincible ends the cutscene; wearing it again (an era switch, a reload) leaves it playing, its redraws still waiting.
-  if (k.id !== 'invincible') {
-    clearThinkMarkTimers()
-    if (INV_FX?.kind === TM_KIND) INV_FX = undefined
-  }
   // The hidden CAPRICORN id is an alias: Edgerunners 2 in CAPRI mode, the palette of the mode below.
   if (k.id === 'capricorn') k = EDGERUNNERS2_SKIN
   if (k.id === 'edgerunners-2' && ER2.mode === 'capri') {
@@ -2523,10 +2516,7 @@ let er2Dismissed = false
 async function er2ContextRule($: EngineInterface, ctx: number): Promise<void> {
   er2Ctx = ctx
   // Invincible: the first time the context passes 95% Omni-Man drops in with his line.
-  if (isInv() && ctx >= 95 && INV_CTX < 95) {
-    const at = await $.clock.now().catch(() => Date.now())
-    if (!thinkMarkLive(INV_FX, at)) INV_FX = { kind: 'think', at }
-  }
+  if (isInv() && ctx >= 95 && INV_CTX < 95) INV_FX = { kind: 'think', at: await $.clock.now().catch(() => Date.now()) }
   INV_CTX = ctx
   if (ctx < 95) er2Dismissed = false
   if (SKIN.id !== 'edgerunners-2') return
@@ -7012,7 +7002,6 @@ export const register: Register = (on, options) => {
     await update($, er2Mode, () => er2Pack(ER2))
     INV_ERA = { era: (await $.store.get('invEra').catch(() => undefined)) === 2 ? 2 : 1, since: 0 }
     INV_FX = undefined
-    clearThinkMarkTimers()
     INV_CTX = 0
     await update($, invEra, () => invPack(INV_ERA))
     const savedCal = await $.store.get('calMode').catch(() => undefined)
@@ -7836,11 +7825,8 @@ export const register: Register = (on, options) => {
       )
       // The short view. Forced when the full one is too big for the app to draw: it
       // keeps the crew's picture and offers the ways back to the full view.
-      // THINK, MARK keeps the stage here too: the short view has no cards to carry it, so the picture comes first as an Svg of its own.
-      const movie = isInv() ? thinkMarkSolo(INV_FX, clockNow, W) : ''
       const compactView = (picture?: string) => (
         <Box flexDirection="column" gap={1} alignItems={align} {...(SKIN.backdrop.fill ? { backgroundColor: SKIN.backdrop.fill } : {})}>
-          {movie ? <Svg key="think-mark" source={movie} alt="THINK, MARK" /> : null}
           <Svg source={compactSvg(W, list, planned, t, clockNow)} alt={`${list.length} ${s.agentsCount}${quietCount ? `, ⚠ ${quietCount} quiet` : ''}, ${summary}`} />
           {picture === undefined ? (
             toggleCompact
@@ -7874,7 +7860,6 @@ export const register: Register = (on, options) => {
       const full = (picture: string, shown: TreeRow[], lite = false, drop: ReadonlySet<string> = NO_DROP) => (
         <Box flexDirection="column" {...(fill ? { backgroundColor: fill } : {})}>
           <Box flexDirection="column" alignItems={align}>
-            {movie && drop.has('cred') ? <Svg key="think-mark" source={movie} alt="THINK, MARK" /> : null}
             {egg && !drop.has('boot') ? (
               <Box key="boot" marginBottom={1}>
                 <Svg
@@ -8049,8 +8034,8 @@ export const register: Register = (on, options) => {
       // Measured as sent, each source compacted once per drawing however many fallbacks hold it.
       // A theme's big eggs (THE FIGHT, the showdown) sit between `<!--dl-->` markers: not counted, a reserve is kept instead,
       // so the layout never changes as they come and go. Only while a job works (the fight plays only then), and only for
-      // the theme that has them; THINK, MARK's reserve only for its 65 s. The steps below make room for it, a part at a time.
-      const reserve = Math.max(th?.paneReserve && (isWorking || boss.isWorking) ? th.paneReserve : 0, isInv() && thinkMarkLive(INV_FX, clockNow) ? MOVIE_RESERVE : 0)
+      // the theme that has them. The steps below make room for it, a part at a time.
+      const reserve = th?.paneReserve && (isWorking || boss.isWorking) ? th.paneReserve : 0
       const sent = new Map<string, number>()
       const lengthOf = (src: string): number => sent.get(src) ?? sent.set(src, sentLength(src.includes('<!--dl-->') ? src.replace(/<!--dl-->[\s\S]*?<!--\/dl-->/g, '') : src)).get(src) ?? src.length
       const sizeOf = (v: unknown): number => drawnChars(v, lengthOf)
@@ -8354,14 +8339,8 @@ export const register: Register = (on, options) => {
       const toNew = NEW_SUIT_RE.test(asked)
       const toOld = CLASSIC_RE.test(asked)
       if (toNew !== toOld) await setInvEra($, toNew ? 2 : 1).catch(() => false)
-      if (THINK_RE.test(asked)) {
-        INV_FX = thinkMarkFx(at)
-        // The pane is drawn again after every cut: a draw carries the shot playing and the next (see invincible-thinkmark.ts).
-        scheduleThinkMark((ms, fn) => $.clock.after(ms, fn), at, at, t => { void update($, paneTick, () => t).catch(() => undefined) })
-      } else if (GUARDIANS_RE.test(asked)) {
-        INV_FX = { kind: 'showdown', at }
-        clearThinkMarkTimers()
-      }
+      if (THINK_RE.test(asked)) INV_FX = { kind: 'think', at }
+      else if (GUARDIANS_RE.test(asked)) INV_FX = { kind: 'showdown', at }
     }
     // Edgerunners 2's two modes (the prompt goes on unchanged): "bye capri" sends her back to D (checked first); the whole word
     // "capri" in any case, or the third episode's title "0+2=1" (which toggles), lets her in.
