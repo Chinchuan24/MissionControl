@@ -48,9 +48,11 @@ export const variantsBlocked = (startAt: number, endAt: number): boolean => {
 }
 /** THE MULTIVERSE: one seeded time a day between 10:00 and 21:00 local, never within 10 s of the fight or the showdown (either era). */
 export const variantsPlan = (at: number) => {
-  const day = Math.floor(at / 86_400_000)
   const d0 = new Date(at)
   d0.setHours(10, 0, 0, 0)
+  // The seed is the LOCAL date's day number: a UTC day number flips mid-evening west of UTC (morning east of +10), re-rolling
+  // the day's time halfway through it, so the act played twice or not at all. Same number as before wherever that never happened.
+  const day = Math.floor(Date.UTC(d0.getFullYear(), d0.getMonth(), d0.getDate()) / 86_400_000)
   for (let i = 0; i < 6; i++) {
     const startAt = d0.getTime() + Math.floor(unit(`inv-variants|${day}|${i}`) * 11 * 3_600_000)
     const endAt = startAt + VARIANTS_MS
@@ -74,10 +76,12 @@ export const CTR = 'class="dl-c"'
 export const BASE_CSS = `.dl-c{transform-box:fill-box;transform-origin:50% 50%}.dl-still{display:none}`
 export const opOnly = (name: any, ons: any) => {
   // ons: [[from, to, op]] windows where the thing shows; 0 elsewhere.
+  // Offsets keep 2 decimals: kf's 1-decimal rounding could put `a` and `a + 0.1` on one offset (53.75 and 53.85 both 53.8),
+  // and there the later frame wins, so a hard cut became a slow fade from the frame before.
   const f: any[] = [[0, 'opacity:0']]
   for (const [a, b, op] of ons) f.push([a, 'opacity:0'], [a + 0.1, `opacity:${op}`], [b, `opacity:${op}`], [b + 0.1, 'opacity:0'])
   f.push([100, 'opacity:0'])
-  return kf(name, f.sort((x: any, y: any) => x[0] - y[0]))
+  return `@keyframes ${name}{${f.sort((x: any, y: any) => x[0] - y[0]).map(([p, v]: [number, string]) => `${+(+p).toFixed(2)}%{${v}}`).join('')}}`
 }
 export const GUARDIANS = ['INV_REDRUSH', 'INV_DARKWING', 'INV_WARWOMAN', 'INV_IMMORTAL', 'INV_GREENGHOST', 'INV_AQUARUS', 'INV_MARTIANMAN']
 export const SD = (t: any) => (t / 7.4) * 100

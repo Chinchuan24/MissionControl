@@ -7,7 +7,7 @@ import { BADGES, RANKS, VERBS, coverCard, coverHeight, pageCard, rankOf, tierOf,
 import { ACT_LEN, ACT_OFF, BAND_CUT, FIGHT_CSS, FIGHT_MS, FIGHT_PANE_RESERVE, FRAME_KEYS, chainOfAct, fightAct, fightBand, frameSprite } from './invincible-fight'
 import { CAMEO_CSS, CAM_JITTER_MS, CAM_SLOT_MS, CECIL_LINES, DUR_MS, EVE_LINE, OLIVER_LINE, camBlocked, camDue, camExtras, camPlanOfSlot } from './invincible-cameos'
 import type { CamPlan } from './invincible-cameos'
-import { AHEAD_MS, CLASSIC_RE, DUEL_MS, GUARDIANS_RE, NEW_SUIT_RE, SHOWDOWN_MS, SWAP_MS, THINK_RE, VARIANTS_MS, VARIANTS_RE, VARIANTS_SOLO_RE, duelPlan, fightDue, isVariantsAsk, showdown, showdownDue, showdownPlan, slotPlan, variantsDue, variantsPlan } from './invincible-eggs'
+import { AHEAD_MS, CLASSIC_RE, DUEL_MS, GUARDIANS_RE, NEW_SUIT_RE, SHOWDOWN_MS, SWAP_MS, THINK_RE, VARIANTS_MS, VARIANTS_RE, VARIANTS_SOLO_RE, duelPlan, fightDue, isVariantsAsk, opOnly, showdown, showdownDue, showdownPlan, slotPlan, variantsDue, variantsPlan } from './invincible-eggs'
 import { VARIANTS_CSS, variants } from './invincible-variants'
 import * as VS from './invincible-variants-sprites'
 import { CSS, EPISODES, ERA1, ERA2, PROPS, SP, TITLE_WORDS, condW, contrast, episodeAt, monoW, sansW, unit as unitOf } from './invincible'
@@ -1040,6 +1040,25 @@ test('multiverse: once a day at a seeded time between 10:00 and 21:00 local, nev
     }
   }
   expect(on).toBeGreaterThanOrEqual(55)
+})
+test('multiverse: one plan per LOCAL day (the seed never re-rolls mid-day, so never twice, never skipped)', () => {
+  // A UTC day number re-rolled the seed at local midnight-minus-offset: here (UTC+8) at 08:00, west of UTC mid-evening, where
+  // the day's time could then come round twice or not at all. Every hour of a local date must see the same plan.
+  for (let day = 0; day < 60; day++) {
+    const d = new Date(NOW + day * 86_400_000)
+    const at = (h: number, m = 0): number => new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, m).getTime()
+    const p = variantsPlan(at(0, 30))
+    for (const [h, m] of [[7, 59], [8, 1], [12, 0], [16, 59], [17, 1], [20, 59], [23, 30]] as const) expect(variantsPlan(at(h, m)).startAt, `day ${day} ${h}:${m}`).toBe(p.startAt)
+  }
+})
+test('opOnly: every frame keeps its own offset (1-decimal rounding put 53.75 and 53.85 on 53.8: a cut became a fade)', () => {
+  const css = opOnly('x', [[44.4, 53.75, 1]])
+  expect(css).toContain('53.75%{opacity:1}')
+  expect(css).toContain('53.85%{opacity:0}')
+  for (let a = 0.05; a < 99; a += 0.05) {
+    const offs = [...opOnly('x', [[a, a + 0.5, 1]]).matchAll(/([\d.]+)%\{/g)].map(m => m[1])
+    expect(new Set(offs).size, `a=${a}`).toBe(offs.length)
+  }
 })
 test('multiverse: cameos are never inside its window, over 30 days', () => {
   let checked = 0
