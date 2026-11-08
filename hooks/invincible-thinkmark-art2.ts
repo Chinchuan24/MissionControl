@@ -1265,81 +1265,70 @@ export const TM2_P_MARK_BLINK: Sprite = {
   rim: false,
 }
 
-// patch on TM_OMNI_MED at (20,17), 24x8, 14 px
+// patch on TM_OMNI_MED at (68,15), 26x6, 35 px
 export const TM2_P_MED_BLINK: Sprite = {
   rows: [
-    "........................",
-    "........................",
-    "........................",
-    "...fff.........f.f......",
-    "..cfc.........c.cc......",
-    "...c.c.........c........",
-    "........................",
-    "........................",
+    "..........................",
+    "..........................",
+    "....mmmm.........mmmm.m...",
+    "....ddddddd......ddd.ddd..",
+    "...mmmmm..m......mmmmmmm..",
+    "..........................",
   ],
-  pal: { c: '#191111', f: '#C99078' },
+  pal: { d: '#030202', m: '#BF826F' },
   rim: false,
 }
 
-// patch on TM_OMNI_MED at (24,33), 16x6, 6 px
+// patch on TM_OMNI_MED at (74,33), 12x4, 14 px
 export const TM2_P_MED_MOUTH_AGAPE: Sprite = {
   rows: [
-    "................",
-    "................",
-    "................",
-    ".....cccccc.....",
-    "................",
-    "................",
+    "............",
+    "..dddddddd..",
+    "...dddddd...",
+    "............",
   ],
-  pal: { c: '#191111' },
+  pal: { d: '#030202' },
   rim: false,
 }
 
-// patch on TM_OMNI_CRY at (20,21), 26x10, 9 px
+// patch on TM_OMNI_CRY at (68,15), 26x6, 49 px
 export const TM2_P_CRY_EYES_SHUT: Sprite = {
   rows: [
     "..........................",
+    "..nnnnn...n.......nnnnnnn.",
+    "......nn.bn......b.nnn.nn.",
+    "..nbbbbbbnn........bbbbbn.",
+    "..nnnnn..nn........nnnn...",
     "..........................",
-    "..........................",
-    "..........................",
-    "..........................",
-    "...cic............ccc.....",
-    "..........................",
-    "....i.....................",
-    "....i.....................",
-    "....c.....................",
   ],
-  pal: { c: '#181010', i: '#C99179' },
+  pal: { b: '#060303', n: '#A55A4B' },
   rim: false,
 }
 
-// patch on TM_OMNI_CRY at (24,38), 18x7, 6 px
+// patch on TM_OMNI_CRY at (74,32), 12x7, 26 px
 export const TM2_P_CRY_MOUTH_QUIVER: Sprite = {
   rows: [
-    "..................",
-    "..................",
-    "..................",
-    "......cccccc......",
-    "..................",
-    "..................",
-    "..................",
+    "............",
+    "....bbbbb...",
+    "...bbbbbbb..",
+    "............",
+    "...bbbbbbb..",
+    "...ccccccc..",
+    "............",
   ],
-  pal: { c: '#181010' },
+  pal: { b: '#060303', c: '#DC8D6C' },
   rim: false,
 }
 
-// patch on TM_OMNI_UP at (26,24), 16x7, 5 px
+// patch on TM_OMNI_UP at (70,24), 18x4, 19 px
 export const TM2_P_UP_MOUTH_OPEN: Sprite = {
   rows: [
-    "................",
-    "................",
-    "................",
-    ".....eeeee......",
-    "................",
-    "................",
-    "................",
+    "..................",
+    "...d..ddddddddd...",
+    ".....ddddddddd....",
+    "..................",
   ],
-  pal: { e: '#161112' },
+  pal: { d: '#040202' },
   rim: false,
 }
 
@@ -1463,27 +1452,27 @@ export const TM2_PATCH_AT: Record<string, { parent: string; x: number; y: number
  },
  "TM2_P_MED_BLINK": {
   "parent": "TM_OMNI_MED",
-  "x": 20,
-  "y": 17
+  "x": 68,
+  "y": 15
  },
  "TM2_P_MED_MOUTH_AGAPE": {
   "parent": "TM_OMNI_MED",
-  "x": 24,
+  "x": 74,
   "y": 33
  },
  "TM2_P_CRY_EYES_SHUT": {
   "parent": "TM_OMNI_CRY",
-  "x": 20,
-  "y": 21
+  "x": 68,
+  "y": 15
  },
  "TM2_P_CRY_MOUTH_QUIVER": {
   "parent": "TM_OMNI_CRY",
-  "x": 24,
-  "y": 38
+  "x": 74,
+  "y": 32
  },
  "TM2_P_UP_MOUTH_OPEN": {
   "parent": "TM_OMNI_UP",
-  "x": 26,
+  "x": 70,
   "y": 24
  },
  "TM2_P_KNEEL_C_MOUTH": {
