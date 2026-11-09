@@ -442,6 +442,21 @@ test('showdown: at its daily time, ahead and live; once that day, never twice', 
   const late = showdownPlan(p.endAt + 60_000, 1)
   expect(late.startAt + 0 <= p.endAt + 60_000 && p.endAt + 60_000 < late.endAt).toBe(false)
 })
+test('showdown: one plan per LOCAL day (the seed never re-rolls mid-day, so never twice, never skipped)', () => {
+  // The seed was the UTC day number, which re-rolled at local midnight-minus-offset (here, UTC+8, at 08:00; west of UTC
+  // mid-evening), so the day's time could come round twice or not at all. Every hour of a local date must see the same plan,
+  // and the next local date a new one.
+  for (const era of [1, 2] as const) {
+    for (let day = 0; day < 60; day++) {
+      const d = new Date(NOW + day * 86_400_000)
+      const at = (h: number, m = 0, plus = 0): number => new Date(d.getFullYear(), d.getMonth(), d.getDate() + plus, h, m).getTime()
+      const p = showdownPlan(at(0, 30), era)
+      for (const [h, m] of [[7, 59], [8, 1], [12, 0], [16, 59], [17, 1], [20, 59], [23, 30]] as const) expect(showdownPlan(at(h, m), era).startAt, `era ${era} day ${day} ${h}:${m}`).toBe(p.startAt)
+      expect(showdownPlan(at(0, 30, 1), era).bucket, `era ${era} day ${day}`).toBe(p.bucket + 1)
+      expect(new Date(showdownPlan(at(0, 30, 1), era).startAt).getDate()).toBe(new Date(at(12, 0, 1)).getDate())
+    }
+  }
+})
 // --- layout ----------------------------------------------------------------------------------------------------------------
 type Box = { l: number; r: number; t: number; b: number; s: string }
 const widthOf = (font: string, s: string, size: number, ls: number, bold: boolean): number => (/Avenir/.test(font) ? condW(s, size, ls) : /monospace|Menlo/.test(font) ? monoW(s, size) + s.length * ls : sansW(s, size, ls, bold))
