@@ -22,7 +22,7 @@
 <p align="center">
   <img alt="MIT license" src="https://img.shields.io/badge/license-MIT-2B2320?style=flat-square">
   <img alt="Platforms" src="https://img.shields.io/badge/Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-E76F51?style=flat-square&labelColor=2B2320&label=runs%20on">
-  <img alt="Skins" src="https://img.shields.io/badge/skins-11%20%2B%205%20hidden-FCEE0A?style=flat-square&labelColor=0A0A0F">
+  <img alt="Skins" src="https://img.shields.io/badge/skins-12%20%2B%207%20hidden-FCEE0A?style=flat-square&labelColor=0A0A0F">
 </p>
 
 ---
@@ -170,7 +170,7 @@ Pick one in the **Skins** tab (a gallery of preview cards), with `/skins` (a liv
 | 🔴 Arasaka | `arasaka` | Corporate red and black. Saburo at the top, Smasher on call. |
 | ✂️ Edgerunners 2 | `edgerunners-2` | D's optics: a cobalt glass HUD. Capri visits. |
 
-The first seven ship with Core; the last four need the Cyberpunk add-on. Six more skins are hidden: see [Easter eggs](#-easter-eggs).
+The first eight ship with Core; the last four need the Cyberpunk add-on. Seven more skins are hidden: see [Easter eggs](#-easter-eggs).
 
 <details open>
 <summary><b>⚪ default</b> · Core</summary>

@@ -1,5 +1,5 @@
 // The Boys: the pane cards, each a new component (no other skin's card with new labels).
-//   Q-SCORE (the level card): a Vought talent contract with a headshot, the BRAND APPROVAL dial and a peg-wall of 9 boxed action
+//   Q-SCORE (the level card): a Vought talent contract with a headshot, the STAR POWER dial and a peg-wall of 9 boxed action
 //     figures (the badges: a lit blister pack, COMING SOON, or ??? for the secret).
 //   CRISIS DESK (the task card and the closed jobs): SITUATION, the steps as talking points stamped SPUN / SPINNING / PENDING, the
 //     Compound V syringe, a HOLDING STATEMENT, and the PRESS RELEASES stack with its CONTAINED stamps.
@@ -138,7 +138,7 @@ export const credCard = (W: number, c: Cred, m: Mode, o: { fresh?: string } = {}
   s.push(`<rect x="${hx}" y="${hy}" width="84" height="96" fill="${m === 'book' ? '#2A2D32' : '#13214A'}"/><rect x="${hx}" y="${hy}" width="84" height="96" fill="none" stroke="#C9A13B" stroke-width="1.4"/>`)
   s.push(px(bust, hx + 42 - (spW(bust) * 1.9) / 2, hy + 96 - spH(bust) * 1.9 + 1, 1.9, { rows: [0, Math.min(spH(bust), Math.floor(95 / 1.9))] }))
   s.push(`<circle cx="${hx + 76}" cy="${hy + 90}" r="12" fill="#C9A13B"/><circle cx="${hx + 76}" cy="${hy + 90}" r="9.5" fill="none" stroke="#F0D27A" stroke-dasharray="1.5 1.5"/>${C(hx + 76, hy + 94, String(level), 10, '#0A1430', 'text-anchor="middle"')}`)
-  // the BRAND APPROVAL dial: progress to the next level (a half gauge)
+  // the STAR POWER dial: progress to the next level (a half gauge; named apart from the band's live APPROVAL meter)
   const dx = hx + 84 + 24 + 50
   const dy = hy + 64
   const R = 44
@@ -152,7 +152,7 @@ export const credCard = (W: number, c: Cred, m: Mode, o: { fresh?: string } = {}
   const na = Math.PI + pct * Math.PI
   s.push(`<path d="M${dx} ${dy}L${r1(dx + (R - 10) * Math.cos(na))} ${r1(dy + (R - 10) * Math.sin(na))}" stroke="${PROPS.paperInk}" stroke-width="2"/><circle cx="${dx}" cy="${dy}" r="3.5" fill="${PROPS.paperInk}"/>`)
   s.push(T(dx, dy + 18, `${Math.round(pct * 100)}%`, 15, 700, PROPS.paperInk, 'text-anchor="middle" font-variant-numeric="tabular-nums"'))
-  s.push(M(dx, dy - R - 6, m === 'book' ? 'HEAT ON HIM' : m === 'gold' ? 'CHART CLIMB' : 'BRAND APPROVAL', 7.5, '#4A4E5A', 'text-anchor="middle" letter-spacing="1"'))
+  s.push(M(dx, dy - R - 6, m === 'book' ? 'HEAT ON HIM' : m === 'gold' ? 'CHART CLIMB' : 'STAR POWER', 7.5, '#4A4E5A', 'text-anchor="middle" letter-spacing="1"'))
   // the terms
   const tx = dx + R + 22
   const tw = cx + cw - 10 - tx
