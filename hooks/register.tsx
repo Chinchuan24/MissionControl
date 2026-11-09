@@ -21,10 +21,11 @@ import type { BashState, Fx, ToastKey } from './bettercallsaul-fx'
 import { UNPLUG_GAP_MS, shouldUnplug } from './bettercallsaul-extra'
 import { CLASSIC_RE, GUARDIANS_RE, NEW_SUIT_RE, SWAP_MS, THINK_RE, isVariantsAsk } from './invincible-eggs'
 import { ERA1, ERA2, TITLE_WORDS as INV_WORDS } from './invincible'
-import { BOOK as TB_BOOK, BRAND as TB_BRAND, GOLD as TB_GOLD } from './theboys'
+import { BOOK as TB_BOOK, BRAND as TB_BRAND, GOLD as TB_GOLD, NOIR as TB_NOIR } from './theboys'
 import type { Mode as BoysMode } from './theboys'
 import { GREETINGS as TB_GREETINGS } from './theboys-theme'
-import { REPLAYS as TB_REPLAYS, SPIN_BOOK, SPIN_BRAND, SPIN_GOLD, TOOLS_BRAND as TB_TOOLS, TOOLS_GOLD as TB_TOOLS_GOLD, boysEvent, fireTyped as tbFire, parseCounts, prToast, resetBoys, scoreEnd, boysState, setBoysFx, setInFlight, toastOk as tbToastOk, typed as tbTyped } from './theboys-eggs'
+import { COST_STEPS as TB_COST_STEPS, CURTAIN_RE as TB_CURTAIN_RE, IDLE_NAP_MS as TB_IDLE_MS, idleFor as tbIdleFor, isCompaction as tbIsCompaction, isNight as tbIsNight, localDay as tbDay, noteBusy as tbNoteBusy, quiet as tbQuiet, resetEvents as tbResetEvents, resetShow as tbResetShow, toolEnd as tbToolEnd, toolStart as tbToolStart } from './theboys-show'
+import { REPLAYS as TB_REPLAYS, SPIN_BOOK, SPIN_BRAND, SPIN_GOLD, SPIN_NOIR, TOOLS_BRAND as TB_TOOLS, TOOLS_GOLD as TB_TOOLS_GOLD, boysEvent, errRun as tbErrRun, inFlight as tbInFlight, toolOk as tbToolOk, fireTyped as tbFire, parseCounts, prToast, resetBoys, scoreEnd, boysState, setBoysFx, setInFlight, toastOk as tbToastOk, typed as tbTyped } from './theboys-eggs'
 import { VERBS as INV_VERBS } from './invincible-cards'
 import { BYE_CAPRI_RE, CAPRICORN_RE, CAPRI_WORD_RE, ER2_FONT, ER2_TOOLS, ER2_WORDS } from './edgerunners2'
 import { CAPRI_MODE, ER2_MODE_DEFAULT } from './edgerunners2-duet'
@@ -813,6 +814,7 @@ async function bumpToday($: EngineInterface, change: Partial<Omit<Today, 'date'>
     if (level > was) {
       capWarned = { date, level }
       $.ui.toast(level === 2 ? `‼ Daily cap hit: ≈${fmtCost(todayCostUsd)} of ${fmtCost(dailyCapUsd)} today` : `! ${Math.round(pct)}% of today's ${fmtCost(dailyCapUsd)} cap used`)
+      if (level === 2 && isBoys()) for (const t of boysEvent('cap', { at: await $.clock.now().catch(() => Date.now()), mode: boysWorn() })) tbToast($, t)
     }
   }
 }
@@ -1951,13 +1953,14 @@ const calFaceOf = (k: Skin, face: 'dark' | 'light'): Skin => {
 // or `soldier boy` typed while wearing it, or `/skin solidgold`; `back on ice` goes back. It has its own secret flag
 // (cred.found 'solidgold'), never the shared `samurai` one. The Boys and its characters belong to Eric Kripke, Garth Ennis, Darick
 // Robertson, Sony Pictures Television and Amazon MGM Studios, used as fan homage only.
+const tbPal = (m: BoysMode) => (m === 'book' ? TB_BOOK : m === 'gold' ? TB_GOLD : m === 'noir' ? TB_NOIR : TB_BRAND)
 const boysColors = (m: BoysMode): SkinColors => {
-  const P = m === 'book' ? TB_BOOK : m === 'gold' ? TB_GOLD : TB_BRAND
+  const P = tbPal(m)
   return { accent: P.a, accent2: P.aT, done: P.done, warn: P.warn, alert: P.alert, meter: P.a, text: P.text, subtext: P.sub, muted: P.muted, tile: P.tile, track: P.track, line: P.line, grid: P.tile2 }
 }
 const boysLook = (k: Skin, m: BoysMode): Skin => {
-  const P = m === 'book' ? TB_BOOK : m === 'gold' ? TB_GOLD : TB_BRAND
-  return { ...k, cast: m === 'book' ? 'boys2' : m === 'gold' ? 'solidgold' : 'boys', colors: boysColors(m), boss: [...P.boss], roles: [...P.roles], backdrop: { fill: P.bg, pattern: m === 'book' ? 'lines' : 'dots', ink: P.dots }, words: m === 'book' ? [...SPIN_BOOK] : m === 'gold' ? [...SPIN_GOLD] : [...SPIN_BRAND] }
+  const P = tbPal(m)
+  return { ...k, cast: m === 'book' ? 'boys2' : m === 'gold' ? 'solidgold' : m === 'noir' ? 'boysnoir' : 'boys', colors: boysColors(m), boss: [...P.boss], roles: [...P.roles], backdrop: { fill: P.bg, pattern: m === 'book' ? 'lines' : 'dots', ink: P.dots }, words: m === 'book' ? [...SPIN_BOOK] : m === 'gold' ? [...SPIN_GOLD] : m === 'noir' ? [...SPIN_NOIR] : [...SPIN_BRAND] }
 }
 const BOYS_SKIN: Skin = {
   id: 'the-boys',
@@ -1992,8 +1995,26 @@ const SOLIDGOLD_SKIN: Skin = {
   backdrop: { fill: TB_GOLD.bg, pattern: 'dots', ink: TB_GOLD.dots },
   tabs: { mission: '◉\uFE0E Mission Control', skins: '◉\uFE0E Skins' },
 }
+// THIS MEANS NOIR, the second hidden skin (Black Noir's silent stage, after his 1979 picture): `this means noir` typed while wearing
+// The Boys, or `/skin noir`; `curtain call` goes back. A real quiet mode: the skin's toasts are `…`, the crawl stops, the spinner
+// nods. Its own secret flag (cred.found 'noir'), separate from SOLID GOLD's and from the shared `samurai` one.
+const NOIR_SKIN: Skin = {
+  ...BOYS_SKIN,
+  id: 'noir',
+  cast: 'boysnoir',
+  hidden: true,
+  name: 'THIS MEANS NOIR',
+  description: 'The hidden silent one: near-black, gunmetal and one amber light.',
+  colors: boysColors('noir'),
+  boss: [...TB_NOIR.boss],
+  roles: [...TB_NOIR.roles],
+  words: [...SPIN_NOIR],
+  toolWords: TB_TOOLS,
+  backdrop: { fill: TB_NOIR.bg, pattern: 'dots', ink: TB_NOIR.dots },
+  tabs: { mission: '▪\uFE0E Mission Control', skins: '▪\uFE0E Skins' },
+}
 
-const BUILT_IN_SKINS: Skin[] = [DEFAULT_SKIN, CRAB_SKIN, CALIPER_SKIN, MENTALIST_SKIN, BREAKING_BAD_SKIN, CYBER_SKIN, ARASAKA_SKIN, LUCY_SKIN, SAMURAI_SKIN, RED_JOHN_SKIN, HEISENBERG_SKIN, BETTER_CALL_SAUL_SKIN, GENE_SKIN, INVINCIBLE_SKIN, BOYS_SKIN, SOLIDGOLD_SKIN, EDGERUNNERS2_SKIN, CAPRICORN_SKIN]
+const BUILT_IN_SKINS: Skin[] = [DEFAULT_SKIN, CRAB_SKIN, CALIPER_SKIN, MENTALIST_SKIN, BREAKING_BAD_SKIN, CYBER_SKIN, ARASAKA_SKIN, LUCY_SKIN, SAMURAI_SKIN, RED_JOHN_SKIN, HEISENBERG_SKIN, BETTER_CALL_SAUL_SKIN, GENE_SKIN, INVINCIBLE_SKIN, BOYS_SKIN, SOLIDGOLD_SKIN, NOIR_SKIN, EDGERUNNERS2_SKIN, CAPRICORN_SKIN]
 
 // Only plain colour and font values reach the drawings: a skin file cannot
 // smuggle markup into an Svg.
@@ -2081,9 +2102,18 @@ let BOYS_MODE: { mode: 'brand' | 'book'; since: number } = { mode: 'brand', sinc
 let BOYS_GOLD_SINCE = 0
 // The Boys' spoiler setting (`boysSpoilers`, OFF by default): the finale and death eggs act only while it is on.
 let BOYS_SPOILERS = false
-const isBoys = (): boolean => SKIN.id === 'the-boys' || SKIN.id === 'solidgold'
-const boysWorn = (): BoysMode => (SKIN.id === 'solidgold' ? 'gold' : BOYS_MODE.mode)
-const boysSwapAt = (): number | undefined => (SKIN.id === 'solidgold' ? (BOYS_GOLD_SINCE > 0 ? BOYS_GOLD_SINCE : undefined) : BOYS_MODE.since > 0 ? BOYS_MODE.since : undefined)
+const isBoys = (): boolean => SKIN.id === 'the-boys' || SKIN.id === 'solidgold' || SKIN.id === 'noir'
+const boysWorn = (): BoysMode => (SKIN.id === 'solidgold' ? 'gold' : SKIN.id === 'noir' ? 'noir' : BOYS_MODE.mode)
+// The Boys' own toasts, quieted to `…` while THIS MEANS NOIR is worn.
+const tbToast = ($: EngineInterface, text: string): void => { $.ui.toast(tbQuiet(text, SKIN.id === 'noir')) }
+// Phase 3's memory: the context last seen (85 / 95 / compaction), the night already announced, the cost steps passed, the idle
+// stretch's eggs, a lint that failed.
+let TB_CTX = 0
+let TB_NIGHT = 0
+let TB_COST = 0
+let TB_IDLE = { from: 0, ten: false }
+let TB_LINT_FAILED = false
+const boysSwapAt = (): number | undefined => (SKIN.id === 'solidgold' || SKIN.id === 'noir' ? (BOYS_GOLD_SINCE > 0 ? BOYS_GOLD_SINCE : undefined) : BOYS_MODE.since > 0 ? BOYS_MODE.since : undefined)
 const swapAtNow = (): number | undefined => (isInv() && INV_ERA.since > 0 ? INV_ERA.since : isBoys() ? boysSwapAt() : undefined)
 // Caliper's setting (dark, light, auto; only this is stored) and the app's theme from /config (for auto). The atom packs
 // `mode|since|appIsLight` for the drawers; `since` is 0 after a restart. The resolved face is never stored.
@@ -2462,6 +2492,7 @@ function applySkin(k: Skin): void {
   // The Boys' mode: ON BRAND or OFF BOOK, the same skin; SOLID GOLD is its own (hidden) skin.
   if (k.id === 'the-boys') k = boysLook(k, BOYS_MODE.mode)
   if (k.id === 'solidgold') k = boysLook(k, 'gold')
+  if (k.id === 'noir') k = boysLook(k, 'noir')
   // Caliper's face: dark, light, or the app's (auto).
   if (k.id === 'caliper') {
     k = calFaceOf(k, calFace())
@@ -2485,7 +2516,7 @@ async function foundSecret($: EngineInterface, k: Skin): Promise<void> {
   $.ui.toast(themed ? THEMES[themed].greeting : GREETING.samurai)
   if (!themed) void play($, `${ADDON}/assets/done-samurai.wav`)
   // Quiet: the badge's chime would cut the band's own. SOLID GOLD keeps its own flag: the shared one is never touched.
-  if (k.id === 'solidgold') await bumpCred($, c => withFound(c, 'solidgold'), true).catch(() => false)
+  if (k.id === 'solidgold' || k.id === 'noir') await bumpCred($, c => withFound(c, k.id), true).catch(() => false)
   else await bumpCred($, c => (c.samurai ? c : { ...c, samurai: true, xp: c.xp + 50 }), true).catch(() => false)
 }
 
@@ -2501,38 +2532,76 @@ async function setBoysMode($: EngineInterface, mode: 'brand' | 'book'): Promise<
   return true
 }
 // Puts on (or takes off) SOLID GOLD, the hidden skin: the transition is pinned to now.
-async function wearBoys($: EngineInterface, id: 'the-boys' | 'solidgold'): Promise<void> {
+async function wearBoys($: EngineInterface, id: 'the-boys' | 'solidgold' | 'noir'): Promise<void> {
   const k = SKINS.get(id)
   if (!k) return
-  BOYS_GOLD_SINCE = await $.clock.now().catch(() => Date.now())
+  BOYS_GOLD_SINCE = id === 'noir' ? 0 : await $.clock.now().catch(() => Date.now())
   applySkin(k)
   await $.store.set('skin', k.id).catch(() => undefined)
   await update($, skin, () => k.id)
   await retitle($).catch(() => undefined)
-  if (id === 'solidgold') await foundSecret($, k).catch(() => undefined)
-  else $.ui.toast('Back in storage.')
+  const from = SKIN_FROM
+  SKIN_FROM = id
+  if (id === 'solidgold' || id === 'noir') await foundSecret($, k).catch(() => undefined)
+  else if (from === 'noir') {
+    setBoysFx('curtain', BOYS_GOLD_SINCE + 2_300)
+    $.ui.toast('Curtain call. (Noir bows.)')
+  } else $.ui.toast('Back in storage.')
+}
+let SKIN_FROM = ''
+// The Boys' clock eggs, once a second while worn: E15 idle (10 min: Terror trots in and naps; 20 min: a line, once a session),
+// E14 after midnight (midnight to 5 AM local, once a night), E16 the session's cost passing $1, $5 and $20.
+async function boysTick($: EngineInterface, at: number, busy: boolean): Promise<void> {
+  const mode = boysWorn()
+  const out: string[] = []
+  if (busy || TB_IDLE.from === 0) {
+    TB_IDLE = { from: at, ten: false }
+    tbNoteBusy(at)
+  } else if (at - TB_IDLE.from >= TB_IDLE_MS && !TB_IDLE.ten) {
+    TB_IDLE = { ...TB_IDLE, ten: true }
+    out.push(...boysEvent('idle10', { at, mode }))
+  } else if (at - TB_IDLE.from >= 2 * TB_IDLE_MS && tbIdleFor(at) >= 2 * TB_IDLE_MS) out.push(...boysEvent('idle20', { at, mode }))
+  if (tbIsNight(at) && TB_NIGHT !== tbDay(at)) {
+    TB_NIGHT = tbDay(at)
+    out.push(...boysEvent('midnight', { at, mode }))
+  }
+  const usd = (await read($, env)).costUsd
+  for (const [step, ev] of TB_COST_STEPS) if (usd >= step && TB_COST < step) out.push(...boysEvent(ev, { at, mode }))
+  TB_COST = Math.max(TB_COST, usd)
+  for (const t of out) tbToast($, t)
 }
 // The Boys: VOUGHT PR SPIN (M2). A tool call that comes back with an error flag gets a toast in press-speak (OFF BOOK: the real line,
 // LEAKED), at most one a minute; the APPROVAL dips and the FOCUS GROUP marks the call red. A garnish only.
 async function boysSpin($: EngineInterface, tool: string, res: unknown): Promise<void> {
   const r = res as { isError?: boolean; is_error?: boolean; error?: unknown; result?: unknown } | null
-  if (!r || typeof r !== 'object' || !(r.isError === true || r.is_error === true || Boolean(r.error))) return
+  if (!r || typeof r !== 'object' || !(r.isError === true || r.is_error === true || Boolean(r.error))) {
+    tbToolOk()
+    return
+  }
   const at = await $.clock.now().catch(() => Date.now())
-  boysEvent('tool-error', { at, mode: boysWorn(), tool })
+  const mode = boysWorn()
+  boysEvent('tool-error', { at, mode, tool })
   const text = typeof r.error === 'string' ? r.error : typeof r.result === 'string' ? r.result : 'error'
-  if (tbToastOk('spin', at, 60_000)) $.ui.toast(prToast(tool, text, boysWorn()))
+  // E6 permission denied, E22 a network tool down, E18 three in a row: their own eggs (and their toasts) first.
+  const extra = [
+    ...(/permission|denied|not permitted|EACCES/i.test(text) ? boysEvent('permission', { at, mode, tool, text }) : []),
+    ...(/^Web(?:Fetch|Search)$/.test(tool) ? boysEvent('net-error', { at, mode, tool, text }) : []),
+    ...(tbErrRun() === 3 ? boysEvent('errors3', { at, mode, tool }) : []),
+  ]
+  for (const t of extra) tbToast($, t)
+  if (!extra.length && tbToastOk('spin', at, 60_000)) $.ui.toast(prToast(tool, text, mode))
 }
 // `/missioncontrol play <name>` while The Boys is worn: the shared registry in theboys-eggs.ts (later phases add rows to it).
 async function boysReplay($: EngineInterface, name: string): Promise<string> {
   const r = TB_REPLAYS.find(x => x.name === name)
-  if (!r) return `Play which? ${TB_REPLAYS.map(x => x.name).join(', ')}`
+  if (!r) return `Play which? The Boys has ${TB_REPLAYS.length}: ${TB_REPLAYS.filter(x => SKIN.id === 'noir' || !['curtain'].includes(x.name)).map(x => x.name).join(', ')}`
   const at = await $.clock.now().catch(() => Date.now())
   const out = r.run(at, boysWorn())
   if (out.mode && SKIN.id === 'the-boys' && (out.mode === 'brand' || out.mode === 'book')) {
     if (!(await setBoysMode($, out.mode).catch(() => false))) return out.mode === 'book' ? 'Already off book.' : 'Already on brand.'
   }
   if (out.fx) setBoysFx(out.fx, at)
-  if (out.toast) $.ui.toast(out.toast)
+  if (out.toast) tbToast($, out.toast)
   await update($, bandTick, () => at)
   await update($, paneTick, () => at)
   return `▶ ${name}`
@@ -2673,6 +2742,14 @@ let er2Ctx = 0
 let er2Dismissed = false
 async function er2ContextRule($: EngineInterface, ctx: number): Promise<void> {
   er2Ctx = ctx
+  // The Boys: E10 at 85%, E11 at 95% (each when crossed going up), E5 when the context drops like a compaction or a /clear.
+  if (isBoys()) {
+    const at = await $.clock.now().catch(() => Date.now())
+    const mode = boysWorn()
+    const evs = tbIsCompaction(TB_CTX, ctx) ? boysEvent('compact', { at, mode }) : ctx >= 95 && TB_CTX < 95 ? boysEvent('ctx95', { at, mode }) : ctx >= 85 && TB_CTX < 85 ? boysEvent('ctx85', { at, mode }) : []
+    TB_CTX = ctx
+    for (const t of evs) tbToast($, t)
+  }
   // Invincible: the first time the context passes 95% Omni-Man drops in with his line.
   if (isInv() && ctx >= 95 && INV_CTX < 95) INV_FX = { kind: 'think', at: await $.clock.now().catch(() => Date.now()) }
   INV_CTX = ctx
@@ -6096,7 +6173,12 @@ const noteUnplug = (at: number): void => {
 }
 const running4 = (running: number, at: number): void => {
   if (isBcs() && shouldUnplug([], at, running)) noteUnplug(at)
-  if (isBoys()) setInFlight(running, at)
+  if (isBoys()) {
+    const was = tbInFlight()
+    setInFlight(running, at)
+    // E13: 4+ in flight sends A-Train across (TURBO RUSH); the streak stays while they run.
+    if (running >= 4 && was < 4) boysEvent('turbo', { at, mode: boysWorn() })
+  }
 }
 // A pane card with the theme's per-card roaming acts (Mike peeks at the log, sits on the task card) and rare eggs spliced in.
 const paneCard = (src: string, th: ThemeEggs, card: 'cred' | 'task' | 'log', at: number, ctxPct: number, party: boolean, working = false): string => {
@@ -6791,6 +6873,7 @@ async function finishIfIdle($: EngineInterface): Promise<void> {
   })
   if (!isMine) return
   // A follow-up Claude started after the job was done ends as quietly as it began.
+  if (isBoys() && outcome === 'stopped') for (const t of boysEvent('cancel', { at, mode: boysWorn() })) tbToast($, t)
   if (boss.isFollowUp || outcome === 'stopped') return
   if (!outcome && isWorthACheer) bcsToast($, SKIN.id === 'gene' && mcgillNow(at) ? 'mcgill' : 'done', at)
   if (outcome === 'error') {
@@ -6815,7 +6898,10 @@ async function finishIfIdle($: EngineInterface): Promise<void> {
     jobTimes: [...(c.jobTimes ?? []), at].slice(-3),
     xp: c.xp + 10 + (isLong ? 15 : 0) + (isCrew ? 10 : 0),
   }), isWorthACheer)
-  if (isBoys()) boysEvent('job-done', { at, mode: boysWorn() })
+  if (isBoys()) {
+    boysEvent('job-done', { at, mode: boysWorn() })
+    if (isLong) for (const t of boysEvent('long-job', { at, mode: boysWorn() })) tbToast($, t)
+  }
   if (!isWorthACheer) {
     await paid
     return
@@ -7245,8 +7331,14 @@ export const register: Register = (on, options) => {
     BCS_CALLS = []
     BCS_BASH = { testFails: 0, lintFailed: false }
     for (const k of Object.keys(BCS_TOAST_AT)) delete BCS_TOAST_AT[k as ToastKey]
-    // The Boys: 50/50 approval, an empty wire, no scoreboard.
+    // The Boys: 50/50 approval, an empty wire, no scoreboard; phase 3's once-a-session eggs and memory too.
     resetBoys()
+    tbResetShow()
+    tbResetEvents()
+    TB_CTX = 0
+    TB_COST = 0
+    TB_IDLE = { from: 0, ten: false }
+    TB_LINT_FAILED = false
     const started = await next(e)
     await registerEntryPoints($)
     await loadModelAliases($).catch(() => undefined)
@@ -7271,6 +7363,7 @@ export const register: Register = (on, options) => {
         if (isLive || at - last >= 60_000) await update($, now, () => at)
         if (isEnvStale) await refreshEnv($)
         await keepTime($, at)
+        if (isBoys()) await boysTick($, at, boss.isWorking || st.isBusy || isRunning).catch(() => undefined)
         await watchStop($, at, list, boss).catch(() => undefined)
         // Free RAM is looked at only while work runs.
         if (boss.isWorking || st.isBusy || isRunning) void sampleGuard($, at, list.filter(a => a.status === 'running').length)
@@ -7523,11 +7616,25 @@ export const register: Register = (on, options) => {
   // and the heartbeat the stuck alarm reads. Never in the way of the call itself.
   on('tool.call', async ($, e, next) => {
     const tracking = trackTool($, e)
+    // The Boys: the call's clock (a call over 60 s is the PREMIERE FACE), and whether a Write makes a new file (E19).
+    const tbTool = isBoys() && !e.agentId ? String((e as { tool?: string }).tool ?? 'A tool') : ''
+    const tbId = `${(e as { tool_use_id?: string }).tool_use_id ?? ''}|${tbTool}|${Math.random()}`
+    const tbPath = tbTool === 'Write' ? String((e as { file_path?: string }).file_path ?? '') : ''
+    const tbNew = tbPath ? !(await $.fs.exists(tbPath).catch(() => true)) : false
+    if (tbTool) tbToolStart(tbId, await $.clock.now().catch(() => Date.now()))
     try {
       const [result] = await Promise.all([next(e), tracking])
-      if (isBoys() && !e.agentId) await boysSpin($, String((e as { tool?: string }).tool ?? 'A tool'), result).catch(() => undefined)
+      if (tbTool) {
+        await boysSpin($, tbTool, result).catch(() => undefined)
+        const r = result as { isError?: boolean; deny?: unknown } | null
+        const ok = !(r && typeof r === 'object' && (r.isError === true || r.deny !== undefined))
+        const at = await $.clock.now().catch(() => Date.now())
+        const evs = ok && tbTool === 'ExitPlanMode' ? boysEvent('plan', { at, mode: boysWorn(), tool: tbTool }) : ok && tbNew ? boysEvent('new-file', { at, mode: boysWorn(), tool: tbTool, text: tbPath }) : []
+        for (const t of evs) tbToast($, t)
+      }
       return result
     } finally {
+      if (tbTool) tbToolEnd(tbId)
       if (e.agentId) await tracking.then(() => endTool($, e.agentId as string))
     }
   })
@@ -7579,7 +7686,14 @@ export const register: Register = (on, options) => {
     const kind = cmdKind(String((e as unknown as { command?: string }).command ?? ''))
     if (kind === 'test') boysEvent('test-start', { at: await $.clock.now().catch(() => Date.now()), mode: boysWorn() })
     const res = await next(e)
-    if (!kind || kind === 'lint') return res
+    if (!kind) return res
+    if (kind === 'lint') {
+      // E21: a lint or type check that passes after one failed.
+      const bad = resultFailed(res)
+      if (!bad && TB_LINT_FAILED) for (const t of boysEvent('lint-fixed', { at: await $.clock.now().catch(() => Date.now()), mode: boysWorn() })) tbToast($, t)
+      TB_LINT_FAILED = bad
+      return res
+    }
     try {
       const at = await $.clock.now().catch(() => Date.now())
       const mode = boysWorn()
@@ -7592,7 +7706,7 @@ export const register: Register = (on, options) => {
         const failed = resultFailed(res) || (n?.fail ?? 0) > 0
         toasts = boysEvent(failed ? 'test-fail' : 'test-pass', { at, mode, pass: n?.pass ?? 0, fail: n?.fail ?? (failed ? 1 : 0) })
       }
-      for (const t of toasts) $.ui.toast(t)
+      for (const t of toasts) tbToast($, t)
       await update($, bandTick, () => at)
     } catch {
       // A garnish only.
@@ -7694,6 +7808,7 @@ export const register: Register = (on, options) => {
     if (e.workflow && started.agentId && started.deny === undefined) mgWorkflow.set(started.agentId, gate.at ?? 0)
     if (started.deny !== undefined) return started
     if (!e.resume) bcsToast($, 'agent', await $.clock.now())
+    if (!e.resume && isBoys()) for (const t of boysEvent('agent-spawn', { at: await $.clock.now().catch(() => Date.now()), mode: boysWorn() })) tbToast($, t)
     rememberTask(started.agentId, { prompt: e.prompt, description: e.description, subagentType: e.subagentType })
     if (isUltraSpawn && started.agentId) {
       ultraFlag.set(started.agentId, true)
@@ -7972,6 +8087,7 @@ export const register: Register = (on, options) => {
           }
         }),
       )
+      if (isBoys() && e.reason === 'answer') for (const t of boysEvent('agent-done', { at, mode: boysWorn() })) tbToast($, t)
       if (staffBaseline.delete(agentId)) await $.store.set(STAFF_SAVED_KEY, staffSaved.total).catch(() => undefined)
       // A background agent's report now waits on the main loop: not done until answered.
       if (reported && (await read($, manager)).task) await update($, manager, prev => (prev.doneAt ? prev : { ...prev, reportDue: at }))
@@ -8738,8 +8854,20 @@ export const register: Register = (on, options) => {
     // The rest of the trigger table (theboys-eggs TRIGGERS) is phase 2's.
     if (asked && isBoys()) {
       const at = await $.clock.now().catch(() => Date.now())
-      const t = tbTyped(asked, boysWorn(), { spoilers: BOYS_SPOILERS })
-      if (t?.kind === 'hijack') await setBoysMode($, 'book').catch(() => false)
+      // E9: the first prompt of the (local) day gets the wake-up (one a day, remembered across sessions).
+      const day = tbDay(at)
+      if (Number(await $.store.get('boysDay').catch(() => 0)) !== day) {
+        await $.store.set('boysDay', day).catch(() => undefined)
+        for (const line of boysEvent('resume', { at, mode: boysWorn() })) tbToast($, line)
+      }
+      const t = SKIN.id === 'noir' && TB_CURTAIN_RE.test(asked) ? undefined : tbTyped(asked, boysWorn(), { spoilers: BOYS_SPOILERS })
+      if (SKIN.id === 'noir' && TB_CURTAIN_RE.test(asked)) await wearBoys($, 'the-boys').catch(() => undefined)
+      else if (t?.kind === 'noirmode' && SKIN.id === 'the-boys') {
+        // THIS MEANS NOIR: the teaser act (Noir, `…`, the 1979 tape) is the transition, then the silent skin is on.
+        tbFire(t, at, boysWorn())
+        await wearBoys($, 'noir').catch(() => undefined)
+      }
+      else if (t?.kind === 'hijack') await setBoysMode($, 'book').catch(() => false)
       else if (t?.kind === 'onbrand') await setBoysMode($, 'brand').catch(() => false)
       else if (t?.kind === 'solidgold') await wearBoys($, 'solidgold').catch(() => undefined)
       else if (t?.kind === 'backonice') await wearBoys($, 'the-boys').catch(() => undefined)
@@ -8748,7 +8876,7 @@ export const register: Register = (on, options) => {
         const sc = boysState().score
         const fired = tbFire(t, at, boysWorn())
         if (fired && t.kind === 'scoreboard' && sc) scoreEnd(sc.pass, sc.fail, at)
-        if (fired?.toast) $.ui.toast(fired.toast)
+        if (fired?.toast) tbToast($, fired.toast)
         if (fired) {
           await update($, bandTick, () => at)
           await update($, paneTick, () => at)
@@ -9867,6 +9995,11 @@ export const register: Register = (on, options) => {
     if (!k.chat || !k.words.length || e.props.message) return next(e)
     const isPlain = e.surface !== 'desktop' || e.props.word === 'Working' || e.props.mode === 'thinking' || e.props.mode === 'requesting'
     if (!isPlain) return next(e)
+    if (isBoys() && SKIN.id !== 'noir' && boysState().inFlight >= 4) {
+      const at = await $.clock.now().catch(() => Date.now())
+      const words = SKIN.words
+      return next({ ...e, props: { ...e.props, word: `${words[Math.floor(at / 500) % words.length] ?? skinWord(e.props.word)} · 2×` } })
+    }
     return next({ ...e, props: { ...e.props, word: skinWord(e.props.word) } })
   })
 

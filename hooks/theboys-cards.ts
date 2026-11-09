@@ -24,6 +24,7 @@ export const TITLES: Record<Mode, { cred: string; task: string; log: string; org
   brand: { cred: 'Q-SCORE', task: 'CRISIS DESK', log: 'FOCUS GROUP', org: 'THE TABLE' },
   book: { cred: 'THE FILE', task: 'THE JOB', log: 'THE WIRE', org: 'THE TABLE' },
   gold: { cred: 'GOLD RECORD', task: 'CRISIS DESK', log: 'THE COUNTDOWN', org: 'THE TABLE' },
+  noir: { cred: 'THE SCRIPT', task: 'CRISIS DESK', log: 'THE STORYBOARD', org: 'THE TABLE' },
 }
 /** The card's frame: the tile with a gold hairline (ON BRAND), plain steel (OFF BOOK), olive with a brass rule (SOLID GOLD). */
 export const frame = (W: number, H: number, m: Mode) => {
@@ -55,6 +56,7 @@ export const rankOf = (level: number, m: Mode = 'brand') => ((m === 'book' ? BOO
 /** The 9 boxed figures: the 7 shared ids (the store is unchanged), then LATE EDITION and the secret SOLID GOLD (SKIN_BADGES). */
 const late = SKIN_BADGES[0] as any
 const gold = SKIN_BADGES[1] as any
+const noir = SKIN_BADGES[2] as any
 export const BADGES = [
   { id: 'choom', name: 'ROOKIE CARD', how: 'First job done', icon: '✦', fig: 'TB_HUGHIE', progress: (c: Cred) => share(c.jobs, 1) },
   { id: 'merc', name: 'LIMITED EDITION', how: '10 jobs', icon: '◆', fig: 'TB_STARLIGHT', progress: (c: Cred) => share(c.jobs, 10) },
@@ -65,12 +67,13 @@ export const BADGES = [
   { id: 'chromed', name: 'COMPOUND V', how: 'Context past 90%', icon: 'V', fig: 'TB_KIMIKO', progress: (c: Cred) => (c.chromed ? 1 : 0) },
   { id: late.id, name: late.name, how: late.how, icon: late.icon, fig: 'TB_FRENCHIE', progress: late.progress as (c: Cred) => number },
   { id: gold.id, name: gold.name, how: gold.how, icon: gold.icon, fig: 'TB_SOLDIERBOY', progress: gold.progress as (c: Cred) => number, secret: true },
+  { id: noir.id, name: noir.name, how: noir.how, icon: noir.icon, fig: 'TB_NOIR', progress: noir.progress as (c: Cred) => number, secret: 'noir' },
 ]
 export const SECRET = 'solidgold'
 /** Earned: in the store's badges, or the skin's own list. */
 export const earnedOf = (c: Cred, id: string) => c.badges.includes(id) || (c.skinBadges ?? []).includes(id)
 /** The secret box stays veiled (???, Keep exploring.) until this skin's own flag is set. */
-export const veiled = (b: any, c: Cred) => (b.secret && !foundOf(c, SECRET) ? { ...b, name: '???', icon: '?', how: 'Keep exploring.' } : b)
+export const veiled = (b: any, c: Cred) => (b.secret && !foundOf(c, typeof b.secret === 'string' ? b.secret : SECRET) ? { ...b, name: '???', icon: '?', how: 'Keep exploring.' } : b)
 export const WORDS = { cases: 'JOBS', long: 'LONG JOBS', all: 'THE FULL SET. MINT IN BOX.' }
 export const credToast = (level: number, m: Mode = 'brand') => `Q-SCORE ↑ ${level} · ${rankOf(level, m)}`
 
@@ -183,7 +186,7 @@ export const credCard = (W: number, c: Cred, m: Mode, o: { fresh?: string } = {}
   if (m === 'book') s.push(leak(W, H, 'cred'))
   return `${s.join('\n')}</svg>`
 }
-export const credAlt = (c: Cred, m: Mode = 'brand') => `Q-score: level ${levelOf(c.xp)} ${rankOf(levelOf(c.xp), m)}, ${c.xp} Q points, ${BADGES.filter(b => earnedOf(c, b.id)).length} of 9 figures`
+export const credAlt = (c: Cred, m: Mode = 'brand') => `Q-score: level ${levelOf(c.xp)} ${rankOf(levelOf(c.xp), m)}, ${c.xp} Q points, ${BADGES.filter(b => earnedOf(c, b.id)).length} of ${BADGES.length} figures`
 
 // ---------------------------------------------------------------- CRISIS DESK: talking points and the press releases
 export const POINT_ROW = 17

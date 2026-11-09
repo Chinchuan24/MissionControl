@@ -32,8 +32,8 @@ Type the word anywhere in a prompt (any case) while the skin is on.
 
 - **Invincible**: `think, mark`, `guardians`, `multiverse`, `new suit` / `classic suit`
 - **Better Call Saul**: `chicanery`, `namaste`, `ding`, `1216`, `saul3d`
-- **The Boys**: `shock and awe, my son` / `never meet your heroes`, `7spn` (more on the way)
-- **Replays**: Invincible `/missioncontrol play fight|showdown|think|eve|oliver|cecil|newsuit|classic`; The Boys `/missioncontrol play hijack|onbrand|breaking|scoreboard|spin|turbo`
+- **The Boys**: 60 typed phrases (`shock and awe, my son` / `never meet your heroes`, `oh, diabolical`, `hughie, blink`, `turbo rush`, `vought on ice`, `7spn`…), 24 event eggs, 8 daily set pieces, 13 rare roamers and THE AMBUSH (the full list is in the main README's spoilers)
+- **Replays**: Invincible `/missioncontrol play fight|showdown|think|eve|oliver|cecil|newsuit|classic`; The Boys `/missioncontrol play` (lists all 92: `ambush`, `ambush-a|b|c`, `scorch`, `sweep`, `kimiko`, `whale`…)
 - Many eggs also play by themselves: daily events, cameos, and extras at 85% and 95% context.
 
 <details>
@@ -48,6 +48,7 @@ Not listed anywhere until worn.
 - **CAPRI** (add-on, Edgerunners 2's CAPRI mode): type `capri` or `0+2=1` on Edgerunners 2, `hi capri` within a minute of a takeover, or `/skin capricorn`; `bye capri` goes back
 - **SAMURAI** (add-on): `/skin samurai` only
 - **SOLID GOLD**: type `solidgold` or `soldier boy` on The Boys, or `/skin solidgold`; `back on ice` goes back. It has its own badge and its own secret flag
+- **THIS MEANS NOIR**: type `this means noir` on The Boys, or `/skin noir`; `curtain call` goes back. The silent one (toasts are `…`); its own badge and its own secret flag
 
 </details>
 

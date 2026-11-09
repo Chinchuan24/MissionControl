@@ -180,7 +180,8 @@ test('SOLID GOLD: `solidgold` typed in The Boys puts it on with its own flag and
   expect(toasts).toContain('Thawed out and ready to roll.')
   const pn = (await svgs($, 'Pane')).join('')
   expect(pn).toContain('GOLD RECORD')
-  expect(pn).not.toContain('>???<')
+  expect(pn).toContain('>SOLID GOLD<')
+  expect(pn).not.toContain('>THIS MEANS NOIR<')
   // The shared flag is untouched: Invincible's era button (shown only once `samurai` is set) stays hidden.
   await $.command.run({ command: 'skin', args: 'invincible' } as never)
   const inv = await $.ui.mount({ plugin: 'crab-progress', surface: 'desktop', component: 'Pane', requestId: 'crab-agents', props: pane })
@@ -207,16 +208,17 @@ test('secret flag: SOLID GOLD and the shared samurai flag are independent both w
   expect(goldOnly.skinBadges).toEqual(['solidgold'])
   const card2 = credCard(560, goldOnly, 'brand')
   expect(card2).toContain('SOLID GOLD')
-  expect(card2).not.toContain('???')
+  expect(card2).toContain('>SOLID GOLD<')
+  expect(card2).not.toContain('>THIS MEANS NOIR<')
   // Another skin's card never counts the skin-only badge.
   expect(goldOnly.badges.length).toBe(0)
-  expect(SKIN_BADGES.map(b => b.id)).toEqual(['lateedition', 'solidgold'])
+  expect(SKIN_BADGES.map(b => b.id)).toEqual(['lateedition', 'solidgold', 'noir'])
   // LATE EDITION: three jobs inside an hour, not a clock window.
   const late = award({ ...BLANK_CRED, jobTimes: [NOW, NOW + 20 * 60_000, NOW + 50 * 60_000] }).cred
   expect(late.skinBadges).toContain('lateedition')
   expect(award({ ...BLANK_CRED, jobTimes: [NOW, NOW + 40 * 60_000, NOW + 70 * 60_000] }).cred.skinBadges ?? []).not.toContain('lateedition')
   expect(cleanCred({ ...goldOnly, found: ['solidgold', '<bad>', 7] }).found).toEqual(['solidgold'])
-  expect(BADGES.map(b => b.id)).toEqual(['choom', 'merc', 'edgerunner', 'legend', 'netrunner', 'crewboss', 'chromed', 'lateedition', 'solidgold'])
+  expect(BADGES.map(b => b.id)).toEqual(['choom', 'merc', 'edgerunner', 'legend', 'netrunner', 'crewboss', 'chromed', 'lateedition', 'solidgold', 'noir'])
 })
 
 // --- the APPROVAL RATING ------------------------------------------------------------------------------------------------------

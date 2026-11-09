@@ -49,7 +49,7 @@ import type { Legend } from './eggs'
 
 /** What the band's figure slot knows: the clock, the context, and whether the job-done celebration is drawing. */
 export type FigureCtx = { at: number; ctxPct: number; party?: boolean; fx?: { kind: string; at: number }; /** A job is running. */ working?: boolean; /** The job's progress, 0 to 100 (absent before a plan). */ progress?: number }
-export type ThemeKey = 'mentalist' | 'redjohn' | 'breakingbad' | 'heisenberg' | 'edgerunners2' | 'capricorn' | 'bettercallsaul' | 'gene' | 'invincible' | 'invincible2' | 'caliper' | 'caliperlight' | 'boys' | 'boys2' | 'solidgold'
+export type ThemeKey = 'mentalist' | 'redjohn' | 'breakingbad' | 'heisenberg' | 'edgerunners2' | 'capricorn' | 'bettercallsaul' | 'gene' | 'invincible' | 'invincible2' | 'caliper' | 'caliperlight' | 'boys' | 'boys2' | 'solidgold' | 'boysnoir'
 /** The pane cards a roaming act can belong to: the level card, the task card, the log. */
 export type PaneCard = 'cred' | 'task' | 'log'
 /** What a theme's rare scheduled eggs know (all from the clock, so an idle draw still shows them). */
@@ -400,6 +400,7 @@ export const THEMES: Record<ThemeKey, ThemeEggs> = {
   boys: boysTheme('brand'),
   boys2: boysTheme('book'),
   solidgold: boysTheme('gold'),
+  boysnoir: boysTheme('noir'),
   caliperlight: calTheme('light'),
   bettercallsaul: saulTheme(false),
   gene: saulTheme(true),

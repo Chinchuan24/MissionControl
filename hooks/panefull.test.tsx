@@ -32,6 +32,7 @@ const WEARS: { label: string; skin: string; theme?: ThemeKey; after?: string }[]
   { label: 'the-boys', skin: 'the-boys', theme: 'boys' },
   { label: 'the-boys (off book)', skin: 'the-boys', theme: 'boys2', after: 'shock and awe, my son' },
   { label: 'solidgold', skin: 'solidgold', theme: 'solidgold' },
+  { label: 'noir', skin: 'noir', theme: 'boysnoir' },
   { label: 'caliper', skin: 'caliper dark', theme: 'caliper' },
   { label: 'caliper (light)', skin: 'caliper light', theme: 'caliperlight' },
   { label: 'cyberpunk-2077', skin: 'cyberpunk-2077' },

@@ -10,7 +10,7 @@ import { pin } from './smooth'
 import { approvalAt, breakingAt, scoreAt, turboAt, vnnLine } from './theboys-eggs'
 
 export { SP, COND, FONT, MONO, clamp, clip, clipC, condW, contrast, esc, hash, monoW, px, r1, sansW, spH, spW, unit, pin }
-export type Mode = 'brand' | 'book' | 'gold'
+export type Mode = 'brand' | 'book' | 'gold' | 'noir'
 
 // ON BRAND: Vought's internal broadcast console. Navy panels, gold for what earns attention (epaulets, collar, buckle), cape white
 // type. Every text colour reads 4.5:1 or better on tile, tile2 and bg (theboys.test.ts checks it).
@@ -42,7 +42,16 @@ export const GOLD = {
   roles: ['#E2C25A', '#A9C77A', '#C9BE9E', '#D9776C', '#4FD6E0', '#E0A85E'],
   boss: ['#D4A637', '#E2C25A', '#4B5236', '#EFE3C2', '#D4A637'],
 }
-export const pal = (m: Mode): Record<string, any> => (m === 'book' ? BOOK : m === 'gold' ? GOLD : BRAND)
+// THIS MEANS NOIR (hidden, silent): a dark stage. Near-black, gunmetal lines, the amber of his goggle lenses as the one accent.
+export const NOIR = {
+  mode: 'noir' as Mode, bg: '#0B0C0E', tile: '#121417', tile2: '#0E1013', line: '#3C4650', track: '#1E2329',
+  a: '#D9A441', aT: '#F0C46A', ink: '#0B0C0E', text: '#E4E7EA', sub: '#AAB3BC', muted: '#8C96A0',
+  done: '#8FC79A', warn: '#D9A441', alert: '#E8907F', red: '#7E2A33', redT: '#E0908F', white: '#E4E7EA', laser: '#D9A441', v: '#D9A441',
+  dots: 'rgba(217,164,65,.035)',
+  roles: ['#F0C46A', '#8FC79A', '#AAB3BC', '#E0908F', '#9FB8D8', '#C9B0F2'],
+  boss: ['#D9A441', '#3C4650', '#121417', '#E4E7EA', '#D9A441'],
+}
+export const pal = (m: Mode): Record<string, any> => (m === 'book' ? BOOK : m === 'gold' ? GOLD : m === 'noir' ? NOIR : BRAND)
 // Props keep their own colours in every mode.
 export const PROPS: Record<string, string> = {
   skin: '#F4B88F', hair: '#EBB34E', milk: '#F7F7F2', milkEdge: '#C9D3E0', glass: '#DDE8F2', vblue: '#4FC3F7', vdeep: '#1E88C8',
@@ -185,7 +194,7 @@ export const bulbs = (x: number, y: number, w: number, _m: Mode, _at: number) =>
   return `<g><defs>${pat('l', 3, '#FFF3C4')}${pat('u', 9, GOLD.a)}</defs><rect x="${r1(x)}" y="${r1(y - 2)}" width="${ww}" height="4" fill="url(#${id}u)"/><rect class="tb-run" x="${r1(x)}" y="${r1(y - 2)}" width="${ww}" height="4" fill="url(#${id}l)"/></g>`
 }
 /** The context chip: 85-94 STAY ON BRAND with the stressed smile; 95+ LOOK AT ME. in laser red with two eye glints. */
-export const CHIP_WORDS: Record<Mode, [string, string]> = { brand: ['STAY ON BRAND', 'LOOK AT ME.'], book: ['DIRT RUNNING OUT', 'CLEAR THE DECKS, MATE'], gold: ['THAWING…', 'CHEST GLOW'] }
+export const CHIP_WORDS: Record<Mode, [string, string]> = { brand: ['STAY ON BRAND', 'LOOK AT ME.'], book: ['DIRT RUNNING OUT', 'CLEAR THE DECKS, MATE'], gold: ['THAWING…', 'CHEST GLOW'], noir: ['…', '… …'] }
 export const chip = (x: number, y: number, pct: number, m: Mode) => {
   if (pct < 85) return { svg: '', w: 0 }
   const P = pal(m)
@@ -206,6 +215,7 @@ export const WARNINGS: Record<Mode, (pct: number) => string> = {
   brand: pct => (pct >= 95 ? `Context ${pct}%: legal says compact now.` : `Context ${pct}%: stay on brand. /compact soon.`),
   book: pct => (pct >= 95 ? `Context ${pct}%: clear the decks, mate.` : `Context ${pct}%: the dirt's running out. /compact soon.`),
   gold: pct => (pct >= 95 ? `Context ${pct}%: chest glow. /compact now.` : `Context ${pct}%: thawing out. /compact soon.`),
+  noir: pct => `… (context ${pct}%: /compact)`,
 }
 /** The episode: a broadcast bug (ON BRAND), a duct-tape label (OFF BOOK), a VHS label (SOLID GOLD); the title only when `full`. */
 export const epW = (code: string, title: string, full: boolean) => condW(code, 9.5, 0.8) + 16 + (full ? 8 + sansW(title, 11.5) : 0)
@@ -303,7 +313,7 @@ export const crew = (x: number, y: number, color: string, m: Mode, live = false)
 }
 /** The avatar (34 by 40 at x 20, y 36): Homelander smiling (ON BRAND), Butcher (OFF BOOK), Soldier Boy in gold (SOLID GOLD). On ON
  *  BRAND his eyes glow red when the approval drops under 30 (the disgusted frame). */
-export const BUST: Record<Mode, any> = { brand: SP.TB_HOMELANDER_BUST, book: SP.TB_BUTCHER_BUST, gold: SP.TB_SOLIDGOLD_BUST }
+export const BUST: Record<Mode, any> = { brand: SP.TB_HOMELANDER_BUST, book: SP.TB_BUTCHER_BUST, gold: SP.TB_SOLIDGOLD_BUST, noir: SP.TB_NOIR_BUST }
 export const figure = (m: Mode, at: number) => {
   const sp = BUST[m]
   const s = 0.86
@@ -337,6 +347,7 @@ export const crawl = (W: number, H: number, at: number, m: Mode) => {
   const P = pal(m)
   const y = CRAWL_Y
   const h = H - y
+  if (m === 'noir') return `<g data-egg="vnn"><rect x="14" y="${y}" width="${W - 28}" height="${h - 2}" rx="2" fill="${P.bg}" stroke="${P.line}" stroke-width=".6"/><rect x="14" y="${y}" width="30" height="${h - 2}" rx="2" fill="${P.a}"/>${C(29, y + h - 4.5, '…', 9.5, P.ink, 'text-anchor="middle"')}${T(56, y + h - 4.5, '…', 10.5, 400, P.muted)}</g>`
   const tag = m === 'book' ? 'THE WIRE' : m === 'gold' ? 'SOLID GOLD' : 'VNN'
   const tagW = condW(tag, 9.5, 1.2) + 14
   const bg = m === 'book' ? '#0C0D0F' : m === 'gold' ? P.olive : P.bg
@@ -437,7 +448,7 @@ export const cheer = (W: number, H: number, m: Mode, o: { delay?: string } = {})
 }
 
 // ---------------------------------------------------------------- the boot strip
-export const BOOTS: Record<Mode, [string, string]> = { brand: ['VOUGHT BROADCAST · 3 · 2 · 1', 'ON AIR. SMILE.'], book: ['SAFEHOUSE LINE · SECURE', 'THE BOYS ARE IN.'], gold: ['ROLL TAPE…', 'SOLID GOLD IS LIVE.'] }
+export const BOOTS: Record<Mode, [string, string]> = { brand: ['VOUGHT BROADCAST · 3 · 2 · 1', 'ON AIR. SMILE.'], book: ['SAFEHOUSE LINE · SECURE', 'THE BOYS ARE IN.'], gold: ['ROLL TAPE…', 'SOLID GOLD IS LIVE.'], noir: ['…', '(thumbs up)'] }
 export const bootLine = (W: number, m: Mode) => {
   const P = pal(m)
   const [a, b] = BOOTS[m]

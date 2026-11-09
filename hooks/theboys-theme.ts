@@ -7,12 +7,13 @@ import { BAND_H, BOOTS, CSS, PROPS, SCORE_W, WARNINGS, bootLine, chip, cheer, cr
 import type { Mode } from './theboys'
 import { BADGES, TITLES, credCard, credToast, deskAlt, deskCard, dialAlt, dialCard, rankOf, tableCard } from './theboys-cards'
 import type { BoysOrg } from './theboys-cards'
-import { SPIN_BOOK, SPIN_BRAND, SPIN_GOLD, TOOLS_BOOK, TOOLS_BRAND, TOOLS_GOLD, actMs, autoLookAtMe, boysFx, drawAt, inFlight, noteDraw, spinDue } from './theboys-eggs'
+import { SPIN_BOOK, SPIN_BRAND, SPIN_GOLD, SPIN_NOIR, fxFromEvent, TOOLS_BOOK, TOOLS_BRAND, TOOLS_GOLD, actMs, autoLookAtMe, boysFx, drawAt, inFlight, noteDraw, spinDue } from './theboys-eggs'
 import { actOn, actShake, speedSmear, titleSpin } from './theboys-acts'
+import { AMBUSH_KINDS, IDLE_NAP_MS, PREMIERE_FACE_MS, ahead, idleFor, isNight, lastWorking, longestCall, moon, noirCheer, noteAmbush, noteBusy, noteWorking, premiereFace, stageAt, terrorNap } from './theboys-show'
 import type { ExtraArgs, PaneCard, ThemeEggs } from './themes'
 import { pin } from './smooth'
 
-export const GREETINGS: Record<Mode, string> = { brand: 'Welcome back. Smile for the cameras.', book: "Oi. Kettle's on.", gold: 'Thawed out and ready to roll.' }
+export const GREETINGS: Record<Mode, string> = { brand: 'Welcome back. Smile for the cameras.', book: "Oi. Kettle's on.", gold: 'Thawed out and ready to roll.', noir: '…' }
 export const SWAP_MS = 2_200
 /** The mode swap over a panel already drawn in the new mode (2.2 s, pinned to the switch). Into OFF BOOK: SIGNAL HIJACKED (the
  *  picture tears, static, then grime). Back ON BRAND: a gold wipe with WE APOLOGISE FOR THE INTERRUPTION. */
@@ -24,6 +25,10 @@ export const swapLayer = (W: number, H: number, to: Mode, since: number): string
     const label = 'SIGNAL HIJACKED'
     const w = condW(label, 16, 3) + 26
     return `<g class="tb-swap" pointer-events="none" style="${d}" data-egg="hijack"><rect width="${W}" height="${H}" rx="10" fill="#111214" opacity=".72"/><g class="tb-static" style="${d}">${bars}</g><g class="tb-tear" style="${d}"><rect x="${r1(W / 2 - w / 2)}" y="${r1(H / 2 - 16)}" width="${r1(w)}" height="30" fill="${PROPS.marker}"/>${C(W / 2, H / 2 + 5, label, 16, '#FFFFFF', 'text-anchor="middle" letter-spacing="3"')}</g></g>`
+  }
+  if (to === 'noir') {
+    const lw = condW('THIS MEANS NOIR', 15, 3) + 30
+    return `<g class="tb-swap" pointer-events="none" style="${d}" data-egg="noirmode"><g class="tb-wipe" style="${d}"><rect width="${W}" height="${H}" rx="10" fill="#0B0C0E"/><rect x="${r1(W / 2 - lw / 2)}" y="${r1(H / 2 - 15)}" width="${r1(lw)}" height="28" fill="#1C1C22" stroke="#D9A441"/>${C(W / 2, H / 2 + 4, 'THIS MEANS NOIR', 15, '#D9A441', 'text-anchor="middle" letter-spacing="3"')}${C(W / 2, H / 2 + 26, '1979', 9, '#8C96A0', 'text-anchor="middle" letter-spacing="2"')}</g></g>`
   }
   const label = to === 'gold' ? 'ROLL TAPE · SOLID GOLD' : 'WE APOLOGISE FOR THE INTERRUPTION'
   const sz = W < 500 ? 10 : 13
@@ -39,7 +44,7 @@ export const actAt = (at: number): { kind: string; at: number } | undefined => {
 }
 /** Characters the pane keeps free while a job works for the typed acts (drawn between `<!--dl-->` markers, so the layout never
  *  flips as they come and go). Phase 3's AMBUSH raises it. */
-export const BOYS_PANE_RESERVE = 40_000
+export const BOYS_PANE_RESERVE = 100_000
 /** The scheduled and live layers: the swap, the 7SPN scoreboard on the band's task row, the SPEED SMEAR and the title SPIN, LOOK
  *  AT ME the first time the context passes 95%, and the typed act now playing (on the band, and on its pane card). */
 export const boysExtras = (m: Mode) => (o: ExtraArgs): string => {
@@ -55,28 +60,45 @@ export const boysExtras = (m: Mode) => (o: ExtraArgs): string => {
     const xr = o.W >= 520 ? o.W - 20 - rw * 3 - 18 - 10 : o.W - 14
     out.push(scoreboard(xr - SCORE_W, 42, o.at, m))
   }
-  const act = swapping ? undefined : actAt(o.at)
+  // One thing on stage at a time (theboys-show stageAt): a typed act or an event egg, else THE AMBUSH (while a job works), else the
+  // day's set piece, else a rare roamer. A scheduled piece may be drawn ahead of its start (an idle band redraws once a minute).
+  if (o.surface === 'band') {
+    noteWorking(o.working)
+    if (o.working) noteBusy(o.at)
+  }
+  const st = swapping ? undefined : stageAt(o.at, { working: o.working, mode: m, ...(o.swapAt !== undefined ? { swapAt: o.swapAt } : {}) })
+  const act = st && o.at >= st.startAt - 1000 ? st : undefined
   if (o.surface === 'band') {
     if (o.working && !act && inFlight() >= 2) out.push(speedSmear(m, inFlight()))
-    const sp = act ? undefined : spinDue(o.at, o.working)
+    // The title SPIN after a failed run plays over E1's scorch (they are the same moment).
+    const sp = act && !(act.src === 'fx' && fxFromEvent()) ? undefined : spinDue(o.at, o.working)
     if (sp !== undefined && o.task) out.push(titleSpin(o.W, o.task, o.titleW ?? 300, m, sp))
+    // The states the band wears between acts: the PREMIERE FACE on a call over 60 s, Terror's nap when idle, the night moon.
+    if (!act && o.working && m === 'brand' && longestCall(o.at) >= PREMIERE_FACE_MS) out.push(premiereFace(m, pal(m)))
+    if (!act && !o.working && idleFor(o.at) >= IDLE_NAP_MS) out.push(terrorNap(o.W, m))
+    if (m === 'brand' && isNight(o.at)) out.push(moon(o.W))
   }
-  if (act) {
+  if (st) {
+    if (o.surface === 'band' && AMBUSH_KINDS.includes(st.kind) && act) noteAmbush(st.startAt)
     const on = o.surface === 'band' ? 'band' : (o.card ?? 'cred')
-    const s = actOn(act.kind, { W: o.W, H: o.H, m, at: act.at, on, ...(o.task ? { task: o.task } : {}), ...(o.titleW ? { titleW: o.titleW } : {}) })
+    let s = actOn(st.kind, { W: o.W, H: o.H, m, at: st.startAt, on, ...(o.task ? { task: o.task } : {}), ...(o.titleW ? { titleW: o.titleW } : {}) })
+    // Scheduled pieces are marked `show-` (typed and event acts `act-`), and stay hidden until their start.
+    if (s && st.src !== 'fx') s = ahead(s.replace('data-egg="act-', 'data-egg="show-'), st.startAt)
     if (s) out.push(on === 'band' ? s : `<!--dl-->${s}<!--/dl-->`)
   }
   return out.join('')
 }
 /** A typed act's camera move on a whole panel (LOOK AT ME's beat drop, the WHATEVER float, LITTLE CRICKET's shrink). */
-export const boysShake = (o: { surface: 'band' | 'pane'; at: number; card?: PaneCard }): string => {
-  const act = actAt(o.at)
-  return act ? actShake(act.kind, o.surface === 'band' ? 'band' : (o.card ?? 'cred'), act.at) : ''
+export const boysShake = (m: Mode) => (o: { surface: 'band' | 'pane'; at: number; card?: PaneCard; working?: boolean; swapAt?: number }): string => {
+  const st = stageAt(o.at, { working: o.working, mode: m, ...(o.swapAt !== undefined ? { swapAt: o.swapAt } : {}) })
+  return st && o.at >= st.startAt - 1000 ? actShake(st.kind, o.surface === 'band' ? 'band' : (o.card ?? 'cred'), st.startAt) : ''
 }
 /** THE TABLE with the typed act's layer for it (AMERICAN HERO's spotlights, THE REAL HEROES, GOD U., FULL ROSTER). The org
  *  drawer has no clock: it reads the newest draw's. */
 export const withTableAct = (svg: string, m: Mode): string => {
-  const act = actAt(drawAt())
+  const at = drawAt()
+  const st = stageAt(at, { working: lastWorking(), mode: m })
+  const act = st && at >= st.startAt - 1000 ? { kind: st.kind, at: st.startAt } : undefined
   const root = /^<svg\b[^>]*>/.exec(svg)?.[0]
   if (!act || !root) return svg
   const W = Number(/\bwidth="([\d.]+)"/.exec(root)?.[1])
@@ -114,7 +136,7 @@ export const boysTheme = (m: Mode): ThemeEggs => {
     },
     idle: (x, y) => idle(x, y, m),
     warning: WARNINGS[m],
-    cheer: (W, H, _font, _t, startAt) => cheer(W, H, m, startAt === undefined ? {} : { delay: `calc(@@T${Math.round(startAt)}@@ + 0s)` }),
+    cheer: (W, H, _font, _t, startAt) => (m === 'noir' ? noirCheer(W, H, startAt === undefined ? undefined : `calc(@@T${Math.round(startAt)}@@ + 0s)`) : cheer(W, H, m, startAt === undefined ? {} : { delay: `calc(@@T${Math.round(startAt)}@@ + 0s)` })),
     cred: { title: TITLES[m].cred, ranks, words: { cases: 'JOBS', long: 'LONG JOBS', all: 'THE FULL SET. MINT IN BOX.', badges }, badges, toast: l => credToast(l, m), card: (W, c) => credCard(W, c, m) },
     card: {
       draw: (W, task, isWorking, done, total, _t, _font, _frame, legends, steps) => deskCard(W, task, isWorking, done, total, legends, m, steps),
@@ -126,10 +148,10 @@ export const boysTheme = (m: Mode): ThemeEggs => {
     boot: BOOTS[m],
     bootDraw: W => bootLine(W, m),
     greeting: GREETINGS[m],
-    words: m === 'book' ? SPIN_BOOK : m === 'gold' ? SPIN_GOLD : SPIN_BRAND,
+    words: m === 'book' ? SPIN_BOOK : m === 'gold' ? SPIN_GOLD : m === 'noir' ? SPIN_NOIR : SPIN_BRAND,
     tools: m === 'book' ? TOOLS_BOOK : m === 'gold' ? TOOLS_GOLD : TOOLS_BRAND,
     extras: boysExtras(m),
-    shake: boysShake,
+    shake: boysShake(m),
     paneReserve: BOYS_PANE_RESERVE,
   }
 }

@@ -71,6 +71,7 @@ export type CredWords = { badges: Badge[]; cases: string; long: string; all: str
 export const SKIN_BADGES: Badge[] = [
   { id: 'lateedition', name: 'LATE EDITION', icon: '▤', how: '3 jobs finished inside one hour', progress: lateEditionOf },
   { id: 'solidgold', name: 'SOLID GOLD', icon: '◉', how: 'Found the B-side.', progress: c => (foundOf(c, 'solidgold') ? 1 : 0) },
+  { id: 'noir', name: 'THIS MEANS NOIR', icon: '▪', how: 'Found the silent one.', progress: c => (foundOf(c, 'noir') ? 1 : 0) },
 ]
 export const award = (c: Cred): { cred: Cred; fresh: Badge[]; freshSkin: Badge[] } => {
   const fresh = BADGES.filter(b => !c.badges.includes(b.id) && b.progress(c) >= 1)

@@ -126,6 +126,8 @@ test('triggers end to end: every act egg typed while wearing The Boys draws its 
     expect(`${t.id}:${p.join('').includes(`data-egg="act-${t.kind}"`)}`).toBe(`${t.id}:true`)
     for (const s of p) expect(s.length).toBeLessThan(60_000)
     expect(p.reduce((n, s) => n + s.length, 0)).toBeLessThan(260_000)
+    // T26 also unlocks THIS MEANS NOIR (phase 3): its way back, so the rest are typed in The Boys again.
+    if (t.id === 'T26') await say($, 'curtain call')
   }
   // The toasts that come with an egg (once a minute each).
   expect(toasts).toContain('Smartest person.')
@@ -160,6 +162,9 @@ test('no false positives: 39 ordinary coding prompts fire nothing in any mode, w
 test('no false positives end to end: ordinary prompts draw no act on the band', async ($, on) => {
   const clock = base(on)
   await start($)
+  // The first prompt of the day plays E9's wake-up (an event egg, phase 3); the corpus starts once it is over.
+  await say($, 'good morning')
+  await clock.advance(15_000)
   for (const p of DEV_PROMPTS.slice(0, 12)) {
     await say($, p)
     await clock.advance(400)

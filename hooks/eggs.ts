@@ -35,6 +35,7 @@ const COLORS: Record<Egg, EggColors> = {
   boys: { a: '#C9A13B', b: '#F0D27A', c: '#B22234', text: '#F4F6FB', dim: '#8E9AB8', bg: '#13214A' },
   boys2: { a: '#C2362F', b: '#C8B48A', c: '#EE7B70', text: '#ECE6DA', dim: '#9C958A', bg: '#1B1D21' },
   solidgold: { a: '#D4A637', b: '#E2C25A', c: '#A8423A', text: '#EFE3C2', dim: '#A49A7C', bg: '#1E2018' },
+  boysnoir: { a: '#D9A441', b: '#3C4650', c: '#7E2A33', text: '#E4E7EA', dim: '#8C96A0', bg: '#121417' },
   caliper: { a: '#5AA9FF', b: '#AAB2BC', c: '#ECEEF0', text: '#ECEEF0', dim: '#8A93A0', bg: '#15181B' },
   caliperlight: { a: '#1F6FE0', b: '#50575F', c: '#1A1D21', text: '#1A1D21', dim: '#646C75', bg: '#FFFFFF' },
   capricorn: { a: '#050305', b: '#3DF27A', c: '#050305', text: '#050305', dim: '#2A0510', bg: '#FD0250' },
@@ -187,7 +188,7 @@ export const celebration = (W: number, H: number, egg: Egg, font: string, startA
 // A tiny code tag for a corner: SYS.2077 // 0x3F, and a katakana line.
 export const sysTag = (x: number, y: number, egg: Egg, font: string, anchor = 'end'): string => {
   const c = COLORS[egg]
-  const code = egg === 'mentalist' ? 'CBI // SAC-01' : egg === 'redjohn' ? '☺ // 0x00' : egg === 'breakingbad' ? 'ABQ // 505' : egg === 'heisenberg' ? 'Br 35 // Ba 56' : egg === 'edgerunners2' ? 'D // 0+2=1' : egg === 'capricorn' ? 'CAPRI // 0+2=1' : egg === 'invincible' ? 'GDA // S1' : egg === 'invincible2' ? 'GDA // S3' : egg === 'boys' ? 'VNN // S1' : egg === 'boys2' ? 'SAFEHOUSE // 0' : egg === 'solidgold' ? 'GOLD // 33⅓' : egg === 'caliper' ? 'CAL // 0.01' : egg === 'caliperlight' ? 'CAL // 0.01 L' : egg === 'bettercallsaul' ? 'ABQ // 505' : egg === 'gene' ? 'OMAHA // 402' : egg === 'corpo' ? 'ARS.2077 // 0x0A' : egg === 'netrun' ? 'NET.2076 // 0x4C' : egg === 'samurai' ? 'SAM.2013 // 0x77' : 'SYS.2077 // 0x3F'
+  const code = egg === 'mentalist' ? 'CBI // SAC-01' : egg === 'redjohn' ? '☺ // 0x00' : egg === 'breakingbad' ? 'ABQ // 505' : egg === 'heisenberg' ? 'Br 35 // Ba 56' : egg === 'edgerunners2' ? 'D // 0+2=1' : egg === 'capricorn' ? 'CAPRI // 0+2=1' : egg === 'invincible' ? 'GDA // S1' : egg === 'invincible2' ? 'GDA // S3' : egg === 'boys' ? 'VNN // S1' : egg === 'boys2' ? 'SAFEHOUSE // 0' : egg === 'solidgold' ? 'GOLD // 33⅓' : egg === 'boysnoir' ? 'NOIR // 1979' : egg === 'caliper' ? 'CAL // 0.01' : egg === 'caliperlight' ? 'CAL // 0.01 L' : egg === 'bettercallsaul' ? 'ABQ // 505' : egg === 'gene' ? 'OMAHA // 402' : egg === 'corpo' ? 'ARS.2077 // 0x0A' : egg === 'netrun' ? 'NET.2076 // 0x4C' : egg === 'samurai' ? 'SAM.2013 // 0x77' : 'SYS.2077 // 0x3F'
   return `<text x="${x}" y="${y}" text-anchor="${anchor}" font-family="${font}" font-size="7" letter-spacing=".8" fill="${c.dim}" fill-opacity=".8">${code}</text>`
 }
 // Japanese text needs a Japanese face: macOS, Windows, then Linux's Noto.

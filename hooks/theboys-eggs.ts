@@ -10,7 +10,7 @@
 // No network, no files: memory only, reset per session by `resetBoys`.
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-export type BoysMode = 'brand' | 'book' | 'gold'
+export type BoysMode = 'brand' | 'book' | 'gold' | 'noir'
 
 // ---------------------------------------------------------------- 1. state
 type Score = { pass: number; fail: number; running: boolean; at: number; endAt: number }
@@ -26,8 +26,9 @@ type State = {
   turboSince: number
   /** When tool calls failed (the FOCUS GROUP dips there); the newest 40. */
   failedAt: number[]
-  /** The typed act now playing (kind and start), as Invincible's fx. */
+  /** The typed act now playing (kind and start), as Invincible's fx; `fxEvent` when an event egg started it (a typed egg may cut it). */
   fx: { kind: string; at: number } | undefined
+  fxEvent: boolean
   /** The run of failed test runs behind the toasts (E1-E3). */
   testFails: number
   lastToast: Record<string, number>
@@ -39,8 +40,12 @@ type State = {
   spinAt: number
   lookedAt: boolean
   drawAt: number
+  /** Tool calls that failed in a row (3 = the CRACKED MIRROR, E18). */
+  errRun: number
+  /** When a failing test run last turned green (E3's regen plays for that run). */
+  fixedAt: number
 }
-const blank = (): State => ({ approval: 50, approvalSince: 0, score: null, breaking: null, inFlight: 0, turboSince: 0, failedAt: [], fx: undefined, testFails: 0, lastToast: {}, lastAct: {}, boost: null, turboUntil: 0, spinAt: 0, lookedAt: false, drawAt: 0 })
+const blank = (): State => ({ approval: 50, approvalSince: 0, score: null, breaking: null, inFlight: 0, turboSince: 0, failedAt: [], fx: undefined, fxEvent: false, testFails: 0, lastToast: {}, lastAct: {}, boost: null, turboUntil: 0, spinAt: 0, lookedAt: false, drawAt: 0, errRun: 0, fixedAt: 0 })
 let S: State = blank()
 /** A fresh session (and every test) starts at 50/50 with nothing on the wire. */
 export const resetBoys = (): void => { S = blank() }
@@ -50,17 +55,25 @@ export const boysState = (): Readonly<State> => ({ ...S, failedAt: [...S.failedA
 // --- M1 APPROVAL RATING: starts 50/50; a passing test run +3, a failing one -4, a clean run +5 more, a tool error -2, a job done
 // +5; it decays 1 point a minute back toward 50. Clamped 0..100. The band's face follows it (theboys.ts faceOf).
 export const APPROVAL = { pass: 3, fail: -4, clean: 5, error: -2, job: 5, decayPerMin: 1 } as const
+/** Is a scheduled act on stage (THE AMBUSH, a set piece)? An event egg never cuts one; theboys-show.ts sets it. */
+let BUSY: (at: number) => boolean = () => false
+export const setStageBusy = (fn: (at: number) => boolean): void => { BUSY = fn }
+const stageBusy = (at: number): boolean => { try { return BUSY(at) } catch { return false } }
+/** A clock-driven nudge on top (THE AMBUSH: -8 while Homelander is on screen, +8 when he flies off); theboys-show.ts sets it. */
+let MOD: (at: number) => number = () => 0
+export const setApprovalMod = (fn: (at: number) => number): void => { MOD = fn }
+const modAt = (at: number): number => { try { return MOD(at) } catch { return 0 } }
 export const approvalAt = (at: number): number => {
   const mins = S.approvalSince > 0 ? Math.max(0, (at - S.approvalSince) / 60_000) : 0
   const d = Math.min(Math.abs(S.approval - 50), mins * APPROVAL.decayPerMin)
   const b = S.boost && at >= S.boost.at - 1000 && at < S.boost.until ? S.boost.delta : 0
-  return Math.max(0, Math.min(100, Math.round((S.approval > 50 ? S.approval - d : S.approval + d) + b)))
+  return Math.max(0, Math.min(100, Math.round((S.approval > 50 ? S.approval - d : S.approval + d) + b + modAt(at))))
 }
 /** The approval as last set (no decay): for drawers without a clock (THE TABLE's buzz). */
 export const lastApproval = (): number => S.approval
 export const bumpApproval = (delta: number, at: number): number => {
   const b = S.boost && at >= S.boost.at - 1000 && at < S.boost.until ? S.boost.delta : 0
-  S.approval = Math.max(0, Math.min(100, approvalAt(at) - b + delta))
+  S.approval = Math.max(0, Math.min(100, approvalAt(at) - b - modAt(at) + delta))
   S.approvalSince = at
   return S.approval
 }
@@ -119,8 +132,10 @@ export const noteFailed = (at: number): void => { S.failedAt = [...S.failedAt, a
 export const failedNear = (at: number, within = 2_000): boolean => S.failedAt.some(t => Math.abs(t - at) <= within)
 
 // --- the typed act now playing (the band's and the pane's extras read it).
-export const setBoysFx = (kind: string, at: number): void => { S.fx = { kind, at } }
+export const setBoysFx = (kind: string, at: number, fromEvent = false): void => { S.fx = { kind, at }; S.fxEvent = fromEvent }
 export const boysFx = (): { kind: string; at: number } | undefined => S.fx
+/** Did an event egg start the act now playing (a typed egg, or a newer event, may cut it)? */
+export const fxFromEvent = (): boolean => S.fxEvent
 
 /** A toast at most once per its gap (ms): true when it may show now, and the time is noted. */
 export const toastOk = (key: string, at: number, gapMs: number): boolean => {
@@ -160,7 +175,7 @@ export const boysEvent = (ev: BoysEvent, a: BoysEventArgs): string[] => {
   for (const r of out) {
     if (r.approval) bumpApproval(r.approval, a.at)
     if (r.breaking) vnnBreak(r.breaking, a.at, ev)
-    if (r.fx) setBoysFx(r.fx, a.at)
+    if (r.fx && (!actLive(a.at) || S.fxEvent) && !stageBusy(a.at)) setBoysFx(r.fx, a.at, true)
     if (r.toast) toasts.push(r.toast)
   }
   return toasts
@@ -186,12 +201,14 @@ const core = (ev: BoysEvent, a: BoysEventArgs): BoysAct[] => {
       S.testFails = 0
       const clean = (a.fail ?? 0) === 0
       const acts: BoysAct[] = [{ approval: approvalForRun(a.pass ?? 0, a.fail ?? 0, false) }]
+      if (was > 0) S.fixedAt = a.at
       if (was > 0 && toastOk('fixed', a.at, 600_000)) acts.push({ toast: gold ? 'Shield’s up.' : 'Somebody up there likes us, mate.' })
       else if (clean && (a.pass ?? 0) > 0 && toastOk('clean', a.at, 600_000)) acts.push({ toast: gold ? 'Hit the mark.' : book ? 'Not bad, Hughie.' : 'It was perfect.' })
       return acts
     }
     case 'tool-error':
       noteFailed(a.at)
+      S.errRun++
       return [{ approval: APPROVAL.error }]
     case 'force-push':
       return [{ breaking: book ? 'THE WIRE: history rewritten. Again.' : 'History rewritten; Vought calls it "a fresh start"', ...(toastOk('force', a.at, 180_000) ? { toast: gold ? 'Payback time.' : book ? 'Shock and awe.' : '“It’s an absolute wonder to me that you’ve all managed to live this long.” — Edgar' } : {}) }]
@@ -203,6 +220,13 @@ const core = (ev: BoysEvent, a: BoysEventArgs): BoysAct[] => {
       return []
   }
 }
+
+/** A tool call that worked ends the run of errors. Returns how many failed in a row (after a tool-error: 3 = E18). */
+export const toolOk = (): void => { S.errRun = 0 }
+/** The failed test runs in a row, and when a failing run last turned green. */
+export const testFails = (): number => S.testFails
+export const fixedAt = (): number => S.fixedAt
+export const errRun = (): number => S.errRun
 
 // --- VOUGHT PR SPIN (M2): a failed tool's line, rewritten into press-speak before it shows. OFF BOOK shows the real line, LEAKED.
 export const SPIN: [RegExp, string][] = [
@@ -225,6 +249,7 @@ export const prToast = (tool: string, text: string, mode: BoysMode): string => {
   const real = String(text || 'it did not work').replace(/\s+/g, ' ').trim().slice(0, 70)
   if (mode === 'book') return `LEAKED · ${tool}: ${real}`
   if (mode === 'gold') return `TAPE JAMMED · ${tool}: ${real}`
+  if (mode === 'noir') return '…'
   return spin(tool, real)
 }
 
@@ -304,6 +329,8 @@ export const typed = (text: string, mode: BoysMode, o: { spoilers?: boolean; all
 
 // --- the typed acts' clock: how long each plays, one at a time, and a cooldown per egg (as Invincible's: a pinned start, one fx).
 const MS = new Map<string, number>(TRIGGERS.filter(t => t.ms).map(t => [t.kind, t.ms as number]))
+/** Phase 3's acts say how long they play. */
+export const setActMs = (kind: string, ms: number): void => { MS.set(kind, ms) }
 /** How long the act `kind` plays (ms); 3 s for a kind with no row. */
 export const actMs = (kind: string): number => MS.get(kind) ?? 3_000
 /** Is an act playing at `at`? */
@@ -313,7 +340,7 @@ export const ACT_COOLDOWN_MS = 20_000
 /** Typed `t` at `at` in `mode`: starts its act unless one is playing or it just played; returns what the register shows (a toast),
  *  after raising its BREAKING line and APPROVAL move. `undefined` when it was held back. */
 export const fireTyped = (t: Trigger, at: number, mode: BoysMode): { toast?: string } | undefined => {
-  if (actLive(at)) return undefined
+  if (actLive(at) && !S.fxEvent) return undefined
   if (at - (S.lastAct[t.kind] ?? -Infinity) < ACT_COOLDOWN_MS) return undefined
   S.lastAct[t.kind] = at
   setBoysFx(t.kind, at)
@@ -410,6 +437,7 @@ export const vnnLine = (at: number, mode: BoysMode): string => {
   const slot = Math.floor(at / 40_000)
   const hour = Math.floor(at / 3_600_000)
   const night = new Date(at).getHours() < 5
+  if (mode === 'noir') return '…'
   const list = mode === 'book' ? VNN_BOOK : mode === 'gold' ? VNN_GOLD : night ? VNN_OVERNIGHT : VNN_BRAND
   // A stride coprime with every pool's length walks the whole pool before it repeats.
   return pick(list, slot * 7 + hour * 13)

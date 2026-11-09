@@ -15,7 +15,7 @@ export type Geo = { W: number; H: number; m: Mode; at: number; on: ActSurface; t
 
 // ---------------------------------------------------------------- the act builder
 type Fr = [number, number, number, number?, string?]
-class Act {
+export class Act {
   css = ''
   n = 0
   constructor(readonly kind: string, readonly ms: number, readonly at: number) {}
@@ -156,12 +156,16 @@ const coverBust = (P: any) => `<rect x="16" y="35" width="44" height="46" fill="
 const dim = (W: number, H: number, P: any, op = 0.6) => `<rect width="${W}" height="${H}" rx="10" fill="${P.tile}" opacity="${op}"/>`
 
 // ---------------------------------------------------------------- the acts
-type Draw = (a: Act, g: Geo, P: any) => string
-type Row = { band: Draw; pane: [ActSurface | 'all', Draw]; shake?: Partial<Record<'band' | PaneCard | 'all', [number, string][]>> }
+export type Draw = (a: Act, g: Geo, P: any) => string
+export type Row = { band: Draw; pane: [ActSurface | 'all', Draw]; shake?: Partial<Record<'band' | PaneCard | 'all', [number, string][]>> }
 
 const runner = (a: Act, s: number) => `<g class="tqf1">${feet(SP.TB_ATRAIN_RUN1, s)}</g><g class="tqf2">${feet(SP.TB_ATRAIN_RUN2, s)}</g>`
 const streak = (w: number, col: string, n = 4) => Array.from({ length: n }, (_, i) => `<rect x="${-w - 14 - i * 6}" y="${-30 + i * 7}" width="${w - i * 8}" height="1.6" rx=".8" fill="${col}" opacity="${0.85 - i * 0.15}"/>`).join('')
 
+/** Rows other files add (phase 3: the event eggs, the set pieces, the roamers, THE AMBUSH); `scrim` puts the band scrim behind it. */
+const XROWS: Record<string, Row & { scrim?: boolean }> = {}
+export const defineActs = (rows: Record<string, Row & { scrim?: boolean }>): void => { Object.assign(XROWS, rows) }
+const rowOf = (kind: string): (Row & { scrim?: boolean }) | undefined => ROWS[kind] ?? XROWS[kind]
 const ROWS: Record<string, Row> = {
   // T1 `oh, diabolical`: Butcher's bust slides in at the left and says it.
   diabolical: {
@@ -729,7 +733,7 @@ export const speedSmear = (m: Mode, inFlight: number): string => {
 // ---------------------------------------------------------------- what the theme's extras ask for
 /** The act `kind` drawn on a surface (the band, a pane card or THE TABLE), or '' when it has nothing there. */
 export const actOn = (kind: string, g: Geo): string => {
-  const row = ROWS[kind]
+  const row = rowOf(kind)
   if (!row) return ''
   const a = new Act(kind, actMs(kind), g.at)
   const P = pal(g.m)
@@ -738,7 +742,7 @@ export const actOn = (kind: string, g: Geo): string => {
   else if (row.pane[0] === g.on || (row.pane[0] === 'all' && g.on !== 'table')) body = row.pane[1](a, g, P)
   // THE TABLE is only drawn with a crew: its acts also caption the FOCUS GROUP, so the pane always shows them.
   else if (row.pane[0] === 'table' && g.on === 'log') body = a.on(cap(44, 60, TABLE_CAP[kind] ?? kind.toUpperCase(), g.m), 0.2, a.ms / 1000 - 0.2)
-  if (g.on === 'band' && body && SCRIM.has(kind)) body = a.on(dim(g.W, g.H, P, 0.72), 0, a.ms / 1000, { fade: 0.25 }) + body
+  if (g.on === 'band' && body && (SCRIM.has(kind) || row.scrim)) body = a.on(dim(g.W, g.H, P, 0.72), 0, a.ms / 1000, { fade: 0.25 }) + body
   const sh = row.shake?.[g.on as 'band'] ?? (g.on !== 'band' && g.on !== 'table' ? row.shake?.all : undefined)
   let extra = ''
   if (sh) {
@@ -751,7 +755,7 @@ export const actOn = (kind: string, g: Geo): string => {
 /** The camera move a typed act puts on a whole panel (T2's beat drop, T5's float, T41's shrink): a CSS animation for the
  *  wrapper (see overlay.ts shakeInto), or ''. The keyframes ride in the act's own <style> on the same panel. */
 export const actShake = (kind: string, on: 'band' | PaneCard, at: number): string => {
-  const row = ROWS[kind]
+  const row = rowOf(kind)
   const sh = row?.shake?.[on] ?? (on !== 'band' ? row?.shake?.all : undefined)
   if (!sh) return ''
   return `xs${kind.slice(0, 4)} ${actMs(kind) / 1000}s linear both;animation-delay:calc(${pin(at)} + 0s)`
@@ -759,5 +763,9 @@ export const actShake = (kind: string, on: 'band' | PaneCard, at: number): strin
 /** Every act kind this file draws (the tests walk them). */
 export const ACT_KINDS = Object.keys(ROWS)
 /** Where each act draws on the pane. */
-export const paneOf = (kind: string): ActSurface | 'all' | undefined => ROWS[kind]?.pane[0]
+export const paneOf = (kind: string): ActSurface | 'all' | undefined => rowOf(kind)?.pane[0]
+/** Every kind phase 3 added (events, set pieces, roamers, THE AMBUSH). */
+export const xKinds = (): string[] => Object.keys(XROWS)
+// The props and the band geometry, for theboys-show.ts.
+export const KIT = { feet, GROUND, gaugeOf, bustAt, coverBust, dim, poof, censor, knight, octo, tentacle, dolphin, beaver, critter, dog, pig, can, flashbulb, cone, glass, vial, crowd, ribbon, vhs, tv, palm, frostEdge, runner, streak, heart, note }
 void M

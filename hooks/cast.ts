@@ -4038,6 +4038,7 @@ export const CASTS: Record<string, Cast> = {
   boys: BOYS_CAST(TB_HOMELANDER, 'Homelander', 'The Boys'),
   boys2: BOYS_CAST(TB_BUTCHER, 'Butcher', 'The Boys (off book)'),
   solidgold: BOYS_CAST(TB_SOLDIERBOY, 'Soldier Boy', 'SOLID GOLD'),
+  boysnoir: BOYS_CAST(TB_NOIR, 'Black Noir', 'THIS MEANS NOIR'),
   // Edgerunners 2 (fan homage): D leads, Roman, Talia, Weak and Jessie work, the Kings and the teal-jacket runners back them.
   edgerunners2: {
     name: 'Edgerunners 2',
