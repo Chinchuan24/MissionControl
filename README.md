@@ -298,7 +298,7 @@ The Saul words also work on GENE.
 | T2 | `ashley, look at me` | lookatme |
 | T3 | `shock and awe, my son` | hijack |
 | T4 | `never meet your heroes` | onbrand |
-| T5 | `i can do whatever i want` | whatever |
+| T5 | `i can do whatever i want` (alone, or ending in `!`) | whatever |
 | T6 | `pinocchio is stayin' put` | whale |
 | T7 | `timothy the octopus` | timothy |
 | T8 | `vought on ice` | ice |
@@ -324,11 +324,11 @@ The Saul words also work on GENE.
 | T28 | `not without my dolphin` | dolphin |
 | T29 | `ambrosius` | ambrosius |
 | T30 | `american hero` | americanhero |
-| T31 | `rock my kiss / super-sweet` | rockmykiss |
-| T32 | `smartest person` | knight |
+| T31 | `rock my kiss / super-sweet (alone)` | rockmykiss |
+| T32 | `smartest person on the planet` | knight |
 | T33 | `wakey wakey` | wakey |
 | T34 | `class dismissed (alone)` | dismissed |
-| T35 | `the real heroes` | realheroes |
+| T35 | `you guys are the real heroes` | realheroes |
 | T36 | `you're bad product` | badproduct |
 | T37 | `really a pharmaceutical company` | pharma |
 | T38 | `storage boy` | storage |

@@ -61,7 +61,7 @@ export const SAMPLES: Record<string, string> = {
   T16: 'a tall glass of milk', T17: 'compound v', T18: 'Hughie, blink', T19: 'turbo rush', T20: 'training a-train',
   T21: 'brave maeve', T22: 'seven on 7', T23: 'dawn of the seven', T24: 'the fun cut', T25: 'invisible force',
   T26: 'this means noir', T27: 'VIVANT!', T28: 'not without my dolphin', T29: 'ambrosius', T30: 'american hero',
-  T31: 'rock my kiss', T32: 'smartest person in the room', T33: 'wakey wakey', T34: 'class dismissed', T35: 'you guys are the real heroes',
+  T31: 'rock my kiss', T32: 'the smartest person on the planet', T33: 'wakey wakey', T34: 'class dismissed', T35: 'you guys are the real heroes',
   T36: "you're bad product", T37: 'what we are, really, is a pharmaceutical company', T38: 'storage boy', T39: 'red scare', T40: 'godolkin',
   T41: 'little cricket', T42: 'monster club', T43: 'v52 expo', T44: 'good boy, terror', T45: 'full roster',
   T46: 'hometeamers', T47: 'starlighters', T48: 'saving america', T49: 'vought for tots', T50: 'planet vought',
@@ -149,8 +149,11 @@ export const DEV_PROMPTS = [
   'the octopus deploy integration keeps timing out', 'show a little cricket score widget on the sports page', 'the monster energy sponsor logo is blurry',
   'run the tests and tell me what failed', 'update the README with the new install steps', 'what is the fastest way to profile this React render?',
   'migrate the database from Postgres 14 to 16', 'the American flag emoji renders as two letters on Windows', 'the planet earth image is too large',
+  // Everyday phrases that hold an egg's words (each egg needs its full line, or the words alone).
+  'return the raw rows so I can do whatever I want with them', 'make the onboarding copy super-sweet and friendly',
+  "I'm not the smartest person in the room, so explain it simply", 'thank the maintainers in the README, they are the real heroes',
 ]
-test('no false positives: 39 ordinary coding prompts fire nothing in any mode, with every row live and spoilers on', () => {
+test('no false positives: 43 ordinary coding prompts fire nothing in any mode, with every row live and spoilers on', () => {
   // `supersonic`, `class dismissed` and `full roster` alone are triggers; in a sentence about code they must not be.
   let checked = 0
   for (const p of DEV_PROMPTS) {
