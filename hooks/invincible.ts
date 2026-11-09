@@ -9,17 +9,18 @@ import { pin } from './smooth'
 
 export { SP, pin }
 export type Era = 1 | 2
-// Era 1: the classic suit (S1-S2). Chin's ask: the whole interface wears the suit's sky blue (saturated, not pastel), the yellow
-// as its accents, dark navy type on top (body text 8:1, the quietest text 6:1 on the tile, 5.3:1 on the deeper tile2). Yellow
-// never carries text on the sky: it fills the caption boxes, the chip, the done pips and the bars, and `heroT` (the suit's deep
-// blue) carries the words and thin lines. Panels: tile the sky, tile2 a step deeper, the pane's backdrop deeper still.
+// Era 1: the classic suit (S1-S2). Palette A: the panels wear the suit's navy (rich, a little muted, clearly blue and never the
+// S3 near-black), and Mark's sky blue marks only what earns attention: the accent and meter fill, accent text, the hero words and
+// speed lines, the borders. The yellow stays the suit's second colour: caption boxes, done pips, bars and the chip, always with
+// ink on top. Light blue-white type reads at 4.5:1 or better on every surface. Panels: tile the navy, tile2 a step deeper, the
+// pane's backdrop deepest.
 export const ERA1 = {
-  light: true, tile: '#4FB0EE', tile2: '#42A5EA', line: '#2A7FC4', track: '#3594DC',
-  a: '#0E2E60', aT: '#082457', hero: '#F5C518', heroInk: '#0B0D14', heroT: '#0A2A66', text: '#05101F', sub: '#0B1A33', muted: '#102A4C',
-  done: '#0B3A1C', warn: '#3A2600', alert: '#5C0A08', name: 'classic', season: 'S1',
-  bg: '#3A9AE0', dots: 'rgba(11,13,20,.08)',
-  roles: ['#082457', '#0B3A1C', '#3A2600', '#4A0A2E', '#5C0A08', '#2E1A66'],
-  boss: ['#0E2E60', '#F5C518', '#0B0D14', '#4FB0EE', '#0E2E60'],
+  light: false, tile: '#1D4270', tile2: '#183960', line: '#4B85C0', track: '#2F5D92',
+  a: '#66BDF3', aT: '#8FCDF7', hero: '#F5C518', heroInk: '#0B0D14', heroT: '#6EC3F7', text: '#F3F7FC', sub: '#C6D6E8', muted: '#A3BAD4',
+  done: '#8EDDA8', warn: '#F5C518', alert: '#FF968B', name: 'classic', season: 'S1',
+  bg: '#122E50', dots: 'rgba(143,205,247,.07)',
+  roles: ['#8FCDF7', '#8EDDA8', '#F5C518', '#F7A8C6', '#FF968B', '#C4B0F2'],
+  boss: ['#66BDF3', '#F5C518', '#0B0D14', '#F3F7FC', '#66BDF3'],
 }
 // Era 2: the new suit (S3). Light blue and platinum on black.
 export const ERA2 = {
