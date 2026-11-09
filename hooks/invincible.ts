@@ -21,6 +21,10 @@ export const ERA1 = {
   bg: '#122E50', dots: 'rgba(143,205,247,.07)',
   roles: ['#8FCDF7', '#8EDDA8', '#F5C518', '#F7A8C6', '#FF968B', '#C4B0F2'],
   boss: ['#66BDF3', '#F5C518', '#0B0D14', '#F3F7FC', '#66BDF3'],
+  // The suit's yellow and its black (the goggles, the underarms) as trim around the navy: the band's ink frame and yellow edge,
+  // the yellow-and-black rules, the yellow Tasks chip and ON PATROL, the ink episode tag ringed in yellow; the pane's yellow
+  // section rails and ink card edges. Yellow as text reads 6.2:1 on the navy or better; ink on yellow 11.9:1.
+  trim: { hi: '#F5C518', ink: '#0B0D14' } as { hi: string; ink: string } | null,
 }
 // Era 2: the new suit (S3). Light blue and platinum on black.
 export const ERA2 = {
@@ -30,6 +34,8 @@ export const ERA2 = {
   bg: '#090C18', dots: 'rgba(245,197,24,.05)',
   roles: ['#8FC0FF', '#7FD39A', '#F5C518', '#F28CB1', '#E8453C', '#B39DDB'],
   boss: ['#3D7FE0', '#F5C518', '#0B0D14', '#F3F5FA', '#3D7FE0'],
+  // No yellow-and-black trim: the new suit keeps its black and light blue.
+  trim: null as { hi: string; ink: string } | null,
 }
 export const pal = (era: any): Record<string, any> => (era === 2 ? ERA2 : ERA1)
 // Props keep their own colours in both eras.
@@ -251,10 +257,36 @@ export const BAND_H = 134
 export const foot = (W: any, H: any, ctx: any, era: any) => {
   const P = pal(era)
   const id = uniq('ht')
-  let s = `<defs>${halftoneDefs(id, P.hero, 1.1, 5, 0.16)}<linearGradient id="${id}g" x1="0" x2="1"><stop offset=".45" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#fff" stop-opacity="1"/></linearGradient><mask id="${id}m"><rect x="0" y="${H - 34}" width="${W}" height="34" fill="url(#${id}g)"/></mask></defs>`
+  let s = edge(W, H, ctx, era)
+  s += `<defs>${halftoneDefs(id, P.hero, 1.1, 5, 0.16)}<linearGradient id="${id}g" x1="0" x2="1"><stop offset=".45" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#fff" stop-opacity="1"/></linearGradient><mask id="${id}m"><rect x="0" y="${H - 34}" width="${W}" height="34" fill="url(#${id}g)"/></mask></defs>`
   s += `<rect x="0" y="${H - 34}" width="${W}" height="34" fill="url(#${id})" mask="url(#${id}m)"/>`
   s += `<rect x="12" y="${H - 6.5}" width="${W - 24}" height="1.5" fill="${P.hero}" opacity=".35"/>`
   return s
+}
+/** The classic suit's own edge (the band's `ownEdge`): the navy tile in an ink comic frame with a yellow hairline inside it, and
+ *  the status edge at the left in yellow on an ink strip while working (green at a party, the quiet line when idle). The new
+ *  suit draws nothing here: the engine's own edge. */
+export const edge = (W: any, H: any, ctx: any, era: any) => {
+  const T = pal(era).trim
+  if (!T) return ''
+  const P = pal(era)
+  const live = ctx?.party ? P.done : ctx?.isWorking ? T.hi : P.line
+  return `<g class="inv-trim"><rect x="1" y="1" width="${W - 2}" height="${H - 2}" rx="10" fill="${P.tile}" stroke="${T.ink}" stroke-width="2"/><rect x="3.5" y="3.5" width="${W - 7}" height="${H - 7}" rx="8" fill="none" stroke="${T.hi}" stroke-opacity=".7" stroke-width="1"/><rect x="1" y="13" width="5" height="${H - 26}" rx="1" fill="${T.ink}"/><rect x="2" y="14" width="3" height="${H - 28}" rx="1" fill="${live}"/></g>`
+}
+/** A divider rule: the classic suit's is a yellow-and-black belt (an ink rule with a yellow line along it); else the plain line. */
+export const rule = (x1: any, y1: any, x2: any, y2: any, era: any) => {
+  const P = pal(era)
+  const T = P.trim
+  if (!T) return `<line x1="${r1(x1)}" y1="${r1(y1)}" x2="${r1(x2)}" y2="${r1(y2)}" stroke="${P.line}"/>`
+  const v = x1 === x2
+  const [dx, dy] = v ? [1.5, 0] : [0, 1.5]
+  return `<g class="inv-trim"><line x1="${r1(x1)}" y1="${r1(y1)}" x2="${r1(x2)}" y2="${r1(y2)}" stroke="${T.ink}" stroke-width="2"/><line x1="${r1(x1 + dx)}" y1="${r1(y1 + dy)}" x2="${r1(x2 + dx)}" y2="${r1(y2 + dy)}" stroke="${T.hi}" stroke-width="1" stroke-opacity=".8"/></g>`
+}
+/** The status and role chips: square, with an ink edge. The classic suit's working status chip (the Tasks chip) wears the suit yellow. */
+export const pill = (x: any, y: any, w: any, h: any, fill: any, opacity: any, stroke: any, era: any) => {
+  const P = pal(era)
+  const hi = P.trim && stroke === undefined && fill === P.a && opacity === 1
+  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${hi ? P.trim.hi : fill}" fill-opacity="${opacity}" stroke="#0B0D14" stroke-width="1.5"${hi ? ' class="inv-trim"' : ''}/>`
 }
 export const corner = (W: any, H: any, ctx: any, era: any) => allenEye(W - 22, H - 15, 1.1, ctx.ctxPct >= 95 || ctx.overBudget ? 'wide' : 'blink')
 /** The session total, "Total $1.23", as bcsTotal does it: a self-contained tag, 11.5 px, `w` wide. */
@@ -295,7 +327,9 @@ export const ep = (xr: any, y: any, code: any, title: any, full: any, era: any) 
   let x = xr
   if (full) { x -= sansW(title, 11.5); s += T(x, y, title, 11.5, 400, P.sub, 'font-style="italic"'); x -= 8 }
   x -= cw
-  s += `<rect x="${r1(x)}" y="${y - 11.5}" width="${r1(cw)}" height="15" fill="${PROPS.ink}" stroke="${P.sub}" stroke-opacity=".5" stroke-width="1"/>${C(x + 7, y, code, 9.5, '#FFFFFF', 'letter-spacing=".8"')}`
+  s += P.trim
+    ? `<rect class="inv-trim" x="${r1(x)}" y="${y - 11.5}" width="${r1(cw)}" height="15" fill="${P.trim.ink}" stroke="${P.trim.hi}" stroke-width="1.2"/>${C(x + 7, y, code, 9.5, '#FFFFFF', 'letter-spacing=".8"')}`
+    : `<rect x="${r1(x)}" y="${y - 11.5}" width="${r1(cw)}" height="15" fill="${PROPS.ink}" stroke="${P.sub}" stroke-opacity=".5" stroke-width="1"/>${C(x + 7, y, code, 9.5, '#FFFFFF', 'letter-spacing=".8"')}`
   return s
 }
 /** The gauge: ON PATROL n/m with the tiny flying Mark while working; BURGER MART n/m with a burger when idle (his day job). */
@@ -309,7 +343,7 @@ export const gauge = (xr: any, y: any, isWorking: any, done: any, total: any, er
   const x = xr - w
   const sp = era === 2 ? SP.INV_MARK_S3_FLY : SP.INV_MARK_FLY
   let s = isWorking ? speedLines(x + 3, y - 5, 8, 3, 1, P.heroT, { op: 0.5, gap: 3 }) + px(sp, x + 1, y - 9, 0.55, { cls: 'inv-bob' }) : burger(x + 1, y - 9)
-  s += T(x + 16, y, label, 9.5, 700, isWorking ? P.heroT : P.muted, 'letter-spacing=".8"')
+  s += T(x + 16, y, label, 9.5, 700, isWorking ? (P.trim ? P.trim.hi : P.heroT) : P.muted, `letter-spacing=".8"${isWorking && P.trim ? ' class="inv-trim"' : ''}`)
   s += T(x + 16 + lw + 7, y, count, 13, 700, P.text, 'font-variant-numeric="tabular-nums"')
   return { svg: s, w }
 }

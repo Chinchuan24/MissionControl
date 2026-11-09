@@ -173,6 +173,8 @@ export type ThemeEggs = {
     cache?: { fill: string; core?: string }
     /** The foot draws the band's left edge itself: the engine's thin status edge is left out. */
     ownEdge?: boolean
+    /** The band's divider rules in the theme's own hand (Invincible's classic suit: a yellow-and-black belt), in place of the plain line. */
+    rule?: (x1: number, y1: number, x2: number, y2: number) => string
   }
   /** A character who roams the band and the pane (a walk, a peek, a sit, now and then a takeover). */
   roamer?: ThemeRoamer
