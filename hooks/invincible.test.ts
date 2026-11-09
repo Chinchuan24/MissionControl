@@ -228,17 +228,24 @@ test('eras: "new suit" puts on the blue-and-black suit with the swap, "classic s
   await $.prompt.submit({ text: 'new suit or classic suit', cursor: 0 } as never)
   expect(await bandAt($, 1250)).not.toContain('class="sw-anim"')
 })
-test('eras: the classic suit paints the whole interface light blue with yellow accents; the new suit keeps its black and blue', () => {
-  // Era 1: a light-blue tile (blue the strongest channel, bright), ink type, the suit's yellow as the accent.
-  const [r, g, b] = [1, 3, 5].map(i => parseInt(ERA1.tile.slice(i, i + 2), 16)) as [number, number, number]
-  expect(b).toBeGreaterThan(r)
-  expect(b).toBeGreaterThanOrEqual(g)
-  expect(lum(ERA1.tile)).toBeGreaterThan(0.6)
+test('eras: the classic suit paints the whole interface sky blue with yellow accents; the new suit keeps its black and blue', () => {
+  // Era 1: Mark's sky blue on every surface: saturated (blue well above red, never a pastel), mid-bright, the layers a step apart.
+  for (const k of ['tile', 'tile2', 'bg'] as const) {
+    const [r, g, b] = [1, 3, 5].map(i => parseInt(ERA1[k].slice(i, i + 2), 16)) as [number, number, number]
+    expect(b).toBeGreaterThan(g)
+    expect(g).toBeGreaterThan(r)
+    expect(b - r).toBeGreaterThanOrEqual(150)
+    expect(r).toBeLessThan(0x60)
+    expect(lum(ERA1[k])).toBeGreaterThan(0.25)
+    expect(lum(ERA1[k])).toBeLessThan(0.45)
+  }
+  expect(lum(ERA1.tile2)).toBeLessThan(lum(ERA1.tile))
+  expect(lum(ERA1.bg)).toBeLessThan(lum(ERA1.tile2))
   expect(ERA1.light).toBe(true)
   expect(ERA1.hero).toBe('#F5C518')
   expect(contrast(ERA1.heroInk, ERA1.hero)).toBeGreaterThanOrEqual(7)
-  expect(lum(ERA1.text)).toBeLessThan(0.05)
-  expect(lum(ERA1.bg)).toBeGreaterThan(0.5)
+  expect(lum(ERA1.text)).toBeLessThan(0.01)
+  expect(contrast(ERA1.text, ERA1.tile)).toBeGreaterThanOrEqual(7)
   // Era 2: unchanged, dark.
   expect(ERA2.light).toBe(false)
   expect(ERA2.tile).toBe('#0A0B10')
@@ -246,7 +253,7 @@ test('eras: the classic suit paints the whole interface light blue with yellow a
   expect(ERA2.bg).toBe('#090C18')
   for (const k of ['tile', 'tile2', 'track', 'line', 'bg'] as const) expect(lum(ERA2[k])).toBeLessThan(0.05)
 })
-test('eras: the classic suit wears the light palette on the band and the pane, the new suit the dark one', async ($, on) => {
+test('eras: the classic suit wears the sky palette on the band and the pane, the new suit the dark one', async ($, on) => {
   const clock = base(on, 100_000, quietAt())
   await start($, 'invincible')
   await jobIn($)

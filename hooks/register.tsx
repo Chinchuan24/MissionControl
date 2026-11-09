@@ -1801,8 +1801,8 @@ const GENE_SKIN: Skin = {
   tabs: { mission: '⚖\uFE0E Mission Control', skins: '⚖\uFE0E Skins' },
 }
 
-// Invincible (fan homage): the comic page that became the show. Era 1 (the classic suit) wears the suit's light blue with yellow
-// accents and ink type, the whole interface; `new suit` puts on the S3 palette (black and light blue) in place, as Edgerunners 2
+// Invincible (fan homage): the comic page that became the show. Era 1 (the classic suit) wears the suit's sky blue with yellow
+// accents and dark navy type, the whole interface; `new suit` puts on the S3 palette (black and light blue) in place, as Edgerunners 2
 // switches its modes. `dark: true` in both eras so the era's own colours always paint (the way Caliper's light face does). Invincible and its characters belong to
 // Robert Kirkman, Cory Walker, Ryan Ottley, Image Comics, Skybound and Amazon MGM Studios, used as fan homage only.
 const invColors = (era: 1 | 2): SkinColors => {

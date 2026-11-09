@@ -9,16 +9,17 @@ import { pin } from './smooth'
 
 export { SP, pin }
 export type Era = 1 | 2
-// Era 1: the classic suit (S1-S2). Chin's ask: the whole interface wears the suit's light blue, the yellow as its accents, ink
-// type on top (body text 13:1, the quietest text 5.8:1 on the tile). Yellow never carries text on the light tile: it fills the
-// caption boxes, the chip, the done pips and the bars, and `heroT` (the suit's deep blue) carries the words and thin lines.
+// Era 1: the classic suit (S1-S2). Chin's ask: the whole interface wears the suit's sky blue (saturated, not pastel), the yellow
+// as its accents, dark navy type on top (body text 8:1, the quietest text 6:1 on the tile, 5.3:1 on the deeper tile2). Yellow
+// never carries text on the sky: it fills the caption boxes, the chip, the done pips and the bars, and `heroT` (the suit's deep
+// blue) carries the words and thin lines. Panels: tile the sky, tile2 a step deeper, the pane's backdrop deeper still.
 export const ERA1 = {
-  light: true, tile: '#C9E6FB', tile2: '#B3DBF8', line: '#7FB6E6', track: '#A6D1F3',
-  a: '#1A5FB8', aT: '#0B4A9E', hero: '#F5C518', heroInk: '#0B0D14', heroT: '#123E8C', text: '#0B1A33', sub: '#24395E', muted: '#3E5578',
-  done: '#176B36', warn: '#7A5000', alert: '#A3221B', name: 'classic', season: 'S1',
-  bg: '#AED6F4', dots: 'rgba(11,13,20,.07)',
-  roles: ['#0B4A9E', '#176B36', '#7A5000', '#9C2B63', '#A3221B', '#5B3FA0'],
-  boss: ['#1A5FB8', '#F5C518', '#0B0D14', '#C9E6FB', '#1A5FB8'],
+  light: true, tile: '#4FB0EE', tile2: '#42A5EA', line: '#2A7FC4', track: '#3594DC',
+  a: '#0E2E60', aT: '#082457', hero: '#F5C518', heroInk: '#0B0D14', heroT: '#0A2A66', text: '#05101F', sub: '#0B1A33', muted: '#102A4C',
+  done: '#0B3A1C', warn: '#3A2600', alert: '#5C0A08', name: 'classic', season: 'S1',
+  bg: '#3A9AE0', dots: 'rgba(11,13,20,.08)',
+  roles: ['#082457', '#0B3A1C', '#3A2600', '#4A0A2E', '#5C0A08', '#2E1A66'],
+  boss: ['#0E2E60', '#F5C518', '#0B0D14', '#4FB0EE', '#0E2E60'],
 }
 // Era 2: the new suit (S3). Light blue and platinum on black.
 export const ERA2 = {

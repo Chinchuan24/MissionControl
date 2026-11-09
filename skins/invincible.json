@@ -7,43 +7,43 @@
   "corners": "round",
   "dark": true,
   "colors": {
-    "accent": "#1A5FB8",
-    "accent2": "#123E8C",
-    "done": "#176B36",
-    "warn": "#7A5000",
-    "alert": "#A3221B",
-    "meter": "#1A5FB8",
-    "text": "#0B1A33",
-    "subtext": "#24395E",
-    "muted": "#3E5578",
-    "tile": "#C9E6FB",
-    "track": "#A6D1F3",
-    "line": "#7FB6E6",
-    "grid": "#B3DBF8"
+    "accent": "#0E2E60",
+    "accent2": "#0A2A66",
+    "done": "#0B3A1C",
+    "warn": "#3A2600",
+    "alert": "#5C0A08",
+    "meter": "#0E2E60",
+    "text": "#05101F",
+    "subtext": "#0B1A33",
+    "muted": "#102A4C",
+    "tile": "#4FB0EE",
+    "track": "#3594DC",
+    "line": "#2A7FC4",
+    "grid": "#42A5EA"
   },
   "boss": [
-    "#1A5FB8",
+    "#0E2E60",
     "#F5C518",
     "#0B0D14",
-    "#C9E6FB",
-    "#1A5FB8"
+    "#4FB0EE",
+    "#0E2E60"
   ],
   "roles": [
-    "#0B4A9E",
-    "#176B36",
-    "#7A5000",
-    "#9C2B63",
-    "#A3221B",
-    "#5B3FA0"
+    "#082457",
+    "#0B3A1C",
+    "#3A2600",
+    "#4A0A2E",
+    "#5C0A08",
+    "#2E1A66"
   ],
   "effects": {
     "scanlines": false,
     "glitch": false
   },
   "backdrop": {
-    "fill": "#AED6F4",
+    "fill": "#3A9AE0",
     "pattern": "dots",
-    "ink": "rgba(11,13,20,.07)"
+    "ink": "rgba(11,13,20,.08)"
   },
   "chat": true,
   "words": [
