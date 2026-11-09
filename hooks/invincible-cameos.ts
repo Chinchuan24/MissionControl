@@ -7,14 +7,14 @@
 //             "GDA REC" tag shows in the band's top corner while the feed is up.
 // Schedule: pure functions of the clock (no state). The clock is cut into 6-minute slots; each slot has one cameo at a seeded
 // moment in its first 2 minutes, so two are always 4 to 8 minutes apart, and one character per slot (never two in a 30 s window).
-// A cameo is skipped when its window would touch THE FIGHT or THE SHOWDOWN (either era's plan), and is never drawn during the
-// swap, THINK, MARK, a typed showdown or the job-done celebration. Every piece runs ONE CSS duration with its keyframes in
-// percent and the single delay `pin(startAt)`, so a redraw anywhere in the act resumes it and a draw up to AHEAD_MS before it
-// schedules it (the delay is then positive): an idle draw still shows it. The cameos do not change with the era; only the band
+// A cameo is skipped when its window would touch THE FIGHT, THE SHOWDOWN or THE MULTIVERSE (either era's plan), and is never
+// drawn during the swap, THINK, MARK, a typed showdown, a typed multiverse or the job-done celebration. Every piece runs ONE
+// CSS duration with its keyframes in percent and the single delay `pin(startAt)`, so a redraw anywhere in the act resumes it
+// and a draw up to AHEAD_MS before it schedules it (the delay is then positive): an idle draw still shows it. The cameos do not change with the era; only the band
 // tag and Oliver's speed lines wear the era's colours. Reduced motion: nothing moves; some cameos leave one faint still.
 // People are only ever the approved pixel sprites (INV_EVE, INV_OLIVER, INV_CECIL); the effects around them are drawn.
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { AHEAD_MS, SHOWDOWN_MS, SWAP_MS, THINK_MS, duelPlan, fightDue, kf, mover, showdownDue, showdownPlan } from './invincible-eggs'
+import { AHEAD_MS, SHOWDOWN_MS, SWAP_MS, THINK_MS, VARIANTS_MS, duelPlan, fightDue, kf, mover, showdownDue, showdownPlan, variantsPlan } from './invincible-eggs'
 import { M, PROPS, SP, T, clamp, pal, pin, px, r1, sansW, speedLines, spH, spW, unit } from './invincible'
 import type { Era } from './invincible'
 import type { ExtraArgs, PaneCard } from './themes'
@@ -54,8 +54,12 @@ export const CECIL_LINES = ['We need to talk.', 'Mark. My office.', 'Give us a m
 export const DUR_MS: Record<Mode, number> = { 'fly-band': 5200, 'fly-pane': 4200, perch: 7000, dash: 2600, pop: 5000, feed: 6000 }
 
 const overlaps = (a0: number, a1: number, b0: number, b1: number, m: number): boolean => a0 < b1 + m && b0 < a1 + m
-/** Would a window touch THE FIGHT or THE SHOWDOWN, in either era (the plan is the same in both, so a swap never changes it)? */
+/** Would a window touch THE FIGHT, THE SHOWDOWN or THE MULTIVERSE, in either era (the plan is the same in both, so a swap never changes it)? */
 export const camBlocked = (startAt: number, endAt: number): boolean => {
+  for (const t of [startAt, endAt]) {
+    const v = variantsPlan(t)
+    if (v.on && overlaps(startAt, endAt, v.startAt, v.endAt, CAM_GAP_MS)) return true
+  }
   for (const era of [1, 2] as const) {
     for (const t of [startAt, endAt]) {
       const d = duelPlan(t, era)
@@ -104,7 +108,7 @@ export const camDue = (at: number, fx?: { kind: string; at: number }, swapAt?: n
     const p = camPlanOfSlot(slot)
     if (!p.on || at >= p.endAt || p.startAt > at + AHEAD_MS) continue
     if (liveWin(swapAt, p.startAt, p.endAt, SWAP_MS + 500)) return undefined
-    if (fx && (fx.kind === 'think' || fx.kind === 'showdown') && liveWin(fx.at, p.startAt, p.endAt, fx.kind === 'think' ? THINK_MS : SHOWDOWN_MS)) return undefined
+    if (fx && (fx.kind === 'think' || fx.kind === 'showdown' || fx.kind === 'variants') && liveWin(fx.at, p.startAt, p.endAt, fx.kind === 'think' ? THINK_MS : fx.kind === 'showdown' ? SHOWDOWN_MS : VARIANTS_MS)) return undefined
     return p
   }
   return undefined
@@ -128,7 +132,7 @@ export const CAMEO_CSS = `.cm-c{transform-box:fill-box;transform-origin:50% 50%}
 @keyframes cm-stay{0%,92%{opacity:1}100%{opacity:0;visibility:hidden}}
 @media (prefers-reduced-motion: reduce){.cm-anim{display:none}.cm-still{display:block;opacity:0;animation-name:cm-stay;animation-timing-function:steps(1);animation-fill-mode:forwards}.cm-bob,.cm-tw,.cm-wave,.cm-blink,.cm-scan{animation:none}}`
 
-const STAR4 = 'M0 -4L1.1 -1.1L4 0L1.1 1.1L0 4L-1.1 1.1L-4 0L-1.1 -1.1Z'
+export const STAR4 = 'M0 -4L1.1 -1.1L4 0L1.1 1.1L0 4L-1.1 1.1L-4 0L-1.1 -1.1Z'
 
 type Ctx = { W: number; H: number; p: CamPlan; era: Era; dly: string; id: string; css: string }
 const T_ = (c: Ctx) => (t: number): number => (t / (c.p.durMs / 1000)) * 100

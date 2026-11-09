@@ -3,7 +3,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import { THEME_KEYS } from './themes'
 import type { ThemeKey } from './themes'
-import { AHEAD_MS, duelPlan, showdownPlan } from './invincible-eggs'
+import { AHEAD_MS, duelPlan, showdownPlan, variantsPlan } from './invincible-eggs'
 
 // The pane must not fall back to its "short view" because of how long the session has run. A plan, two agents at work
 // and a hundred finished ones is the everyday case: it draws in full, within what the desktop app can hold (a whole
@@ -247,7 +247,7 @@ const fightAt = (era: 1 | 2 = 1): number => {
 const quietAt = (): number => {
   for (let t = NOW; ; t += 61_000) {
     const near = (p: { startAt: number; endAt: number }) => t + 2 * AHEAD_MS > p.startAt && t < p.endAt + 60_000
-    if (!near(duelPlan(t, 1)) && !near(duelPlan(t + 120_000, 1)) && !near(showdownPlan(t, 1)) && !near(showdownPlan(t + 120_000, 1))) return t
+    if (!near(duelPlan(t, 1)) && !near(duelPlan(t + 120_000, 1)) && !near(showdownPlan(t, 1)) && !near(showdownPlan(t + 120_000, 1)) && !near(variantsPlan(t)) && !near(variantsPlan(t + 120_000))) return t
   }
 }
 const INVINCIBLE = WEARS.find(w => w.label === 'invincible') as (typeof WEARS)[number]
@@ -282,6 +282,23 @@ test('always full: Invincible after a typed think, mark still draws the full pan
   underCaps(m, 'think, mark')
   isFull(m, 'think, mark')
 })
+
+for (const era of [1, 2] as const) {
+  for (const working of [true, false]) {
+    test(`always full: Invincible (era ${era}, ${working ? 'at work' : 'idle'}) while THE MULTIVERSE plays still draws the full pane, under both caps`, { timeoutMs: 60_000 }, async ($, on) => {
+      const clock = base(on, quietAt())
+      await session($, era === 2 ? (WEARS.find(w => w.label === 'invincible (new suit)') as (typeof WEARS)[number]) : INVINCIBLE, working ? 2 : 0, 100)
+      const quiet = await look($, 120)
+      expect(quiet.sources.some(s => s.includes('<!--dl-->'))).toBe(false)
+      await $.prompt.submit({ text: 'multiverse', cursor: 0 } as never)
+      await clock.advance(3_000)
+      const m = await look($, 120)
+      underCaps(m, 'multiverse')
+      isFull(m, 'multiverse')
+      expect(m.sources.some(s => s.includes('<!--dl--><g pointer-events="none" data-egg="variants"')), 'the act is in the drawing').toBe(true)
+    })
+  }
+}
 
 test('always full: the finished toggle and each row\'s Open button still work with the chip', { timeoutMs: 60_000 }, async ($, on) => {
   base(on)
