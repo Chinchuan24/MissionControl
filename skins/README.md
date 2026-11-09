@@ -16,7 +16,7 @@ Caliper is an original Mission Control design (no homage): a dark face, a light 
 - `/skin mentalist`: Jane and the CBI team (dark, its own pixel cast)
 - `/skin breaking-bad`: Mr. White, Jesse and the lab (dark, crystal blue, its own pixel cast)
 - `/skin better-call-saul`: Saul's strip-mall law office (dark walnut, powder blue and gold, Mike roams). A hidden black-and-white skin hides inside it
-- `/skin invincible`: the comic page that became the show (ink navy and suit yellow). Mark and Omni-Man fight across the band and the pane now and then, the Guardians take on Omni-Man once a day (or type `guardians`), a rift spills a flock of evil Marks across the screen once a day too (or type `multiverse`), and a second era hides behind `new suit` (`classic suit` goes back).
+- `/skin invincible`: the comic page that became the show (the classic suit: sky blue with yellow accents, the whole interface). Mark and Omni-Man fight across the band and the pane now and then, the Guardians take on Omni-Man once a day (or type `guardians`), a rift spills a flock of evil Marks across the screen once a day too (or type `multiverse`), and a second era hides behind `new suit`: the S3 suit's black and blue (`classic suit` goes back to the sky blue).
 - `/skin caliper`: graphite and ice, a dial and a ruler. `/skin caliper light`, `dark` or `auto` picks the face; the CALIBRATION card's `⇄` button cycles it.
 - `/skin off`: back to Default (no skin)
 - `/skin reload`: re-read this folder after you edit or add a file
