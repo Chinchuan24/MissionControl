@@ -19,7 +19,7 @@ import { BCS_SKIN_WORDS, BCS_TOOLS, SAUL_GOODMAN_RE, TAKAVIC_RE } from './better
 import { TOASTS, bashToast, cmdKind, fxOf, mcgillNow, resultFailed, toastDue } from './bettercallsaul-fx'
 import type { BashState, Fx, ToastKey } from './bettercallsaul-fx'
 import { UNPLUG_GAP_MS, shouldUnplug } from './bettercallsaul-extra'
-import { CLASSIC_RE, GUARDIANS_RE, NEW_SUIT_RE, THINK_RE } from './invincible-eggs'
+import { CLASSIC_RE, GUARDIANS_RE, NEW_SUIT_RE, SWAP_MS, THINK_RE, isVariantsAsk } from './invincible-eggs'
 import { ERA1, ERA2, TITLE_WORDS as INV_WORDS } from './invincible'
 import { VERBS as INV_VERBS } from './invincible-cards'
 import { BYE_CAPRI_RE, CAPRICORN_RE, CAPRI_WORD_RE, ER2_FONT, ER2_TOOLS, ER2_WORDS } from './edgerunners2'
@@ -2029,7 +2029,7 @@ const readAppLight = async ($: EngineInterface): Promise<boolean> => {
 }
 const calFace = (): 'dark' | 'light' => (CAL_MODE.mode === 'auto' ? (APP_LIGHT ? 'light' : 'dark') : CAL_MODE.mode)
 const calNext = (): CalMode => (CAL_MODE.mode === 'dark' ? 'light' : CAL_MODE.mode === 'light' ? 'auto' : 'dark')
-// The last typed Invincible word that draws something (`think, mark`, `guardians`), and the context last seen (Omni-Man drops in by himself when it first passes 95%).
+// The last typed Invincible word that draws something (`think, mark`, `guardians`, `multiverse`), and the context last seen (Omni-Man drops in by himself when it first passes 95%).
 let INV_FX: { kind: string; at: number } | undefined
 let INV_CTX = 0
 const isInv = (): boolean => SKIN.id === 'invincible'
@@ -8528,14 +8528,16 @@ export const register: Register = (on, options) => {
       bcsToast($, 'first', at)
     }
     // Invincible (the prompt goes on unchanged; these words only act while wearing it): "new suit" / "season 3" put on the S3 suit,
-    // "classic suit" / "old suit" / "season 1" the classic one, "think, mark" has Omni-Man drop in, "guardians" starts the showdown.
+    // "classic suit" / "old suit" / "season 1" the classic one, "think, mark" has Omni-Man drop in, "guardians" starts the showdown,
+    // "multiverse" / "invincible war" / a bare "what have i done" open the rifts (after the swap, when the same prompt swaps).
     if (asked && isInv()) {
       const at = await $.clock.now().catch(() => Date.now())
       const toNew = NEW_SUIT_RE.test(asked)
       const toOld = CLASSIC_RE.test(asked)
-      if (toNew !== toOld) await setInvEra($, toNew ? 2 : 1).catch(() => false)
+      const swapped = toNew !== toOld && (await setInvEra($, toNew ? 2 : 1).catch(() => false))
       if (THINK_RE.test(asked)) INV_FX = { kind: 'think', at }
       else if (GUARDIANS_RE.test(asked)) INV_FX = { kind: 'showdown', at }
+      else if (isVariantsAsk(asked)) INV_FX = { kind: 'variants', at: swapped ? at + SWAP_MS + 300 : at }
     }
     // Edgerunners 2's two modes (the prompt goes on unchanged): "bye capri" sends her back to D (checked first); the whole word
     // "capri" in any case, or the third episode's title "0+2=1" (which toggles), lets her in.

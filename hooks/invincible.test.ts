@@ -7,7 +7,9 @@ import { BADGES, RANKS, VERBS, coverCard, coverHeight, pageCard, rankOf, tierOf,
 import { ACT_LEN, ACT_OFF, BAND_CUT, FIGHT_CSS, FIGHT_MS, FIGHT_PANE_RESERVE, FRAME_KEYS, chainOfAct, fightAct, fightBand, frameSprite } from './invincible-fight'
 import { CAMEO_CSS, CAM_JITTER_MS, CAM_SLOT_MS, CECIL_LINES, DUR_MS, EVE_LINE, OLIVER_LINE, camBlocked, camDue, camExtras, camPlanOfSlot, camReplay } from './invincible-cameos'
 import type { CamPlan } from './invincible-cameos'
-import { AHEAD_MS, CLASSIC_RE, DUEL_MS, GUARDIANS_RE, NEW_SUIT_RE, SHOWDOWN_MS, THINK_RE, duelPlan, showdown, showdownPlan, slotPlan } from './invincible-eggs'
+import { AHEAD_MS, CLASSIC_RE, DUEL_MS, GUARDIANS_RE, NEW_SUIT_RE, SHOWDOWN_MS, SWAP_MS, THINK_RE, VARIANTS_MS, VARIANTS_RE, VARIANTS_SOLO_RE, duelPlan, fightDue, isVariantsAsk, opOnly, showdown, showdownDue, showdownPlan, slotPlan, variantsDue, variantsPlan } from './invincible-eggs'
+import { VARIANTS_CSS, variants } from './invincible-variants'
+import * as VS from './invincible-variants-sprites'
 import { CSS, EPISODES, ERA1, ERA2, PROPS, SP, TITLE_WORDS, condW, contrast, episodeAt, monoW, sansW, unit as unitOf } from './invincible'
 import { THEMES } from './themes'
 
@@ -71,7 +73,7 @@ const quietAt = (era: 1 | 2 = 1, from = NOW): number => {
   for (let t = from; ; t += 61_000) {
     const d = duelPlan(t, era)
     const near = (p: { startAt: number; endAt: number }) => t + 2 * AHEAD_MS > p.startAt && t < p.endAt + 60_000
-    if (!near(d) && !near(duelPlan(t + 120_000, era)) && !near(showdownPlan(t, era)) && !near(showdownPlan(t + 120_000, era))) return t
+    if (!near(d) && !near(duelPlan(t + 120_000, era)) && !near(showdownPlan(t, era)) && !near(showdownPlan(t + 120_000, era)) && !near(variantsPlan(t)) && !near(variantsPlan(t + 120_000))) return t
   }
 }
 const fightStart = (era: 1 | 2 = 1, from = NOW): number => {
@@ -163,14 +165,16 @@ test('invincible: episodes, ranks, patches and verbs', () => {
 test('invincible: the other skins do not wear the Invincible words', async ($, on) => {
   base(on, 100_000, quietAt())
   await start($, 'mentalist')
-  await $.prompt.submit({ text: 'new suit, think, mark, guardians, season 3', cursor: 0 } as never)
+  await $.prompt.submit({ text: 'new suit, think, mark, guardians, season 3, multiverse, invincible war', cursor: 0 } as never)
   const band = await bandAt($, 1250)
+  expect(band).not.toContain('data-egg="variants"')
   expect(band).not.toContain('THINK, MARK.')
   expect(band).not.toContain('INVINCIBLE')
   expect(await skinList($)).toContain('▸ mentalist')
   expect(band).not.toContain(ERA2.tile)
   const pn = (await svgs($, 'Pane')).join('')
   expect(pn).not.toContain('LAST ONE STANDING')
+  expect(pn).not.toContain('data-egg="variants"')
 })
 // --- two eras ------------------------------------------------------------------------------------------------------------
 test('eras: the codes, as whole words in any case', () => {
@@ -988,4 +992,243 @@ test('replay: play think has Omni-Man drop in on the band for 3 s, ending on its
   expect(await bandAt($, 1250, false)).toContain('THINK, MARK.')
   await clock.advance(4_500)
   expect(await bandAt($, 1250, false)).not.toContain('THINK, MARK.')
+})
+
+// --- THE MULTIVERSE: Angstrom's rifts and the flock of other-universe Marks ------------------------------------------------
+const EGG = 'data-egg="variants"'
+/** The act's one pinned delay in seconds (the shared class rule), or NaN when the egg is not in the source. */
+const vrDelay = (svg: string): number => Number(/\.vr\d+A\{[^}]*animation-delay:calc\((-?[\d.]+)s \+ 0s\)/.exec(svg)?.[1] ?? NaN)
+/** The day's plan, from a day on which it is on. */
+const vrDay = (from = NOW): ReturnType<typeof variantsPlan> => {
+  for (let t = from; ; t += 86_400_000) {
+    const p = variantsPlan(t)
+    if (p.on) return p
+  }
+}
+const MARK_FLY_ROWS = ['.............ddd.....', '............idid.....', '............jjjj.....', '.......ddbb.clll.....', '....nndddjbnelll.....', '..ennmiiiijnfmlj..nf.', '..mm.....idnneaddnnee', '........dimnnaiiimmmm', '......dddheegi.......', '...adddddkmk.........', '..jadiiiddd..........', '.jjj..dddd...........', 'jj..jddd.............', 'jj.jjj...............', '..jj.................', '..j..................']
+const MARK_S3_FLY_ROWS = ['............eee......', '...........hehhe.....', '............ffj......', '...........ilhh......', '.....eeeeefjlii......', '...fffeeeeffgiceefffj', '..ffgb.kkeeffjeeejdbj', '..b.....hhbaahkk.....', '.......ehhjjfh.......', '....ddgehddg.........', '..jjdddjeda..........', '.bjjbadjjj...........', '.jj..gjjj............', '.jdbbjj..............', 'jjbb.................', 'j.b..................']
+
+test('multiverse: the words, whole words in any case; "what have i done" only as the whole prompt', () => {
+  for (const t of ['show me the multiverse', 'MULTIVERSE', 'the multiverses', 'start the Invincible War', 'invincible   war']) expect(VARIANTS_RE.test(t)).toBe(true)
+  for (const t of ['what have I done', 'What have I done?!', '  what have i done.  ']) expect(VARIANTS_SOLO_RE.test(t)).toBe(true)
+  for (const t of ['show me the multiverse', 'MULTIVERSE', 'the multiverses', 'start the Invincible War', 'invincible   war', 'what have I done', 'What have I done?!', '  what have i done.  ']) expect(isVariantsAsk(t)).toBe(true)
+  for (const t of ['button variants', 'variants', 'multiversal', 'metaverse', 'invincible warehouse', 'invincible wars', 'what have I done to the build', 'so what have i done wrong']) expect(isVariantsAsk(t)).toBe(false)
+})
+for (const era of [1, 2] as const) {
+  test(`multiverse: era ${era}: typed, the rifts open on the band and on COVER STORY only, between the pane's dl markers; under the caps`, async ($, on) => {
+    const clock = base(on, 100_000, quietAt(era))
+    await start($, 'invincible')
+    // (the swap takes the stage while it plays: the word comes after it)
+    if (era === 2) await $.prompt.submit({ text: 'new suit', cursor: 0 } as never)
+    await clock.advance(5_000)
+    await jobIn($)
+    await four($)
+    expect(await bandAt($, 1250)).not.toContain(EGG)
+    await $.prompt.submit({ text: era === 1 ? 'show me the multiverse' : 'What have I done?!', cursor: 0 } as never)
+    for (const W of [750, 900, 1250]) {
+      const band = await bandAt($, W)
+      expect(band).toContain(`${EGG} data-era="${era}"`)
+      expect(band.length).toBeLessThan(70_000)
+    }
+    const pane = await svgs($, 'Pane')
+    const withEgg = pane.filter(s => s.includes(EGG))
+    expect(withEgg).toHaveLength(1)
+    expect(withEgg[0]).toContain('COVER STORY')
+    expect(/<!--dl--><g pointer-events="none" data-egg="variants"[\s\S]*?<!--\/dl-->/.test(withEgg[0] as string)).toBe(true)
+    for (const s of pane) expect(s.length).toBeLessThan(60_000)
+    expect(pane.join('').length).toBeLessThan(260_000)
+  })
+}
+test('multiverse: "season 3 multiverse" swaps first, then the flock flies in the new suit (the act waits for the swap)', async ($, on) => {
+  const clock = base(on, 100_000, quietAt())
+  await start($, 'invincible')
+  await jobIn($)
+  await $.prompt.submit({ text: 'season 3 multiverse', cursor: 0 } as never)
+  const band = await bandAt($, 1250)
+  expect(band).toContain('class="sw-anim"')
+  expect(band).toContain(`${EGG} data-era="2"`)
+  expect(vrDelay(band)).toBeGreaterThan(2.4)
+  expect(vrDelay(band)).toBeLessThan(2.6)
+  await clock.advance(1_000)
+  const later = await bandAt($, 1250)
+  expect(vrDelay(later)).toBeGreaterThan(1.4)
+  expect(vrDelay(later)).toBeLessThan(1.6)
+})
+test('multiverse: one 8 s act, pinned: ahead (+10 s), live (-4 s), gone after; the pops and the flock in percent', async ($, on) => {
+  expect(VARIANTS_MS).toBe(8_000)
+  const p = vrDay(quietAt() + 86_400_000)
+  const clock = base(on, 100_000, p.startAt - 10_000)
+  await start($, 'invincible')
+  const ahead = await bandAt($, 1250)
+  expect(ahead).toContain('animation-duration:8s')
+  expect(vrDelay(ahead)).toBeGreaterThan(9.9)
+  expect(vrDelay(ahead)).toBeLessThan(10.1)
+  await clock.advance(14_000)
+  const live = await bandAt($, 1250)
+  expect(vrDelay(live)).toBeGreaterThan(-4.1)
+  expect(vrDelay(live)).toBeLessThan(-3.9)
+  const cover = (await svgs($, 'Pane')).find(s => s.includes(EGG)) as string
+  expect(cover).toContain('COVER STORY')
+  expect(cover).toMatch(/@keyframes vr\d+v1\{0%,6\.25%\{/)
+  expect(cover).toMatch(/@keyframes vr\d+fl\{0%,67\.5%\{[^}]*\}87\.5%,100%\{/)
+  await clock.advance(p.endAt + 1 - (p.startAt + 4_000))
+  expect(await bandAt($, 1250)).not.toContain(EGG)
+  expect((await svgs($, 'Pane')).join('')).not.toContain(EGG)
+})
+test('multiverse: once a day at a seeded time between 10:00 and 21:00 local, never within 10 s of the fight or the showdown', () => {
+  let on = 0
+  for (let day = 0; day < 60; day++) {
+    const at = NOW + day * 86_400_000
+    const p = variantsPlan(at)
+    expect(variantsPlan(at).startAt).toBe(p.startAt)
+    if (!p.on) continue
+    on++
+    expect(variantsPlan(p.startAt + 1_000).startAt).toBe(p.startAt)
+    expect(p.endAt - p.startAt).toBe(VARIANTS_MS)
+    const d = new Date(p.startAt)
+    expect(d.getHours()).toBeGreaterThanOrEqual(10)
+    expect(d.getHours()).toBeLessThan(21)
+    for (const era of [1, 2] as const) {
+      for (let t = p.startAt - 12_000; t <= p.endAt + 12_000; t += 1_000) {
+        const f = duelPlan(t, era)
+        if (f.on) expect(p.startAt < f.endAt + 10_000 && f.startAt < p.endAt + 10_000).toBe(false)
+        const sd = showdownPlan(t, era)
+        expect(p.startAt < sd.endAt + 10_000 && sd.startAt < p.endAt + 10_000).toBe(false)
+      }
+    }
+  }
+  expect(on).toBeGreaterThanOrEqual(55)
+})
+test('multiverse: one plan per LOCAL day (the seed never re-rolls mid-day, so never twice, never skipped)', () => {
+  // A UTC day number re-rolled the seed at local midnight-minus-offset: here (UTC+8) at 08:00, west of UTC mid-evening, where
+  // the day's time could then come round twice or not at all. Every hour of a local date must see the same plan.
+  for (let day = 0; day < 60; day++) {
+    const d = new Date(NOW + day * 86_400_000)
+    const at = (h: number, m = 0): number => new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, m).getTime()
+    const p = variantsPlan(at(0, 30))
+    for (const [h, m] of [[7, 59], [8, 1], [12, 0], [16, 59], [17, 1], [20, 59], [23, 30]] as const) expect(variantsPlan(at(h, m)).startAt, `day ${day} ${h}:${m}`).toBe(p.startAt)
+  }
+})
+test('opOnly: every frame keeps its own offset (1-decimal rounding put 53.75 and 53.85 on 53.8: a cut became a fade)', () => {
+  const css = opOnly('x', [[44.4, 53.75, 1]])
+  expect(css).toContain('53.75%{opacity:1}')
+  expect(css).toContain('53.85%{opacity:0}')
+  for (let a = 0.05; a < 99; a += 0.05) {
+    const offs = [...opOnly('x', [[a, a + 0.5, 1]]).matchAll(/([\d.]+)%\{/g)].map(m => m[1])
+    expect(new Set(offs).size, `a=${a}`).toBe(offs.length)
+  }
+})
+test('multiverse: cameos are never inside its window, over 30 days', () => {
+  let checked = 0
+  for (let day = 0; day < 30; day++) {
+    const p = variantsPlan(NOW + day * 86_400_000)
+    if (!p.on) continue
+    for (let k = Math.floor((p.startAt - 600_000) / CAM_SLOT_MS); k <= Math.floor((p.endAt + 600_000) / CAM_SLOT_MS); k++) {
+      const c = camPlanOfSlot(k)
+      if (!c.on) continue
+      expect(c.startAt < p.endAt + 5_000 && p.startAt < c.endAt + 5_000).toBe(false)
+      checked++
+    }
+  }
+  expect(checked).toBeGreaterThan(30)
+})
+test('multiverse: a typed act keeps the fight, the cameos and the daily showdown off; the swap cuts it; the daily one waits for typed eggs', async ($, on) => {
+  const fs = fightStart(1, quietAt(1) + 3_600_000)
+  expect(fightDue(fs + 2_000, 1, true)).toBe(fs)
+  expect(fightDue(fs + 2_000, 1, true, { kind: 'variants', at: fs + 1_000 })).toBeUndefined()
+  const c = camFind(q => q.who === 'eve')
+  expect(camDue(c.startAt + 500)).toBeDefined()
+  expect(camDue(c.startAt + 500, { kind: 'variants', at: c.startAt })).toBeUndefined()
+  const sd = showdownPlan(NOW, 1)
+  expect(showdownDue(sd.startAt + 500, 1)).toBe(sd.startAt)
+  expect(showdownDue(sd.startAt + 500, 1, { kind: 'variants', at: sd.startAt })).toBeUndefined()
+  // a swap typed mid-act cuts it; a swap typed with it (the act set after it) does not
+  expect(variantsDue(fs + 4_000, { kind: 'variants', at: fs }, fs + 3_000)).toBeUndefined()
+  expect(variantsDue(fs + 1_000, { kind: 'variants', at: fs + SWAP_MS + 300 }, fs)).toBe(fs + SWAP_MS + 300)
+  // the daily act waits while another typed egg is live, and comes back after a typed act has ended
+  const p = vrDay()
+  expect(variantsDue(p.startAt + 1_000)).toBe(p.startAt)
+  expect(variantsDue(p.startAt + 1_000, { kind: 'showdown', at: p.startAt })).toBeUndefined()
+  expect(variantsDue(p.startAt + 1_000, { kind: 'variants', at: p.startAt - 60_000 })).toBe(p.startAt)
+  // in the mod: guardians typed after multiverse draws only the showdown; a swap mid-act takes the egg off
+  const clock = base(on, 100_000, quietAt())
+  await start($, 'invincible')
+  await jobIn($)
+  await $.prompt.submit({ text: 'multiverse', cursor: 0 } as never)
+  await clock.advance(2_000)
+  expect(await bandAt($, 1250)).toContain(EGG)
+  await $.prompt.submit({ text: 'guardians', cursor: 0 } as never)
+  const all = [await bandAt($, 1250), ...(await svgs($, 'Pane'))].join('')
+  expect(all).toContain('sd-anim')
+  expect(all).not.toContain(EGG)
+  await $.prompt.submit({ text: 'multiverse', cursor: 0 } as never)
+  await clock.advance(2_000)
+  expect(await bandAt($, 1250)).toContain(EGG)
+  await $.prompt.submit({ text: 'new suit', cursor: 0 } as never)
+  expect(await bandAt($, 1250)).not.toContain(EGG)
+})
+test('multiverse: no flip, no red in the effects, under the size caps, a reduced-motion still', () => {
+  for (const era of [1, 2] as const) {
+    for (const W of [750, 900, 1250]) {
+      const s = variants(W, 134, 'band', era, NOW)
+      expect(s.length).toBeLessThan(20_000)
+      expect(s).not.toContain('scale(-1')
+      expect(s).not.toContain('flip')
+      expect(s).not.toMatch(/<use[^>]*transform=/)
+      expect(s.replace(/<defs>[\s\S]*?<\/defs>/, '')).not.toContain(PROPS.red as string)
+      const still = /<g class="vr-still"[\s\S]*$/.exec(s)?.[0] ?? ''
+      expect(still.match(/<use /g)?.length).toBeGreaterThanOrEqual(7)
+      expect(still).toContain('TOO MANY MARKS.')
+    }
+    for (const [W, H] of [[480, 434], [600, 434]] as const) {
+      const s = variants(W, H, 'pane', era, NOW)
+      expect(s.length).toBeLessThan(28_000)
+      expect(s).not.toContain('scale(-1')
+      expect(s).not.toMatch(/<use[^>]*transform=/)
+      expect(s.replace(/<defs>[\s\S]*?<\/defs>/, '')).not.toContain(PROPS.red as string)
+      expect((/<g class="vr-still"[\s\S]*$/.exec(s)?.[0] ?? '').match(/<use /g)?.length).toBeGreaterThanOrEqual(10)
+    }
+  }
+  const reduced = /@media \(prefers-reduced-motion: reduce\)\{(.*)\}$/.exec(VARIANTS_CSS)?.[1] ?? ''
+  expect(reduced).toContain('.vr-anim{display:none}')
+  expect(reduced).toContain('.vr-still{display:block')
+  expect(reduced).toContain('.vr-bob{animation:none}')
+})
+test('multiverse: the sprites: 21x18, every letter in the palette, overlay-only top rows, the base Marks untouched', () => {
+  const vars = Object.entries(VS).filter(([k]) => k.startsWith('INV_VAR_')) as [string, Sprite][]
+  expect(vars.length).toBe(9)
+  for (const [, sp] of vars) {
+    expect(sp.rows.length).toBe(18)
+    expect(new Set(sp.rows.map(r => r.length))).toEqual(new Set([21]))
+    for (const row of sp.rows) for (const ch of row) if (ch !== '.') expect(sp.pal[ch]).toBeTruthy()
+    // the two pad rows only hold pixels above the head (columns 12-16), never the body's
+    for (const row of sp.rows.slice(0, 2)) expect(/^\.{11}.{6}\.{4}$/.test(row)).toBe(true)
+  }
+  expect(VS.VARIANT_CAST.band).toHaveLength(6)
+  expect(VS.VARIANT_CAST.pane).toHaveLength(8)
+  expect(SP.INV_MARK_FLY.rows).toEqual(MARK_FLY_ROWS)
+  expect(SP.INV_MARK_S3_FLY.rows).toEqual(MARK_S3_FLY_ROWS)
+})
+test('multiverse: layout: 130 redraws across the act keep one layout signature', { timeoutMs: 180_000 }, async ($, on) => {
+  const clock = base(on, 100_000, quietAt(1))
+  await start($, 'invincible')
+  await jobIn($)
+  await four($)
+  const sig = async () => {
+    const b = await svgs($, 'AbovePrompt', 900)
+    const p = await svgs($, 'Pane')
+    const dims = (l: string[]) => l.map(s => `${/width="(\d+)"/.exec(s)?.[1]}x${/height="(\d+)"/.exec(s)?.[1]}`).join(',')
+    return { sig: `${b.length}:${/height="(\d+)"/.exec(b[0] ?? '')?.[1]}|${p.length}|${dims(p)}`, egg: b.join('').includes(EGG) }
+  }
+  const seen = new Set([(await sig()).sig])
+  await $.prompt.submit({ text: 'multiverse', cursor: 0 } as never)
+  let shown = 0
+  for (let i = 0; i < 130; i++) {
+    const s = await sig()
+    seen.add(s.sig)
+    if (s.egg) shown++
+    await clock.advance(80)
+  }
+  expect(shown).toBeGreaterThan(90)
+  expect([...seen]).toHaveLength(1)
 })
