@@ -79,7 +79,9 @@ export const clipC = (s: any, size: any, max: any, ls: any = 0) => clipBy(condW,
 export const clipM = (s: any, size: any, max: any) => clipBy(monoW, s, size, max)
 export const T = (x: any, y: any, text: any, size: any, weight: any, fill: any, extra: any = '') => `<text x="${r1(x)}" y="${r1(y)}" font-family="${FONT}" font-size="${size}" font-weight="${weight}" fill="${fill}" ${extra}>${esc(text)}</text>`
 export const C = (x: any, y: any, text: any, size: any, fill: any, extra: any = '') => `<text x="${r1(x)}" y="${r1(y)}" font-family="${COND}" font-size="${size}" font-weight="800" fill="${fill}" ${extra}>${esc(text)}</text>`
-export const M = (x: any, y: any, text: any, size: any, fill: any, extra: any = '') => `<text x="${r1(x)}" y="${r1(y)}" font-family="${MONO}" font-size="${size}" font-weight="500" fill="${fill}" ${extra}>${esc(text)}</text>`
+// An `extra` with its own font-weight replaces the default 500: an attribute written twice makes the whole SVG invalid, and the app
+// then draws the band as a broken image (the GDA "REC" tag did this).
+export const M = (x: any, y: any, text: any, size: any, fill: any, extra: any = '') => `<text x="${r1(x)}" y="${r1(y)}" font-family="${MONO}" font-size="${size}"${/\bfont-weight=/.test(extra) ? '' : ' font-weight="500"'} fill="${fill}" ${extra}>${esc(text)}</text>`
 export const durOf = (ms: any) => (ms >= 3_600_000 ? `${Math.floor(ms / 3_600_000)} h ${Math.round((ms % 3_600_000) / 60_000)} min` : ms >= 60_000 ? `${Math.round(ms / 60_000)} min` : `${Math.round(ms / 1000)} s`)
 export const money = (usd: any) => (usd < 0.005 ? '$0' : `$${usd.toFixed(2)}`)
 export const hhmm = (at: any) => { const d = new Date(at); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` }

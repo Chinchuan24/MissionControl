@@ -1304,6 +1304,18 @@ const listRules = (rules: string[]): string =>
 
 const TOOL = 'mcp__crab-progress__progress'
 const STEP_TOOL = 'mcp__crab-progress__step'
+const DEMO_TOOL = 'mcp__crab-progress__demo'
+const DEMO_PREFIX = 'demo-'
+const DEMO_TITLE = 'Ship the launch trailer'
+// The made-up crew demo mode plays: each finishes at its own share of the run (endsAt).
+const DEMO_CREW: { task: string; tier: string; model: string; effort: string; why: string; steps: number; endsAt: number; notes: string[] }[] = [
+  { task: 'Researcher: scan the meetup brief', tier: 'light', model: 'haiku', effort: 'low', why: 'Read-only scan, cheapest worker', steps: 3, endsAt: 0.35, notes: ['reading brief.md', 'searching past talks', 'writing notes'] },
+  { task: 'Designer: storyboard the 30s cut', tier: 'careful', model: 'opus', effort: 'high', why: 'Taste-heavy, presentation grade', steps: 5, endsAt: 0.7, notes: ['sketching beats', 'picking hero skins', 'timing the cuts', 'framing the band', 'locking the board'] },
+  { task: 'Engineer: wire the HUD band', tier: 'heavy', model: 'opus', effort: 'xhigh', why: 'Touches the live band, high blast radius', steps: 6, endsAt: 0.85, notes: ['reading register.tsx', 'editing band.tsx', 'running band tests', 'fixing a width bug', 'running band tests', 'all green'] },
+  { task: 'Artist: polish the pixel cast', tier: 'medium', model: 'sonnet', effort: 'medium', why: 'Routine sprite pass', steps: 4, endsAt: 0.55, notes: ['opening sprites', 'recolouring suits', 'checking 2x scale', 'exporting'] },
+  { task: 'Tester: check every skin at 80 cols', tier: 'medium', model: 'sonnet', effort: 'medium', why: 'Mechanical sweep across skins', steps: 5, endsAt: 0.95, notes: ['wearing Edgerunners 2', 'wearing Invincible', 'wearing Breaking Bad', 'checking overlaps', 'report written'] },
+  { task: 'Writer: tighten the end card', tier: 'light', model: 'haiku', effort: 'low', why: 'Short copy edit', steps: 2, endsAt: 0.45, notes: ['drafting the line', 'cutting to six words'] },
+]
 // Added to the end of each Mission Control worker's brief. Their system prompt words step
 // reporting as a condition ("if the step tool appears among your tools") and they
 // skip it even with the tool listed; the same request in the brief is followed.
@@ -7023,6 +7035,22 @@ async function registerEntryPoints($: EngineInterface): Promise<void> {
     },
   }).catch(() => undefined)
   await $.tool.register({
+    name: 'demo',
+    description:
+      'Demo mode, for screen recordings: wear a skin (`skin`: an id or name), play a made-up crew of agents in the pane ' +
+      '(`crew: "start"` with `seconds`, or `"stop"` to clear it), and `open` the pane. It only changes Mission Control\'s own skin and rows.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        skin: { type: 'string', description: 'Skin id or name to wear, e.g. edgerunners-2, invincible, breaking-bad.' },
+        crew: { type: 'string', enum: ['start', 'stop'], description: 'Start the made-up crew, or clear it.' },
+        seconds: { type: 'integer', minimum: 10, description: 'How long the made-up crew takes to finish (default 45).' },
+        open: { type: 'boolean', description: 'Open the Mission Control pane.' },
+        egg: { type: 'string', description: 'Play an easter egg: capri or d (Edgerunners 2 modes, with the transition), or an Invincible replay: fight, showdown, think, eve, oliver, cecil, newsuit, classic.' },
+      },
+    },
+  }).catch(() => undefined)
+  await $.tool.register({
     name: 'step',
     description:
       'For subagents: show progress on your own task in Mission Control. ' +
@@ -7100,6 +7128,112 @@ async function skinKitRun($: EngineInterface, kind: 'new' | 'check', arg: string
   }
   const deps = { folderName: SKINS_FOLDER, taken: () => new Set(SKINS.keys()), reload }
   return kind === 'new' ? skinNew($, arg, deps) : skinCheck($, arg, deps)
+}
+
+// `/skin <word>` and the demo tool's `skin` share this, so both wear a skin the same way.
+async function skinRun($: EngineInterface, raw: string): Promise<{ text: string }> {
+  const e = { args: raw }
+  const arg = (e.args ?? '').trim().toLowerCase()
+  // Caliper's setting rides on the skin word: `/skin caliper light|dark|auto`.
+  const calArg = /^caliper\s+(dark|light|auto)$/.exec(arg)
+  const calNote = (): string => (CAL_MODE.mode === 'auto' ? `auto → ${calFace()}` : CAL_MODE.mode)
+  const listing = skinListing
+  if (arg === 'reload') return { text: await skinReload($) }
+  const word = /^(new|check)(?:\s+([\s\S]*))?$/i.exec((e.args ?? '').trim())
+  if (word) return { text: await skinKitRun($, word[1]!.toLowerCase() === 'new' ? 'new' : 'check', word[2] ?? '') }
+  if (arg === 'folder') {
+    const folder = await $.store.get('skinsFolder').catch(() => undefined)
+    return { text: typeof folder === 'string' ? `Skins folder: ${folder}` : `No "${SKINS_FOLDER}" folder found yet.` }
+  }
+  if (!arg || arg === 'list') return { text: `Skins (▸ is on):\n${listing()}\nSwitch with /skin <id or name>.${HAS_CYBER ? '' : `\n\n${ADDON_PITCH}`}` }
+  const k = arg === 'off' || arg === 'none' ? SKINS.get(DEFAULT_SKIN.id) : skinByWord(calArg ? 'caliper' : arg)
+  if (!k) return { text: `No skin "${arg}".\n${listing()}` }
+  if (!canWear(k)) return { text: `${k.hidden ? `No skin "${arg}".` : `${k.name} comes with the Cyberpunk Skins add-on.`}\n${ADDON_PITCH}` }
+  // CAPRICORN is Edgerunners 2 in CAPRI mode: wear the one skin and let her in (the possession transition plays).
+  const isCapricorn = k.id === 'capricorn'
+  const worn = isCapricorn ? (SKINS.get('edgerunners-2') as Skin) : k
+  if (worn.id === 'caliper') {
+    // The setting first (the skin is not worn yet, so nothing draws twice), and the app's theme as it is now.
+    if (calArg) await setCalMode($, calArg[1] as CalMode)
+    APP_LIGHT = await readAppLight($)
+    await update($, calMode, () => calPack(CAL_MODE, APP_LIGHT))
+  }
+  applySkin(worn)
+  await $.store.set('skin', worn.id)
+  await update($, skin, () => worn.id)
+  await retitle($)
+  await er2ContextRule($, er2Ctx).catch(() => undefined)
+  if (isCapricorn) {
+    if (!(await setEr2Mode($, 'capri', false))) await foundSecret($, CAPRICORN_SKIN).catch(() => undefined)
+    return { text: `Skin: ${worn.name} (CAPRI mode).` }
+  }
+  if (k.hidden) await foundSecret($, k)
+  return { text: `Skin: ${k.name}${k.id === 'caliper' ? ` (${calNote()})` : ''}.` }
+}
+
+// Demo mode: Claude switches skins and plays a made-up crew in the pane while the
+// person screen-records. It only changes Mission Control's own skin and rows; the
+// crew's ids start with "demo-" so nothing real is ever touched or cleared.
+// Demo mode's eggs: Edgerunners 2's two modes (`capri` lets her in with the possession transition, `d` sends her back), or one of
+// Invincible's replays (`fight` is Mark vs Omni-Man across the band and the pane).
+async function demoEgg($: EngineInterface, egg: string): Promise<string> {
+  if (egg === 'capri' || egg === 'd') {
+    if (SKIN.id !== 'edgerunners-2') return 'Wear Edgerunners 2 first.'
+    return (await setEr2Mode($, egg, false).catch(() => false)) ? `▶ ${egg === 'capri' ? 'Capri takes over' : 'Back to D'}` : `Already in ${egg === 'capri' ? 'CAPRI' : 'D'} mode.`
+  }
+  return invReplay($, egg)
+}
+let demoTick: { cancel: () => void } | undefined
+async function stopDemo($: EngineInterface): Promise<void> {
+  demoTick?.cancel()
+  demoTick = undefined
+  await update($, agents, list => list.filter(a => !a.id.startsWith(DEMO_PREFIX)))
+  await update($, flow, f => (f?.title === DEMO_TITLE ? null : f))
+}
+async function startDemo($: EngineInterface, seconds: number): Promise<void> {
+  await stopDemo($)
+  const t0 = await $.clock.now()
+  const rows: AgentRun[] = DEMO_CREW.map((c, i) => ({
+    id: `${DEMO_PREFIX}${i}`, agentId: `${DEMO_PREFIX}${i}`, type: 'general-purpose', description: c.task,
+    model: c.model, effort: c.effort, status: 'running', startedAt: t0 - (i + 1) * 9_000,
+    contextTokens: 18_000 + i * 7_000, contextMax: 200_000, tokens: 40_000 + i * 15_000, costUsd: 0.12 + i * 0.07,
+    steps: 2 + i, round: 1, stepDone: 0, stepTotal: c.steps, stepNote: c.notes[0], activity: c.notes[0],
+    lastProgressAt: t0, why: c.why,
+  }))
+  await update($, agents, list => [...list.filter(a => !a.id.startsWith(DEMO_PREFIX)), ...rows])
+  await update($, flow, () => ({
+    title: DEMO_TITLE, total: DEMO_CREW.length, done: 0, running: DEMO_CREW.length, phase: 'delegate', isFinished: false,
+    tasks: DEMO_CREW.map(c => ({ title: c.task, tier: c.tier, after: [], model: c.model, effort: c.effort, why: c.why })), minutes: 30,
+  }))
+  void $.ui.open({ id: PANE, title: SKIN.tabs.mission })
+  // Each agent finishes at its own share of the run; the last one on the final second.
+  const ms = Math.max(10, seconds) * 1000
+  demoTick = $.clock.every(1200, () => {
+    void (async () => {
+      const at = await $.clock.now()
+      const frac = Math.min(1, (at - t0) / ms)
+      let done = 0
+      await update($, agents, list => list.map(a => {
+        if (!a.id.startsWith(DEMO_PREFIX)) return a
+        const i = Number(a.id.slice(DEMO_PREFIX.length))
+        const c = DEMO_CREW[i]
+        if (!c) return a
+        const p = Math.min(1, frac / c.endsAt)
+        const stepDone = Math.min(c.steps, Math.floor(p * c.steps))
+        const isDone = p >= 1
+        if (isDone) done++
+        const note = c.notes[Math.min(c.notes.length - 1, Math.floor(p * c.notes.length))]
+        return {
+          ...a, stepDone, stepNote: note, activity: note, lastProgressAt: at, isStuck: false,
+          tokens: Math.round(a.tokens + 900 + i * 300), costUsd: a.costUsd + 0.004 + i * 0.002,
+          contextTokens: Math.min(a.contextMax, a.contextTokens + 600),
+          status: isDone ? 'done' : 'running', endedAt: isDone ? (a.endedAt ?? at) : undefined,
+        }
+      }))
+      await update($, flow, f => (f?.title === DEMO_TITLE ? { ...f, done, running: DEMO_CREW.length - done, phase: done === DEMO_CREW.length ? 'close' : 'delegate', isFinished: done === DEMO_CREW.length } : f))
+      if (frac >= 1) { demoTick?.cancel(); demoTick = undefined }
+    })().catch(() => undefined)
+  })
 }
 
 export const register: Register = (on, options) => {
@@ -9261,43 +9395,18 @@ export const register: Register = (on, options) => {
     return r
   })
 
-  on('command.run', { command: 'skin' }, async ($, e) => {
-    const arg = (e.args ?? '').trim().toLowerCase()
-    // Caliper's setting rides on the skin word: `/skin caliper light|dark|auto`.
-    const calArg = /^caliper\s+(dark|light|auto)$/.exec(arg)
-    const calNote = (): string => (CAL_MODE.mode === 'auto' ? `auto → ${calFace()}` : CAL_MODE.mode)
-    const listing = skinListing
-    if (arg === 'reload') return { text: await skinReload($) }
-    const word = /^(new|check)(?:\s+([\s\S]*))?$/i.exec((e.args ?? '').trim())
-    if (word) return { text: await skinKitRun($, word[1]!.toLowerCase() === 'new' ? 'new' : 'check', word[2] ?? '') }
-    if (arg === 'folder') {
-      const folder = await $.store.get('skinsFolder').catch(() => undefined)
-      return { text: typeof folder === 'string' ? `Skins folder: ${folder}` : `No "${SKINS_FOLDER}" folder found yet.` }
-    }
-    if (!arg || arg === 'list') return { text: `Skins (▸ is on):\n${listing()}\nSwitch with /skin <id or name>.${HAS_CYBER ? '' : `\n\n${ADDON_PITCH}`}` }
-    const k = arg === 'off' || arg === 'none' ? SKINS.get(DEFAULT_SKIN.id) : skinByWord(calArg ? 'caliper' : arg)
-    if (!k) return { text: `No skin "${arg}".\n${listing()}` }
-    if (!canWear(k)) return { text: `${k.hidden ? `No skin "${arg}".` : `${k.name} comes with the Cyberpunk Skins add-on.`}\n${ADDON_PITCH}` }
-    // CAPRICORN is Edgerunners 2 in CAPRI mode: wear the one skin and let her in (the possession transition plays).
-    const isCapricorn = k.id === 'capricorn'
-    const worn = isCapricorn ? (SKINS.get('edgerunners-2') as Skin) : k
-    if (worn.id === 'caliper') {
-      // The setting first (the skin is not worn yet, so nothing draws twice), and the app's theme as it is now.
-      if (calArg) await setCalMode($, calArg[1] as CalMode)
-      APP_LIGHT = await readAppLight($)
-      await update($, calMode, () => calPack(CAL_MODE, APP_LIGHT))
-    }
-    applySkin(worn)
-    await $.store.set('skin', worn.id)
-    await update($, skin, () => worn.id)
-    await retitle($)
-    await er2ContextRule($, er2Ctx).catch(() => undefined)
-    if (isCapricorn) {
-      if (!(await setEr2Mode($, 'capri', false))) await foundSecret($, CAPRICORN_SKIN).catch(() => undefined)
-      return { text: `Skin: ${worn.name} (CAPRI mode).` }
-    }
-    if (k.hidden) await foundSecret($, k)
-    return { text: `Skin: ${k.name}${k.id === 'caliper' ? ` (${calNote()})` : ''}.` }
+  on('command.run', { command: 'skin' }, ($, e) => skinRun($, e.args ?? ''))
+
+  on('tool.call', { tool: DEMO_TOOL }, async ($, e) => {
+    if (e.agentId) return { result: 'ignored: demo mode is for the main session' }
+    const input = e as unknown as { skin?: string; crew?: 'start' | 'stop'; seconds?: number; open?: boolean; egg?: string }
+    const said: string[] = []
+    if (input.skin) said.push((await skinRun($, input.skin)).text)
+    if (input.egg) said.push(await demoEgg($, input.egg.trim().toLowerCase()))
+    if (input.crew === 'start') { await startDemo($, Number(input.seconds) || 45); said.push(`Demo crew running for ${Math.max(10, Number(input.seconds) || 45)} s.`) }
+    if (input.crew === 'stop') { await stopDemo($); said.push('Demo crew cleared.') }
+    if (input.open) { void $.ui.open({ id: PANE, title: SKIN.tabs.mission }); said.push('Pane opened.') }
+    return { result: said.join(' ') || 'Nothing asked: pass skin, crew or open.' }
   })
 
   on('command.run', { command: 'autocrew' }, async ($, e) => {
