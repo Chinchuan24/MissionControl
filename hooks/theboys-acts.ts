@@ -4,7 +4,7 @@
 // Reduced motion: the movers stop at their still pose, flashes are hidden, and the act still ends on time. PG-13: no hit lands,
 // the only "impacts" are scorch dots, a grey-pink splat and stamps. All words are ours, or a short attributed quote.
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { BUST, C, CRAWL_Y, M, PROPS, SP, T, clip, condW, crew, esc, faceIcon, pal, pin, px, r1, sansW, spH, spW, stamp, star, tape, unit } from './theboys'
+import { BUST, C, CRAWL_Y, M, PROPS, SP, T, clip, condW, crew, faceIcon, pal, pin, px, r1, sansW, spH, spW, stamp, star, tape, unit } from './theboys'
 import type { Mode } from './theboys'
 import type { PaneCard } from './themes'
 import { VNN_BRAND, actMs, scoreAt } from './theboys-eggs'
@@ -599,7 +599,8 @@ const ROWS: Record<string, Row> = {
     },
     pane: ['cred', (a, g) => a.kf(`<path d="M${g.W * 0.2} 0l20 ${g.H * 0.3} -14 ${g.H * 0.2} 26 ${g.H * 0.5}M${g.W * 0.2 + 20} ${g.H * 0.3}l60 -10M${g.W * 0.2 + 6} ${g.H * 0.5}l-40 16" fill="none" stroke="#FFFFFF" stroke-width="1.2" opacity=".75"/>`, [[0, 'opacity:0'], [0.2, 'opacity:1'], [7.6, 'opacity:1'], [8, 'opacity:0']], {})],
   },
-  // T53 `it's a deepfake`: the title tears (a 2-frame sync slip and a DEEPFAKE? tag); the CRISIS DESK stamps UNDER REVIEW.
+  // T53 `it's a deepfake`: a censor mosaic pixelates the title (coarse, then fine) under a DEEPFAKE? tag; the CRISIS DESK stamps
+  // UNDER REVIEW.
   deepfake: {
     band: (a, g) => deepfakeTear(a, g),
     pane: ['task', (a, g) => a.slam(stamp(g.W - 110, 44, 'UNDER REVIEW', PROPS.stamp, 13, -8), 0.3, 2.4)],
@@ -687,13 +688,25 @@ const walkLine = (a: Act, g: Geo, s: number, y: number, ms: number) => {
   })
   return out
 }
-/** The DEEPFAKE? tear on the band's task title: a 2-frame sync slip (the title in red and cyan offsets) and a tiny tag. */
+/** The DEEPFAKE? check on the band's task title: a broadcast censor mosaic pixelates it, coarse, then fine ("enhance"), then the
+ *  title reads clean again, under a tiny DEEPFAKE? tag. A TV censor's pixels in the mode's own tones (never an RGB split). */
 const deepfakeTear = (a: Act, g: Geo) => {
   const t = clip(g.task ?? '', 15, g.titleW ?? 300, 0, true)
   const tw = Math.min(g.titleW ?? 300, sansW(t, 15, 0, true))
   if (!t) return a.on(cap(64, 54, 'DEEPFAKE?', g.m, { red: true }), 0.1, 2.4)
-  const slip = (dx: number, c: string) => `<text x="${64 + dx}" y="54" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="15" font-weight="700" fill="${c}" opacity=".85">${esc(t)}</text>`
-  return a.kf(`<g>${slip(-3, '#FF3B5C')}${slip(3, '#3BE8FF')}</g>`, [[0, 'opacity:0'], [0.2, 'opacity:1;transform:translateX(-4px)'], [0.3, 'transform:translateX(5px)'], [0.4, 'transform:none'], [0.5, 'opacity:0'], [1.1, 'opacity:0'], [1.2, 'opacity:1;transform:translateX(4px)'], [1.3, 'transform:none;opacity:0'], [2.5, 'opacity:0']], { still: 'opacity="0"' }) + a.on(cap(64 + tw + 10, 36, 'DEEPFAKE?', g.m, { z: 9, red: true }), 0.2, 2.4)
+  const P = pal(g.m)
+  const tones = [P.tile, P.track, P.track, P.line, P.muted, P.aT, P.aT, P.sub]
+  const id = `tbmz${Math.round(a.at) % 1_000_000}`
+  // One tile of `cols` by `rows` cells, each a seeded tone, so the mosaic repeats only every few cells.
+  const tile = (n: string, cell: number, cols: number, rows: number) => {
+    let s = ''
+    for (let i = 0; i < cols * rows; i++) s += `<rect x="${r1((i % cols) * cell)}" y="${r1(Math.floor(i / cols) * cell)}" width="${cell}" height="${cell}" fill="${tones[Math.floor(unit(`${n}|${i}`) * tones.length) % tones.length]}"/>`
+    return `<pattern id="${n}" width="${r1(cols * cell)}" height="${r1(rows * cell)}" x="62" y="41" patternUnits="userSpaceOnUse">${s}</pattern>`
+  }
+  const box = (n: string) => `<rect x="62" y="41" width="${r1(tw + 4)}" height="18" fill="url(#${n})"/>`
+  const coarse = a.kf(box(`${id}a`), [[0, 'opacity:0'], [0.15, 'opacity:1'], [0.9, 'opacity:1'], [0.95, 'opacity:0'], [2.5, 'opacity:0']], { still: 'opacity="0"' })
+  const fine = a.kf(box(`${id}b`), [[0, 'opacity:0'], [0.9, 'opacity:0'], [0.95, 'opacity:1'], [1.7, 'opacity:1'], [2.0, 'opacity:0'], [2.5, 'opacity:0']], { still: 'opacity="0"' })
+  return `<defs>${tile(`${id}a`, 9, 5, 2)}${tile(`${id}b`, 4.5, 6, 4)}</defs>${coarse}${fine}${a.on(cap(64 + tw + 10, 36, 'DEEPFAKE?', g.m, { z: 9, red: true }), 0.2, 2.4)}`
 }
 
 // ---------------------------------------------------------------- the PR SPIN title glitch (plan row 11): every ~10 min or on a failed test

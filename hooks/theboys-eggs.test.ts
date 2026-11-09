@@ -261,7 +261,11 @@ test('title SPIN: a bad word is struck and its PR word written above; no bad wor
   expect(a).toContain('>feature<')
   expect(a).toContain('data-egg="spin"')
   expect(titleSpin(1250, 'The parser crashes on empty input', 300, 'book', NOW)).toContain('>pause<')
-  expect(titleSpin(1250, 'Vought Tower incident report', 300, 'brand', NOW)).toContain('DEEPFAKE?')
+  const df = titleSpin(1250, 'Vought Tower incident report', 300, 'brand', NOW)
+  expect(df).toContain('DEEPFAKE?')
+  // A censor mosaic (two pixel patterns), never Cyberpunk's red and cyan RGB split.
+  expect((df.match(/<pattern /g) ?? []).length).toBe(2)
+  expect(df).not.toMatch(/#3BE8FF|#FF3B5C|mix-blend-mode/i)
 })
 test('title SPIN on the band right after a failing test run', async ($, on) => {
   base(on)
