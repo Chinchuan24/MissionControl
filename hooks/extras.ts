@@ -42,7 +42,7 @@ export const BADGES: Badge[] = [
   { id: 'netrunner', name: 'NETRUNNER', icon: '⌁', how: 'Call 100 sub-agents', progress: c => share(c.agents, 100) },
   { id: 'crewboss', name: 'FIXER', icon: '⚑', how: 'Run a gig with 5+ sub-agents', progress: c => share(c.crewJobs, 1) },
   { id: 'chromed', name: 'CYBERPSYCHO', icon: '⚙', how: 'Push the context past 90%', progress: c => (c.chromed ? 1 : 0) },
-  { id: 'owl', name: 'GRAVEYARD SHIFT', icon: '☾', how: 'Finish a gig after midnight', progress: c => share(c.nightJobs, 1) },
+  { id: 'owl', name: 'GRAVEYARD SHIFT', icon: '☾', how: 'Finish a gig between midnight and 5 am', progress: c => share(c.nightJobs, 1) },
   { id: 'samurai', name: 'SAMURAI', icon: '♪', how: 'Keep exploring.', progress: c => (c.samurai ? 1 : 0) },
 ]
 

@@ -31,7 +31,7 @@ const BCS_NAMES: Record<string, [string, string, string]> = {
   netrunner: ['& ASSOCIATES', '⚖', 'Call 100 sub-agents'],
   crewboss: ['FILM CREW', '⚑', 'Run a job with 5+ sub-agents'],
   chromed: ['OBJECTION', '!', 'Push the context past 90%'],
-  owl: ['LANTERN', '☾', 'Finish a job after midnight'],
+  owl: ['LANTERN', '☾', 'Finish a job between midnight and 5 am'],
   samurai: ['NIPPY', '▣', 'Keep exploring.'],
 }
 export const BCS_BADGES: Badge[] = BADGES.map(b => {
