@@ -1379,6 +1379,9 @@ type Skin = {
   cast?: string
   /** Left out of the picker and the list until it is worn: an easter egg. */
   hidden?: boolean
+  /** A second colour and an ink worn as trim on the pane (Invincible's classic suit: its yellow and black): the section rails in
+   *  `hi` with an `ink` edge, and an ink edge round the plain cards. Left out, the rails keep the accent and the cards no edge. */
+  trim?: { hi: string; ink: string } | null
 }
 
 const CRAB_SKIN: Skin = {
@@ -1830,6 +1833,7 @@ const INVINCIBLE_SKIN: Skin = {
   toolWords: INV_VERBS,
   backdrop: { fill: ERA1.bg, pattern: 'dots', ink: ERA1.dots },
   tabs: { mission: '★\uFE0E Mission Control', skins: '★\uFE0E Skins' },
+  trim: ERA1.trim,
 }
 
 // Edgerunners 2 v2 "D's optics" (fan homage, Cyberpunk Skins add-on): a next-gen netrunner HUD on holographic glass, D's
@@ -2380,7 +2384,7 @@ function applySkin(k: Skin): void {
   // Invincible's second era: the new suit's palette and cast, the same skin.
   if (k.id === 'invincible') {
     const P = INV_ERA.era === 2 ? ERA2 : ERA1
-    k = { ...k, cast: INV_ERA.era === 2 ? 'invincible2' : 'invincible', colors: invColors(INV_ERA.era), boss: [...P.boss], roles: [...P.roles], backdrop: { fill: P.bg, pattern: 'dots', ink: P.dots } }
+    k = { ...k, cast: INV_ERA.era === 2 ? 'invincible2' : 'invincible', colors: invColors(INV_ERA.era), boss: [...P.boss], roles: [...P.roles], backdrop: { fill: P.bg, pattern: 'dots', ink: P.dots }, trim: P.trim }
   }
   // Caliper's face: dark, light, or the app's (auto).
   if (k.id === 'caliper') {
@@ -3311,7 +3315,9 @@ const totals = (list: AgentRun[], at: number) => {
 // the classic follows the system scheme.
 const paneCss = (k: Skin): string => {
   const c = k.colors
-  const dark = `.t{fill:${c.text}}.s{fill:${c.subtext}}.m{fill:${c.muted}}.k{fill:${c.track}}.ln{stroke:${c.line}}.tile{fill:${c.tile}}.tr{stroke:${c.text}}.ac{fill:${c.accent}}`
+  // A skin with trim edges its plain cards in the ink (a card that sets its own stroke keeps it).
+  const edge = k.trim ? `.tile:not([stroke]){stroke:${k.trim.ink};stroke-width:2}` : ''
+  const dark = `.t{fill:${c.text}}.s{fill:${c.subtext}}.m{fill:${c.muted}}.k{fill:${c.track}}.ln{stroke:${c.line}}.tile{fill:${c.tile}}${edge}.tr{stroke:${c.text}}.ac{fill:${c.accent}}`
   // On a light background the classic violet (and Default's grey) is too faint to
   // read as text: light mode writes it darker.
   const lightAccent = k.id === CRAB_SKIN.id ? '#5B57D6' : k.id === DEFAULT_SKIN.id ? '#6e6e6a' : c.accent
@@ -4423,10 +4429,13 @@ const liveSegmentBar = (x: number, y: number, w: number, at: number, pctAt: (t: 
   return `${segmentBar(x, y, w, pctAt(t0), tone).replace(/height="8"/g, 'height="7"')}${later.join('')}`
 }
 
+// A heading's short rail: the accent, or the skin's trim (yellow with an ink edge on Invincible's classic suit).
+const railSvg = (x: number, y: number, h: number): string =>
+  SKIN.trim ? `<rect x="${x}" y="${y}" width="3" height="${h}" rx="1" fill="${SKIN.trim.hi}" stroke="${SKIN.trim.ink}" stroke-width="1" paint-order="stroke"/>` : `<rect x="${x}" y="${y}" width="3" height="${h}" rx="1" fill="${SKIN.colors.accent}"/>`
 // A section's heading: a short rail in the accent, the title, a note at the right.
 const usageHead = (x: number, y: number, w: number, title: string, note: string): string =>
   `<line class="ln" x1="${x}" y1="${y + 4.5}" x2="${x + w}" y2="${y + 4.5}"/>
-<rect x="${x}" y="${y + 13}" width="3" height="12" rx="1" fill="${SKIN.colors.accent}"/>
+${railSvg(x, y + 13, 12)}
 <text class="s" x="${x + 9}" y="${y + 23}" font-family="${FONT}" font-size="11.5" font-weight="600">${xml(title)}</text>
 <text class="m" x="${x + w}" y="${y + 23}" text-anchor="end" font-family="${FONT}" font-size="11" font-variant-numeric="tabular-nums">${xml(note)}</text>`
 
@@ -4502,7 +4511,7 @@ ${segmentBar(x0, y + 17, w, pct, tone)}`)
     H,
     `<defs>${defs.join('')}</defs>
 ${cardShape(0.5, 0.5, W - 1, H - 1, `class="tile"`, 14)}
-<rect x="${x0}" y="11" width="3" height="14" rx="1" fill="${SKIN.colors.accent}"/>
+${railSvg(x0, 11, 14)}
 <text class="t gl" x="${x0 + 9}" y="23" font-family="${FONT}" font-size="14" font-weight="800" letter-spacing=".4">Usage</text>
 ${sortedLimits(info).length ? '' : `<text class="m" x="${x0}" y="48" font-family="${FONT}" font-size="12">Your limits show up after Claude's first reply.</text>`}
 ${out.join('\n')}`,
@@ -6064,7 +6073,7 @@ const slimBandSvg = (OW: number, d: HudData): string => {
   const cold = th.coldLine?.(d.title) ?? ''
   const crRight = epLeft - 28
   if (cold && crRight - baseEnd > 220) s.push(`<text x="${r2(crRight)}" y="${y}" text-anchor="end" font-family="${FONT}" font-size="11.5" font-style="italic" fill="${c.muted}">${xml(serifClip(`“${cold}”`, 11.5, crRight - baseEnd))}</text>`)
-  s.push(`<line x1="14" y1="32.5" x2="${W - 14}" y2="32.5" stroke="${c.line}"/>`)
+  s.push(sl?.rule ? sl.rule(14, 32.5, W - 14, 32.5) : `<line x1="14" y1="32.5" x2="${W - 14}" y2="32.5" stroke="${c.line}"/>`)
   // ---- task row
   const fig = sl ? sl.figure({ at: d.at, ctxPct: d.ctxPct, party: d.isParty, working: d.isWorking, ...(d.progress === null ? {} : { progress: Math.round(d.progress * 100) }), ...(activeFx() && th.extras ? { fx: activeFx() as { kind: string; at: number } } : {}) }) : `${crab(14, 38, 'boss', false, d.isWorking, 1.05)}${crown(14, 38, 1.05)}`
   s.push(dancing(fig, d.isParty))
@@ -6091,7 +6100,7 @@ const slimBandSvg = (OW: number, d: HudData): string => {
   // Heisenberg's unlock line sits over the activity for a few seconds (and ends itself, so no redraw is needed).
   if (SKIN.id === 'heisenberg' && BB_REVEAL_AT > 0 && d.at >= BB_REVEAL_AT - 1000 && d.at - BB_REVEAL_AT < BB_REVEAL_MS && actRoom >= 60) s.push(bbRightLine(ax, 54, actRoom, c, FONT, BB_REVEAL_AT))
   if (hasReadouts) {
-    s.push(`<line x1="${r0 - 18}" y1="40" x2="${r0 - 18}" y2="76" stroke="${c.line}"/>`)
+    s.push(sl?.rule ? sl.rule(r0 - 18, 40, r0 - 18, 76) : `<line x1="${r0 - 18}" y1="40" x2="${r0 - 18}" y2="76" stroke="${c.line}"/>`)
     const ctxTone = d.ctxPct >= 95 ? c.alert : d.ctxPct >= 85 ? c.warn : c.text
     const lim = d.limitPct === null ? null : Math.round(d.limitPct)
     const limTone = (lim ?? 0) >= 90 ? c.alert : (lim ?? 0) >= 70 ? c.warn : c.text
@@ -6123,7 +6132,7 @@ const slimBandSvg = (OW: number, d: HudData): string => {
     else s.push(Vl(tx + segs * 6 + 8, 73, pct === null ? (d.isWorking ? '···' : '') : `${pct}%`))
     if (idle) s.push(th.idle?.(tx + segs * 6 + 8 + 44, 56, c) ?? '')
   }
-  s.push(`<line x1="14" y1="84.5" x2="${W - 14}" y2="84.5" stroke="${c.line}"/>`)
+  s.push(sl?.rule ? sl.rule(14, 84.5, W - 14, 84.5) : `<line x1="14" y1="84.5" x2="${W - 14}" y2="84.5" stroke="${c.line}"/>`)
   // ---- row A: steps left, crew right. The step dots always stay; role pills give way first, and the "+N" shows only after four figures.
   const ya = 103
   const stepDone = d.steps.filter(st => st === 'done').length
@@ -7994,9 +8003,16 @@ export const register: Register = (on, options) => {
       const section = (key: string, text: string) =>
         SKIN.dark ? (
           <Box key={key} marginTop={1} marginBottom={1}>
-            <Text color={SKIN.colors.accent} bold>
-              {`▍${text}`}
-            </Text>
+            {SKIN.trim ? (
+              <Text color={SKIN.colors.accent} bold>
+                <Text color={SKIN.trim.hi}>▍</Text>
+                {text}
+              </Text>
+            ) : (
+              <Text color={SKIN.colors.accent} bold>
+                {`▍${text}`}
+              </Text>
+            )}
           </Box>
         ) : (
           <Box key={key} marginTop={1} marginBottom={1}>

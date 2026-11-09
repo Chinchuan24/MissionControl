@@ -2,7 +2,7 @@
 // suit (S3+); the worn era picks the cast key `invincible` or `invincible2` (the way Edgerunners 2 picks D or CAPRI). The band is
 // the slim band in the theme's own hand; COVER STORY is the level card, THE PAGE the log, GDA WALL the task card and the closed jobs.
 import { BADGES, GREETING, VERBS, WORDS, bootLine, coverCard, coverToast, pageAlt, pageCard, rankOf, wallAlt, wallCard } from './invincible-cards'
-import { BAND_H, CSS, TITLE_WORDS, WARNING, cheer, chip, corner, crew, ep, epW, episodeAt, figure, flightBar, foot, gauge, mug, name, pal, pip, sansW, PROPS } from './invincible'
+import { BAND_H, CSS, TITLE_WORDS, WARNING, cheer, chip, corner, crew, ep, epW, episodeAt, figure, flightBar, foot, gauge, mug, name, pal, pill, pip, rule, sansW, PROPS } from './invincible'
 import type { Era } from './invincible'
 import { invExtras, invShake } from './invincible-eggs'
 import { camExtras } from './invincible-cameos'
@@ -32,7 +32,9 @@ export const invTheme = (era: Era): ThemeEggs => {
       ownsTotal: true,
       ep: { w: epW, draw: (xr, y, code, title, full) => ep(xr, y, code, title, full, era) },
       tear: (x, y, w, pct, _t, ctx) => flightBar(x, y, w, pct, era, { near: (ctx?.ctxPct ?? 0) >= 95, working: ctx?.isWorking }),
-      pill: (x, y, w, h, fill, opacity) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${fill}" fill-opacity="${opacity}" stroke="#0B0D14" stroke-width="1.5"/>`,
+      pill: (x, y, w, h, fill, opacity, stroke) => pill(x, y, w, h, fill, opacity, stroke, era),
+      // The classic suit draws its own yellow-and-black edge and rules (in the foot); the new suit keeps the engine's.
+      ...(P.trim ? { ownEdge: true, rule: (x1: number, y1: number, x2: number, y2: number) => rule(x1, y1, x2, y2, era) } : {}),
       cache: { fill: PROPS.eve as string, core: PROPS.evePale as string },
       figure: () => figure(era),
       crew: (x, y, color) => crew(x, y, color, era),

@@ -6,7 +6,11 @@ import { flightBar, monitor, pip } from './invincible'
 import { nextOf, veil } from './extras'
 
 export const svgOpen = (W: any, H: any) => `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="font-variant-numeric:tabular-nums"><style>${CSS}</style>`
-export const frame = (W: any, H: any, P: any) => `<rect x=".5" y=".5" width="${W - 1}" height="${H - 1}" rx="10" fill="${P.tile}" stroke="${P.line}"/>`
+// The classic suit frames its comic cards as the band: an ink panel edge with a yellow hairline inside; the new suit the plain line.
+export const frame = (W: any, H: any, P: any) =>
+  P.trim
+    ? `<g class="inv-trim"><rect x="1" y="1" width="${W - 2}" height="${H - 2}" rx="10" fill="${P.tile}" stroke="${P.trim.ink}" stroke-width="2"/><rect x="3.5" y="3.5" width="${W - 7}" height="${H - 7}" rx="8" fill="none" stroke="${P.trim.hi}" stroke-opacity=".7" stroke-width="1"/></g>`
+    : `<rect x=".5" y=".5" width="${W - 1}" height="${H - 1}" rx="10" fill="${P.tile}" stroke="${P.line}"/>`
 /** A card title: a 3 x 13 bar in the hero colour, then condensed caps 13/800 ls 1.5. */
 export const cardTitle = (x: any, y: any, text: any, P: any) => `<rect x="${x}" y="${y - 11}" width="3" height="13" fill="${P.hero}"${P.light ? ` stroke="${PROPS.ink}" stroke-width=".8"` : ''}/>${C(x + 9, y, text, 13, P.text, 'letter-spacing="1.5"')}`
 

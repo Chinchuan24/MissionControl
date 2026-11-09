@@ -289,6 +289,53 @@ test('eras: the classic suit wears the navy palette on the band and the pane, th
   await clock.advance(3_000)
   expect(await bandAt($, 1250)).toContain(ERA1.tile)
 })
+test('eras: the classic suit wears yellow-and-black trim on the band and the pane; the new suit wears none', async ($, on) => {
+  // The suit's yellow and its black: yellow reads as text on every navy surface, ink on yellow is strong.
+  expect(ERA1.trim).toEqual({ hi: '#F5C518', ink: '#0B0D14' })
+  expect(ERA2.trim).toBeNull()
+  const T = ERA1.trim as { hi: string; ink: string }
+  for (const s of ['tile', 'tile2', 'bg'] as const) expect(contrast(T.hi, ERA1[s])).toBeGreaterThanOrEqual(4.5)
+  expect(contrast(T.ink, T.hi)).toBeGreaterThanOrEqual(7)
+  const clock = base(on, 100_000, quietAt())
+  await start($, 'invincible')
+  await jobIn($)
+  await four($)
+  // The band: the ink frame with the yellow status edge, the yellow-and-black rules, the yellow Tasks chip, ON PATROL in
+  // yellow and the ink episode tag ringed in yellow.
+  const b1 = await bandAt($, 1250)
+  expect(b1.match(/class="inv-trim"/g)?.length ?? 0).toBeGreaterThanOrEqual(7)
+  expect(b1).toMatch(/<g class="inv-trim"><rect x="1" y="1" [^>]*stroke="#0B0D14" stroke-width="2"\/>/)
+  expect(b1).toMatch(/<rect x="2" y="14" width="3" height="\d+" rx="1" fill="#F5C518"\/>/)
+  expect(b1).toMatch(/fill="#F5C518" fill-opacity="1" stroke="#0B0D14" stroke-width="1.5" class="inv-trim"/)
+  expect(b1).toMatch(/fill="#F5C518" letter-spacing=".8" class="inv-trim">ON PATROL</)
+  expect(b1).toContain('class="inv-trim" x=')
+  expect(b1).not.toContain('class="hedge"')
+  // The pane: yellow rails with an ink edge, ink edges round the plain cards, the comic cards framed in ink and yellow.
+  const ui1 = await $.ui.mount({ plugin: 'crab-progress', surface: 'desktop', component: 'Pane', requestId: 'crab-agents', props: pane })
+  const tree1 = JSON.stringify(await ui1.drawn())
+  const p1 = (await ui1.findAll({ type: 'Svg' })).map(el => String(el.props.source)).join('')
+  await ui1.unmount()
+  expect(p1).toContain('.tile:not([stroke]){stroke:#0B0D14;stroke-width:2}')
+  expect(p1).toContain('fill="#F5C518" stroke="#0B0D14" stroke-width="1" paint-order="stroke"')
+  expect(p1).toContain('<g class="inv-trim"><rect x="1" y="1"')
+  expect(tree1).toMatch(/"color":"#F5C518"[^▍]{0,60}"▍"/)
+  // The new suit: none of it.
+  await $.prompt.submit({ text: 'new suit', cursor: 0 } as never)
+  await clock.advance(3_000)
+  const b2 = await bandAt($, 1250)
+  expect(b2).not.toContain('inv-trim')
+  expect(b2).toContain('class="hedge"')
+  const ui2 = await $.ui.mount({ plugin: 'crab-progress', surface: 'desktop', component: 'Pane', requestId: 'crab-agents', props: pane })
+  const p2 = (await ui2.findAll({ type: 'Svg' })).map(el => String(el.props.source)).join('')
+  await ui2.unmount()
+  expect(p2).not.toContain('inv-trim')
+  expect(p2).not.toContain('.tile:not([stroke])')
+  expect(p2).not.toContain('paint-order="stroke"')
+  // Back to the classic suit: the trim returns.
+  await $.prompt.submit({ text: 'classic suit', cursor: 0 } as never)
+  await clock.advance(3_000)
+  expect(await bandAt($, 1250)).toContain('inv-trim')
+})
 test('eras: era 2 draws its own palette, its own cast key and the NEW SUIT patch', async ($, on) => {
   base(on, 100_000, quietAt(2))
   await start($, 'invincible')
