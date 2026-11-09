@@ -38,7 +38,7 @@ import {
 // reads it through apiKeyHelper. Only fake keys appear in these tests.
 
 const FAKE = 'sk-ant-TEST-not-a-real-key'
-const ROOT = '/Users/chin/.claude/plugins/mission-control'
+const ROOT = '/Users/you/.claude/plugins/mission-control'
 const HELPER = `${ROOT}/scripts/${HELPER_NAME}`
 
 // --- the key -------------------------------------------------------------------------
@@ -110,11 +110,11 @@ test('billing: the key box shows only dots, and an edit anywhere (typed or paste
 // --- the Keychain command: the key rides stdin, never argv ------------------------------
 
 test('billing: the Keychain command carries the key and refuses anything that could break out of its quotes', () => {
-  const line = addCommand('chin', FAKE)
-  expect(line).toBe(`add-generic-password -U -a "chin" -s "${KEYCHAIN_SERVICE}" -w "${FAKE}"\n`)
+  const line = addCommand('me', FAKE)
+  expect(line).toBe(`add-generic-password -U -a "me" -s "${KEYCHAIN_SERVICE}" -w "${FAKE}"\n`)
   expect(line.split('\n').length).toBe(2) // one command, one trailing newline
-  expect(() => addCommand('chin', 'sk-ant-abc12345" -A')).toThrow()
-  expect(() => addCommand('chin', 'sk-ant-abc12345\nquit')).toThrow()
+  expect(() => addCommand('me', 'sk-ant-abc12345" -A')).toThrow()
+  expect(() => addCommand('me', 'sk-ant-abc12345\nquit')).toThrow()
   expect(() => addCommand('ch"in', FAKE)).toThrow()
 })
 
@@ -138,19 +138,19 @@ test('billing: apiKeyHelper decides the mode: none is the plan, our script is AP
 
 test('billing: a path with spaces or a quote is shell-quoted for apiKeyHelper, and reads back the same', () => {
   expect(shellQuote(HELPER)).toBe(HELPER)
-  for (const p of ["/Users/chin/Personal Projects/claude mod/scripts/x.sh", "/Users/o'brien/scripts/x.sh", '/a b/c$d/e.sh']) {
+  for (const p of ["/Users/you/Personal Projects/claude mod/scripts/x.sh", "/Users/o'brien/scripts/x.sh", '/a b/c$d/e.sh']) {
     expect(unquote(shellQuote(p))).toBe(p)
     expect(classifyHelper(shellQuote(p), p)).toBe('keychain')
   }
-  expect(unquote('/Users/chin/Personal\\ Projects/x.sh')).toBe('/Users/chin/Personal Projects/x.sh')
+  expect(unquote('/Users/you/Personal\\ Projects/x.sh')).toBe('/Users/you/Personal Projects/x.sh')
 })
 
 test('billing: the exact JSON to add has the real path, and the guide is four steps that edit nothing', () => {
   expect(helperPath(`${ROOT}/`)).toBe(HELPER)
   const json = settingsSnippet(ROOT)
   expect(JSON.parse(json)).toEqual({ apiKeyHelper: HELPER })
-  const spaced = settingsSnippet('/Users/chin/Personal Projects/claude mod')
-  expect(JSON.parse(spaced).apiKeyHelper).toBe("'/Users/chin/Personal Projects/claude mod/scripts/anthropic-key-helper.sh'")
+  const spaced = settingsSnippet('/Users/you/Personal Projects/claude mod')
+  expect(JSON.parse(spaced).apiKeyHelper).toBe("'/Users/you/Personal Projects/claude mod/scripts/anthropic-key-helper.sh'")
   const guide = guideText(ROOT, 'plan')
   for (const n of ['1.', '2.', '3.', '4.']) expect(guide).toContain(`\n${n} `)
   expect(guide).toContain(`"apiKeyHelper": "${HELPER}"`)
@@ -190,7 +190,7 @@ const result = (exitCode: number, stdout = '') => ({ exitCode, stdout, stderr: '
 const host = (w: World, calls: Call[]) => (argv: readonly string[], init?: { stdin?: string }) => {
   calls.push({ argv: [...argv], stdin: init?.stdin })
   if (argv[0] === '/usr/bin/uname') return result(0, `${w.os}\n`)
-  if (argv[0] === '/usr/bin/id') return result(0, 'chin\n')
+  if (argv[0] === '/usr/bin/id') return result(0, 'me\n')
   if (argv[0] === '/usr/bin/security' && argv[1] === '-i') {
     if (w.addExit === 0) w.hasItem = true
     return result(w.addExit)
@@ -231,7 +231,7 @@ test('billing: saving hands the key to `security -i` on stdin; no argument list,
   expect(saved.message).toBe('Key saved ••••-key. It is in your macOS Keychain only.')
   const add = calls.find(c => c.argv[1] === '-i')
   expect(add?.argv).toEqual(['/usr/bin/security', '-i'])
-  expect(add?.stdin).toBe(addCommand('chin', FAKE))
+  expect(add?.stdin).toBe(addCommand('me', FAKE))
   expect(JSON.stringify(calls.map(c => c.argv))).not.toContain(FAKE) // not in any argv, anywhere
   expect(kv.get('billing')).toEqual({ last4: '-key', savedAt: NOW })
   expect(JSON.stringify([...kv.entries()])).not.toContain(FAKE)
@@ -278,7 +278,7 @@ test('billing: remove deletes the item and the last 4; "not found" counts as rem
   expect(kv.has('billing')).toBe(false)
   expect(await removeKey($)).toEqual({ ok: true, message: 'There was no key to remove.' })
   const del = calls.filter(c => c.argv[1] === 'delete-generic-password').pop()
-  expect(del?.argv).toEqual(['/usr/bin/security', 'delete-generic-password', '-a', 'chin', '-s', KEYCHAIN_SERVICE])
+  expect(del?.argv).toEqual(['/usr/bin/security', 'delete-generic-password', '-a', 'me', '-s', KEYCHAIN_SERVICE])
 })
 
 test('billing: the mode is read from the merged apiKeyHelper setting (read only)', async () => {
