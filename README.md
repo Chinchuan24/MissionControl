@@ -67,7 +67,7 @@
 
 <p align="center"><sub>Both zips are the full mod (Cyberpunk = Core + add-on). Unzip, <a href="#-install">point Claude Code at the folder</a>, restart.</sub></p>
 
-> **Unofficial, non-commercial fan project.** Not affiliated with, endorsed by or sponsored by CD PROJEKT S.A., CD PROJEKT RED, Studio Trigger or Netflix. Cyberpunk 2077, Cyberpunk: Edgerunners, Edgerunners 2 and all related names, characters and terms belong to their respective owners and are used as fan homage only. The Mentalist and its characters belong to CBS and Warner Bros. Television, used as fan homage only. Breaking Bad and Better Call Saul and their characters belong to Sony Pictures Television and AMC, used as fan homage only. Invincible and its characters belong to Robert Kirkman, Cory Walker, Ryan Ottley, Image Comics, Skybound and Amazon MGM Studios, used as fan homage only. The MIT license covers this project's code, not those properties. Removal requests: open an issue.
+> **Unofficial, non-commercial fan project.** Not affiliated with, endorsed by or sponsored by CD PROJEKT S.A., CD PROJEKT RED, Studio Trigger or Netflix. Cyberpunk 2077, Cyberpunk: Edgerunners, Edgerunners 2 and all related names, characters and terms belong to their respective owners and are used as fan homage only. The Mentalist and its characters belong to CBS and Warner Bros. Television, used as fan homage only. Breaking Bad and Better Call Saul and their characters belong to Sony Pictures Television and AMC, used as fan homage only. Invincible and its characters belong to Robert Kirkman, Cory Walker, Ryan Ottley, Image Comics, Skybound and Amazon MGM Studios, used as fan homage only. The Boys and its characters belong to Eric Kripke, Garth Ennis, Darick Robertson, Sony Pictures Television and Amazon MGM Studios, used as fan homage only; the pixel art is original (text prompts only, no stills, no actor likenesses). The MIT license covers this project's code, not those properties. Removal requests: open an issue.
 
 ---
 
@@ -139,7 +139,7 @@ The add-on swaps the crabs for a pixel-art cast, moves the HUD to Night City and
 | Feature | Core | Cyberpunk |
 |---|:---:|:---:|
 | HUD band, pane, crew, Token Manager, crew mode, done chime, rich replies | ✓ | ✓ |
-| 7 core skins: default, Crab Classic, Caliper, The Mentalist, Breaking Bad, Better Call Saul, Invincible; custom JSON skins | ✓ | ✓ |
+| 8 core skins: default, Crab Classic, Caliper, The Mentalist, Breaking Bad, Better Call Saul, Invincible, The Boys; custom JSON skins | ✓ | ✓ |
 | **Cyberpunk Edgerunner**, **Lucy · Edgerunners**, **Arasaka**, **Edgerunners 2** skins | — | ✓ |
 | **Edgerunners 2** (fan homage): D's optics, a cobalt glass HUD, Roman's Tape, and Capri who walks in now and then | — | ✓ |
 | Pixel-art cast: David, Lucy, Rebecca, Maine, Kiwi, Johnny… Saburo and Adam Smasher on Arasaka | — | ✓ |
@@ -164,6 +164,7 @@ Pick one in the **Skins** tab (a gallery of preview cards), with `/skins` (a liv
 | ⚗️ Breaking Bad | `breaking-bad` | Mr. White, Jesse and the lab, crystal blue on desert green-black. |
 | ⚖️ Better Call Saul | `better-call-saul` | Saul's strip-mall law office, powder blue and gold on dark walnut. |
 | 💥 Invincible | `invincible` | The comic page: Mark and Omni-Man fight across the panels. |
+| ⭐ The Boys | `the-boys` | Vought's broadcast console in navy and gold: an approval meter that follows your tests, a VNN news crawl, spin on every error. Then the Boys hijack the feed. |
 | 🟡 Cyberpunk Edgerunner | `cyberpunk-2077` | Neon yellow, cyan and hot red. David leads the crew. |
 | 🌙 Lucy · Edgerunners | `lucy-edgerunners` | Rose-pink and cyan under the moon. Lucy runs the net. |
 | 🔴 Arasaka | `arasaka` | Corporate red and black. Saburo at the top, Smasher on call. |
@@ -252,13 +253,15 @@ Type a word anywhere in your prompt (any case) while its skin is on.
 | Invincible | `guardians` | The Guardians take on Omni-Man |
 | Invincible | `multiverse`, `invincible war` or just `what have i done` | Rifts open and a flock of evil Marks flies across |
 | Invincible | `new suit` (or `season 3`/`4`) · `classic suit` (or `old suit`, `season 1`/`2`) | Swap to the S3 suit's black and blue, and back |
+| The Boys | `shock and awe, my son` · `never meet your heroes` | SIGNAL HIJACKED: OFF BOOK (Butcher's black and red), and back ON BRAND |
+| The Boys | `7spn` | The test scoreboard comes back for a look |
 | Better Call Saul | `chicanery` | Chuck: "I AM NOT CRAZY!" |
 | Better Call Saul | `1216` | The number flip |
 | Better Call Saul | `namaste` | A bowling ball meets Howard's car |
 | Better Call Saul | `ding` | Hector's bell rings |
 | Better Call Saul | `saul3d` | Saul's bust zooms to a beat |
 
-**Replays (Invincible only):** `/missioncontrol play <name>` plays one now. Names: `fight`, `showdown`, `think`, `eve`, `oliver`, `cecil`, `newsuit`, `classic`.
+**Replays:** `/missioncontrol play <name>` plays one now. Invincible: `fight`, `showdown`, `think`, `eve`, `oliver`, `cecil`, `newsuit`, `classic`. The Boys: `hijack`, `onbrand`, `breaking`, `scoreboard`, `spin`, `turbo`.
 
 **They also play by themselves:** daily Invincible events, cameos while jobs run, show toasts on job and tool events, and something extra on most skins when context passes 85% and 95%.
 
@@ -275,6 +278,7 @@ Hidden skins are not in the gallery, the picker or `/skin` until you wear one.
 | GENE | type `takavic` on Better Call Saul, or `/skin gene` (`saul goodman` goes back) | Core |
 | CAPRI (Edgerunners 2's CAPRI mode) | type `capri` or `0+2=1` on Edgerunners 2, answer one of Capri's takeovers with `hi capri` within a minute, or `/skin capricorn`; `bye capri` goes back | Cyberpunk add-on |
 | SAMURAI | `/skin samurai` only (no typed word) | Cyberpunk add-on |
+| SOLID GOLD | type `solidgold` or `soldier boy` on The Boys, or `/skin solidgold`; `back on ice` goes back. Its own badge and its own secret flag | Core |
 
 The Saul words also work on GENE.
 

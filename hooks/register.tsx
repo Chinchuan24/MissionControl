@@ -21,6 +21,10 @@ import type { BashState, Fx, ToastKey } from './bettercallsaul-fx'
 import { UNPLUG_GAP_MS, shouldUnplug } from './bettercallsaul-extra'
 import { CLASSIC_RE, GUARDIANS_RE, NEW_SUIT_RE, SWAP_MS, THINK_RE, isVariantsAsk } from './invincible-eggs'
 import { ERA1, ERA2, TITLE_WORDS as INV_WORDS } from './invincible'
+import { BOOK as TB_BOOK, BRAND as TB_BRAND, GOLD as TB_GOLD } from './theboys'
+import type { Mode as BoysMode } from './theboys'
+import { GREETINGS as TB_GREETINGS } from './theboys-theme'
+import { REPLAYS as TB_REPLAYS, SPIN_BOOK, SPIN_BRAND, SPIN_GOLD, TOOLS_BRAND as TB_TOOLS, TOOLS_GOLD as TB_TOOLS_GOLD, boysEvent, parseCounts, prToast, resetBoys, scoreEnd, boysState, setBoysFx, setInFlight, toastOk as tbToastOk, typed as tbTyped } from './theboys-eggs'
 import { VERBS as INV_VERBS } from './invincible-cards'
 import { BYE_CAPRI_RE, CAPRICORN_RE, CAPRI_WORD_RE, ER2_FONT, ER2_TOOLS, ER2_WORDS } from './edgerunners2'
 import { CAPRI_MODE, ER2_MODE_DEFAULT } from './edgerunners2-duet'
@@ -29,7 +33,7 @@ import { extrasInto, glitchPanel, hackInto, overlayInto, roamOnBand, roamOverlay
 import type { ThemeCtx, ThemeEggs } from './themes'
 import { canNudge, nudge, pickQuiet, prBadge, quietOf, rememberTask, repoAndBranch, rescueText, retryOnHaiku, whatIf, whatIfText, whatIfTip } from './coach'
 import { flatSmiley, serifClip, serifW } from './mentalist-cards'
-import { BEATS_KEPT, BLANK_CRED, BOOT_H, award, rockerRankOf, bdHeight, bootStrip, braindanceCard, cleanCred, credCard, credHeight, levelOf, rankOf, shiftPick, stepPick } from './extras'
+import { BEATS_KEPT, BLANK_CRED, BOOT_H, award, withFound, rockerRankOf, bdHeight, bootStrip, braindanceCard, cleanCred, credCard, credHeight, levelOf, rankOf, shiftPick, stepPick } from './extras'
 import type { Beat, Cred } from './extras'
 import { ONESHOT_KEY, ULTRA_BY_KEY, ULTRA_BY_OPTIONS, ULTRA_KEY, ULTRA_TASK_HINT, cleanUltraBy, managerPicks, parseUltraBy, ultraBySaid, ultraBySection, ultraPlanToast, type UltraBy, pillChip, oneShotChipWord, cleanOneShot, cleanUltraRules, isUltraAgent, matchUltra, nextOneShot, oneShotChip, oneShotSaid, oneShotSection, oneShotWord, parseOneShot, resolveEffort, ultraCommand, ultraLine, withUltraBrief } from './crewcontrol'
 import type { OneShot } from './crewcontrol'
@@ -1941,7 +1945,55 @@ const calFaceOf = (k: Skin, face: 'dark' | 'light'): Skin => {
   return { ...k, cast: face === 'light' ? 'caliperlight' : 'caliper', colors: calColors(face), boss: [...P.boss], roles: [...P.roles], backdrop: { fill: P.bg, pattern: 'none', ink: '' } }
 }
 
-const BUILT_IN_SKINS: Skin[] = [DEFAULT_SKIN, CRAB_SKIN, CALIPER_SKIN, MENTALIST_SKIN, BREAKING_BAD_SKIN, CYBER_SKIN, ARASAKA_SKIN, LUCY_SKIN, SAMURAI_SKIN, RED_JOHN_SKIN, HEISENBERG_SKIN, BETTER_CALL_SAUL_SKIN, GENE_SKIN, INVINCIBLE_SKIN, EDGERUNNERS2_SKIN, CAPRICORN_SKIN]
+// The Boys (fan homage): Vought's broadcast console. One skin, two modes that switch in place: ON BRAND (navy and gold, the
+// default) and OFF BOOK (Butcher's grime: coat-black and marker red), typed `shock and awe, my son` and `never meet your heroes`.
+// `dark: true` so the mode's own colours always paint. SOLID GOLD is its hidden skin (Soldier Boy's 80s variety hour): `solidgold`
+// or `soldier boy` typed while wearing it, or `/skin solidgold`; `back on ice` goes back. It has its own secret flag
+// (cred.found 'solidgold'), never the shared `samurai` one. The Boys and its characters belong to Eric Kripke, Garth Ennis, Darick
+// Robertson, Sony Pictures Television and Amazon MGM Studios, used as fan homage only.
+const boysColors = (m: BoysMode): SkinColors => {
+  const P = m === 'book' ? TB_BOOK : m === 'gold' ? TB_GOLD : TB_BRAND
+  return { accent: P.a, accent2: P.aT, done: P.done, warn: P.warn, alert: P.alert, meter: P.a, text: P.text, subtext: P.sub, muted: P.muted, tile: P.tile, track: P.track, line: P.line, grid: P.tile2 }
+}
+const boysLook = (k: Skin, m: BoysMode): Skin => {
+  const P = m === 'book' ? TB_BOOK : m === 'gold' ? TB_GOLD : TB_BRAND
+  return { ...k, cast: m === 'book' ? 'boys2' : m === 'gold' ? 'solidgold' : 'boys', colors: boysColors(m), boss: [...P.boss], roles: [...P.roles], backdrop: { fill: P.bg, pattern: m === 'book' ? 'lines' : 'dots', ink: P.dots }, words: m === 'book' ? [...SPIN_BOOK] : m === 'gold' ? [...SPIN_GOLD] : [...SPIN_BRAND] }
+}
+const BOYS_SKIN: Skin = {
+  id: 'the-boys',
+  cast: 'boys',
+  name: 'The Boys',
+  description: "Fan homage: Vought's broadcast console, navy and gold, until the Boys hijack the feed.",
+  font: "-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',Ubuntu,Cantarell,'Noto Sans','Liberation Sans',sans-serif",
+  corners: 'round',
+  dark: true,
+  colors: boysColors('brand'),
+  boss: [...TB_BRAND.boss],
+  roles: [...TB_BRAND.roles],
+  effects: { scanlines: false, glitch: false },
+  chat: true,
+  words: [...SPIN_BRAND],
+  toolWords: TB_TOOLS,
+  backdrop: { fill: TB_BRAND.bg, pattern: 'dots', ink: TB_BRAND.dots },
+  tabs: { mission: '★\uFE0E Mission Control', skins: '★\uFE0E Skins' },
+}
+const SOLIDGOLD_SKIN: Skin = {
+  ...BOYS_SKIN,
+  id: 'solidgold',
+  cast: 'solidgold',
+  hidden: true,
+  name: 'SOLID GOLD',
+  description: 'The hidden one: live from 1983. Olive, brass and cream.',
+  colors: boysColors('gold'),
+  boss: [...TB_GOLD.boss],
+  roles: [...TB_GOLD.roles],
+  words: [...SPIN_GOLD],
+  toolWords: TB_TOOLS_GOLD,
+  backdrop: { fill: TB_GOLD.bg, pattern: 'dots', ink: TB_GOLD.dots },
+  tabs: { mission: '◉\uFE0E Mission Control', skins: '◉\uFE0E Skins' },
+}
+
+const BUILT_IN_SKINS: Skin[] = [DEFAULT_SKIN, CRAB_SKIN, CALIPER_SKIN, MENTALIST_SKIN, BREAKING_BAD_SKIN, CYBER_SKIN, ARASAKA_SKIN, LUCY_SKIN, SAMURAI_SKIN, RED_JOHN_SKIN, HEISENBERG_SKIN, BETTER_CALL_SAUL_SKIN, GENE_SKIN, INVINCIBLE_SKIN, BOYS_SKIN, SOLIDGOLD_SKIN, EDGERUNNERS2_SKIN, CAPRICORN_SKIN]
 
 // Only plain colour and font values reach the drawings: a skin file cannot
 // smuggle markup into an Svg.
@@ -2017,6 +2069,20 @@ const invUnpack = (v: string): { era: 1 | 2; since: number } => {
   return { era: era === '2' ? 2 : 1, since: Number(since) || 0 }
 }
 let INV_ERA: { era: 1 | 2; since: number } = { era: 1, since: 0 }
+// The Boys is one skin with two modes, ON BRAND and OFF BOOK, switched in place by typing. `since` pins the swap (SIGNAL HIJACKED /
+// WE APOLOGISE FOR THE INTERRUPTION) and is 0 after a restart; the store keeps the mode.
+const boysModeAtom = atom({ plugin: 'crab-progress', key: 'boysMode' } as const, 'brand|0')
+const boysUnpack = (v: string): { mode: 'brand' | 'book'; since: number } => {
+  const [mode, since] = v.split('|')
+  return { mode: mode === 'book' ? 'book' : 'brand', since: Number(since) || 0 }
+}
+let BOYS_MODE: { mode: 'brand' | 'book'; since: number } = { mode: 'brand', since: 0 }
+// When SOLID GOLD was put on or taken off (its own transition), 0 after a restart.
+let BOYS_GOLD_SINCE = 0
+const isBoys = (): boolean => SKIN.id === 'the-boys' || SKIN.id === 'solidgold'
+const boysWorn = (): BoysMode => (SKIN.id === 'solidgold' ? 'gold' : BOYS_MODE.mode)
+const boysSwapAt = (): number | undefined => (SKIN.id === 'solidgold' ? (BOYS_GOLD_SINCE > 0 ? BOYS_GOLD_SINCE : undefined) : BOYS_MODE.since > 0 ? BOYS_MODE.since : undefined)
+const swapAtNow = (): number | undefined => (isInv() && INV_ERA.since > 0 ? INV_ERA.since : isBoys() ? boysSwapAt() : undefined)
 // Caliper's setting (dark, light, auto; only this is stored) and the app's theme from /config (for auto). The atom packs
 // `mode|since|appIsLight` for the drawers; `since` is 0 after a restart. The resolved face is never stored.
 const calMode = atom({ plugin: 'crab-progress', key: 'calMode' } as const, 'auto|0|0')
@@ -2038,7 +2104,7 @@ const calNext = (): CalMode => (CAL_MODE.mode === 'dark' ? 'light' : CAL_MODE.mo
 let INV_FX: { kind: string; at: number } | undefined
 let INV_CTX = 0
 const isInv = (): boolean => SKIN.id === 'invincible'
-const activeFx = (): { kind: string; at: number } | undefined => (isInv() ? INV_FX : BCS_FX)
+const activeFx = (): { kind: string; at: number } | undefined => (isInv() ? INV_FX : isBoys() ? boysState().fx : BCS_FX)
 // When the phrase turned Breaking Bad into Heisenberg (0: it did not): the band's "You're goddamn right!" is drawn from it for
 // BB_REVEAL_MS, pinned to this time, so a redraw keeps it and it ends on its own. Also kept in the store as bbRevealAt.
 let BB_REVEAL_AT = 0
@@ -2280,7 +2346,7 @@ async function bumpCredNow($: EngineInterface, change: (c: Cred) => Cred, quiet:
     return false // An unreadable store is left alone rather than overwritten with a blank.
   }
   const before = cleanCred(saved)
-  const { cred: next, fresh } = award(change(before))
+  const { cred: next, fresh, freshSkin } = award(change(before))
   if (next === before) return false
   await $.store.set('cred', next).catch(() => undefined)
   await update($, cred, () => next)
@@ -2294,7 +2360,10 @@ async function bumpCredNow($: EngineInterface, change: (c: Cred) => Cred, quiet:
     const b = th ? (th.cred.badges.find(x => x.id === b0.id) ?? b0) : b0
     $.ui.toast(`${b.icon} Badge unlocked: ${b.name}`)
   }
-  const isCheer = now > was || fresh.length > 0
+  // A badge only one skin lists (The Boys' LATE EDITION, SOLID GOLD) is earned anywhere and announced only there.
+  const ownFresh = freshSkin.filter(b => th?.cred.badges.some(x => x.id === b.id))
+  for (const b of ownFresh) $.ui.toast(`${b.icon} Badge unlocked: ${b.name}`)
+  const isCheer = now > was || fresh.length > 0 || ownFresh.length > 0
   if (!quiet && isCheer) void play($, cyberOf() ? `${ADDON}/assets/levelup.wav` : 'assets/done.wav')
   return isCheer
 }
@@ -2386,6 +2455,9 @@ function applySkin(k: Skin): void {
     const P = INV_ERA.era === 2 ? ERA2 : ERA1
     k = { ...k, cast: INV_ERA.era === 2 ? 'invincible2' : 'invincible', colors: invColors(INV_ERA.era), boss: [...P.boss], roles: [...P.roles], backdrop: { fill: P.bg, pattern: 'dots', ink: P.dots }, trim: P.trim }
   }
+  // The Boys' mode: ON BRAND or OFF BOOK, the same skin; SOLID GOLD is its own (hidden) skin.
+  if (k.id === 'the-boys') k = boysLook(k, BOYS_MODE.mode)
+  if (k.id === 'solidgold') k = boysLook(k, 'gold')
   // Caliper's face: dark, light, or the app's (auto).
   if (k.id === 'caliper') {
     k = calFaceOf(k, calFace())
@@ -2408,8 +2480,58 @@ async function foundSecret($: EngineInterface, k: Skin): Promise<void> {
   const themed = themeKeyOf(k.cast)
   $.ui.toast(themed ? THEMES[themed].greeting : GREETING.samurai)
   if (!themed) void play($, `${ADDON}/assets/done-samurai.wav`)
-  // Quiet: the badge's chime would cut the band's own.
-  await bumpCred($, c => (c.samurai ? c : { ...c, samurai: true, xp: c.xp + 50 }), true).catch(() => false)
+  // Quiet: the badge's chime would cut the band's own. SOLID GOLD keeps its own flag: the shared one is never touched.
+  if (k.id === 'solidgold') await bumpCred($, c => withFound(c, 'solidgold'), true).catch(() => false)
+  else await bumpCred($, c => (c.samurai ? c : { ...c, samurai: true, xp: c.xp + 50 }), true).catch(() => false)
+}
+
+// The Boys' mode: ON BRAND or OFF BOOK. Writes the state, redraws in the mode's palette and starts the swap (pinned to `since`).
+async function setBoysMode($: EngineInterface, mode: 'brand' | 'book'): Promise<boolean> {
+  if (BOYS_MODE.mode === mode) return false
+  const now = await $.clock.now().catch(() => Date.now())
+  BOYS_MODE = { mode, since: now }
+  await $.store.set('boysMode', mode).catch(() => undefined)
+  await update($, boysModeAtom, () => `${mode}|${now}`)
+  if (SKIN.id === 'the-boys') applySkin(SKINS.get('the-boys') ?? BOYS_SKIN)
+  $.ui.toast(TB_GREETINGS[mode])
+  return true
+}
+// Puts on (or takes off) SOLID GOLD, the hidden skin: the transition is pinned to now.
+async function wearBoys($: EngineInterface, id: 'the-boys' | 'solidgold'): Promise<void> {
+  const k = SKINS.get(id)
+  if (!k) return
+  BOYS_GOLD_SINCE = await $.clock.now().catch(() => Date.now())
+  applySkin(k)
+  await $.store.set('skin', k.id).catch(() => undefined)
+  await update($, skin, () => k.id)
+  await retitle($).catch(() => undefined)
+  if (id === 'solidgold') await foundSecret($, k).catch(() => undefined)
+  else $.ui.toast('Back in storage.')
+}
+// The Boys: VOUGHT PR SPIN (M2). A tool call that comes back with an error flag gets a toast in press-speak (OFF BOOK: the real line,
+// LEAKED), at most one a minute; the APPROVAL dips and the FOCUS GROUP marks the call red. A garnish only.
+async function boysSpin($: EngineInterface, tool: string, res: unknown): Promise<void> {
+  const r = res as { isError?: boolean; is_error?: boolean; error?: unknown; result?: unknown } | null
+  if (!r || typeof r !== 'object' || !(r.isError === true || r.is_error === true || Boolean(r.error))) return
+  const at = await $.clock.now().catch(() => Date.now())
+  boysEvent('tool-error', { at, mode: boysWorn(), tool })
+  const text = typeof r.error === 'string' ? r.error : typeof r.result === 'string' ? r.result : 'error'
+  if (tbToastOk('spin', at, 60_000)) $.ui.toast(prToast(tool, text, boysWorn()))
+}
+// `/missioncontrol play <name>` while The Boys is worn: the shared registry in theboys-eggs.ts (later phases add rows to it).
+async function boysReplay($: EngineInterface, name: string): Promise<string> {
+  const r = TB_REPLAYS.find(x => x.name === name)
+  if (!r) return `Play which? ${TB_REPLAYS.map(x => x.name).join(', ')}`
+  const at = await $.clock.now().catch(() => Date.now())
+  const out = r.run(at, boysWorn())
+  if (out.mode && SKIN.id === 'the-boys' && (out.mode === 'brand' || out.mode === 'book')) {
+    if (!(await setBoysMode($, out.mode).catch(() => false))) return out.mode === 'book' ? 'Already off book.' : 'Already on brand.'
+  }
+  if (out.fx) setBoysFx(out.fx, at)
+  if (out.toast) $.ui.toast(out.toast)
+  await update($, bandTick, () => at)
+  await update($, paneTick, () => at)
+  return `▶ ${name}`
 }
 
 // An open pane behind another tab is not raised by a second ui.open: close it, then open it.
@@ -2470,6 +2592,11 @@ async function useSkin($: EngineInterface): Promise<Skin> {
   const m = er2Unpack(await read($, er2Mode))
   const mi = invUnpack(await read($, invEra))
   const mc = calUnpack(await read($, calMode))
+  const mb = boysUnpack(await read($, boysModeAtom))
+  if (mb.mode !== BOYS_MODE.mode || mb.since !== BOYS_MODE.since) {
+    BOYS_MODE = mb
+    if (id === SKIN.id && id === 'the-boys') applySkin(SKINS.get(id) ?? BOYS_SKIN)
+  }
   if (id !== SKIN.id || m.mode !== ER2.mode || m.since !== ER2.since || mi.era !== INV_ERA.era || mi.since !== INV_ERA.since || mc.mode !== CAL_MODE.mode || mc.since !== CAL_MODE.since || mc.light !== APP_LIGHT) {
     ER2 = m
     INV_ERA = mi
@@ -5965,6 +6092,7 @@ const noteUnplug = (at: number): void => {
 }
 const running4 = (running: number, at: number): void => {
   if (isBcs() && shouldUnplug([], at, running)) noteUnplug(at)
+  if (isBoys()) setInFlight(running, at)
 }
 // A pane card with the theme's per-card roaming acts (Mike peeks at the log, sits on the task card) and rare eggs spliced in.
 const paneCard = (src: string, th: ThemeEggs, card: 'cred' | 'task' | 'log', at: number, ctxPct: number, party: boolean, working = false): string => {
@@ -5975,7 +6103,7 @@ const paneCard = (src: string, th: ThemeEggs, card: 'cred' | 'task' | 'log', at:
 const paneFinish = (over: string, th: ThemeEggs, card: 'cred' | 'task' | 'log', at: number, ctxPct: number, party: boolean, working = false): string => {
   if (!th.extras) return over
   const fx = activeFx()
-  const swapAt = isInv() && INV_ERA.since > 0 ? INV_ERA.since : undefined
+  const swapAt = swapAtNow()
   const drawn = extrasInto(over, th, { at, ctxPct, card, party, working, ...(BCS_UNPLUG_AT !== undefined ? { unplugAt: BCS_UNPLUG_AT } : {}), ...(fx ? { fx } : {}), ...(swapAt !== undefined ? { swapAt } : {}) })
   const root = /^<svg\b[^>]*>/.exec(drawn)?.[0]
   const W = Number(/\bwidth="([\d.]+)"/.exec(root ?? '')?.[1])
@@ -6244,9 +6372,9 @@ const slimBandSvg = (OW: number, d: HudData): string => {
   const trLayer = transitionLayer(th, { W, H, surface: 'band', since: ER2.since, now: d.at, party: d.isParty, ...(chip.w ? { chip: { x: chipX, y: y - 11.5, w: chip.w, h: 16 } } : {}) })
   // Rare scheduled eggs (a car, a face, a dim): from the clock, over the band and under the roamer.
   if (th.extras && !d.isParty) running4(d.crew.filter(m => m.status === 'running').length, d.at)
-  const extras = th.extras ? th.extras({ W, H, surface: 'band', at: d.at, ctxPct: d.ctxPct, ...(d.isParty ? { party: true } : {}), ...(BCS_UNPLUG_AT !== undefined ? { unplugAt: BCS_UNPLUG_AT } : {}), ...(activeFx() ? { fx: activeFx() as { kind: string; at: number } } : {}), working: d.isWorking, ...(isInv() && INV_ERA.since > 0 ? { swapAt: INV_ERA.since } : {}) }) : ''
+  const extras = th.extras ? th.extras({ W, H, surface: 'band', at: d.at, ctxPct: d.ctxPct, ...(d.isParty ? { party: true } : {}), ...(BCS_UNPLUG_AT !== undefined ? { unplugAt: BCS_UNPLUG_AT } : {}), ...(activeFx() ? { fx: activeFx() as { kind: string; at: number } } : {}), working: d.isWorking, ...(swapAtNow() !== undefined ? { swapAt: swapAtNow() } : {}) }) : ''
   const body = `${s.join('\n')}${extras}${d.isParty ? th.cheer(W, H, FONT, c, d.partyAt) : ''}${d.isParty && th.roamer?.hushParty ? '' : roam}${trLayer}`
-  return shakeInto(glitchPanel(svg(W, H, body), th, { at: d.at, ctxPct: d.ctxPct, party: d.isParty }), th, { W, H, surface: 'band', at: d.at, working: d.isWorking, party: d.isParty, fx: activeFx(), ...(isInv() && INV_ERA.since > 0 ? { swapAt: INV_ERA.since } : {}) })
+  return shakeInto(glitchPanel(svg(W, H, body), th, { at: d.at, ctxPct: d.ctxPct, party: d.isParty }), th, { W, H, surface: 'band', at: d.at, working: d.isWorking, party: d.isParty, fx: activeFx(), ...(swapAtNow() !== undefined ? { swapAt: swapAtNow() } : {}) })
 }
 
 const hudBandSvg = (OW: number, d: HudData): string => {
@@ -6680,8 +6808,10 @@ async function finishIfIdle($: EngineInterface): Promise<void> {
     longJobs: c.longJobs + (isLong ? 1 : 0),
     crewJobs: c.crewJobs + (isCrew ? 1 : 0),
     nightJobs: c.nightJobs + (new Date(at).getHours() < 5 ? 1 : 0),
+    jobTimes: [...(c.jobTimes ?? []), at].slice(-3),
     xp: c.xp + 10 + (isLong ? 15 : 0) + (isCrew ? 10 : 0),
   }), isWorthACheer)
+  if (isBoys()) boysEvent('job-done', { at, mode: boysWorn() })
   if (!isWorthACheer) {
     await paid
     return
@@ -7111,6 +7241,8 @@ export const register: Register = (on, options) => {
     BCS_CALLS = []
     BCS_BASH = { testFails: 0, lintFailed: false }
     for (const k of Object.keys(BCS_TOAST_AT)) delete BCS_TOAST_AT[k as ToastKey]
+    // The Boys: 50/50 approval, an empty wire, no scoreboard.
+    resetBoys()
     const started = await next(e)
     await registerEntryPoints($)
     await loadModelAliases($).catch(() => undefined)
@@ -7207,6 +7339,9 @@ export const register: Register = (on, options) => {
     INV_FX = undefined
     INV_CTX = 0
     await update($, invEra, () => invPack(INV_ERA))
+    BOYS_MODE = { mode: (await $.store.get('boysMode').catch(() => undefined)) === 'book' ? 'book' : 'brand', since: 0 }
+    BOYS_GOLD_SINCE = 0
+    await update($, boysModeAtom, () => `${BOYS_MODE.mode}|0`)
     const savedCal = await $.store.get('calMode').catch(() => undefined)
     CAL_MODE = { mode: savedCal === 'dark' || savedCal === 'light' ? savedCal : 'auto', since: 0 }
     APP_LIGHT = await readAppLight($)
@@ -7301,6 +7436,7 @@ export const register: Register = (on, options) => {
     }
     // Unlisted on purpose: `/missioncontrol play <egg>` replays one of Invincible's eggs now (no help text names it).
     const replay = /^play(?:\s+(\S+))?\s*$/i.exec((e.args ?? '').trim())
+    if (replay && isBoys()) return { text: await boysReplay($, (replay[1] ?? '').toLowerCase()) }
     if (replay) return { text: await invReplay($, (replay[1] ?? '').toLowerCase()) }
     // Billing: how to pay with API credits instead of the plan, in four steps (nothing is edited).
     if (/^billing$/i.test((e.args ?? '').trim())) {
@@ -7377,6 +7513,7 @@ export const register: Register = (on, options) => {
     const tracking = trackTool($, e)
     try {
       const [result] = await Promise.all([next(e), tracking])
+      if (isBoys() && !e.agentId) await boysSpin($, String((e as { tool?: string }).tool ?? 'A tool'), result).catch(() => undefined)
       return result
     } finally {
       if (e.agentId) await tracking.then(() => endTool($, e.agentId as string))
@@ -7423,6 +7560,33 @@ export const register: Register = (on, options) => {
     return res
   })
 
+  // The Boys: a test command lights the 7SPN scoreboard and moves the APPROVAL by its pass rate (a failure hijacks the VNN crawl
+  // with BREAKING); a force push breaks news too. A garnish only: never in the way of the call.
+  on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
+    if (!isBoys()) return next(e)
+    const kind = cmdKind(String((e as unknown as { command?: string }).command ?? ''))
+    if (kind === 'test') boysEvent('test-start', { at: await $.clock.now().catch(() => Date.now()), mode: boysWorn() })
+    const res = await next(e)
+    if (!kind || kind === 'lint') return res
+    try {
+      const at = await $.clock.now().catch(() => Date.now())
+      const mode = boysWorn()
+      let toasts: string[] = []
+      if (kind === 'force') toasts = boysEvent('force-push', { at, mode })
+      else {
+        const r = res as { result?: unknown }
+        const text = typeof r?.result === 'string' ? r.result : JSON.stringify(r?.result ?? '')
+        const n = parseCounts(text)
+        const failed = resultFailed(res) || (n?.fail ?? 0) > 0
+        toasts = boysEvent(failed ? 'test-fail' : 'test-pass', { at, mode, pass: n?.pass ?? 0, fail: n?.fail ?? (failed ? 1 : 0) })
+      }
+      for (const t of toasts) $.ui.toast(t)
+      await update($, bandTick, () => at)
+    } catch {
+      // A garnish only.
+    }
+    return res
+  })
   // The manager's task list, followed as the plan tool is called; wrap-up closes it.
   on('tool.call', { tool: PLAN_TOOL }, async ($, e, next) => {
     // Never in the way: a failure here must not block the plan tool itself.
@@ -8556,6 +8720,22 @@ export const register: Register = (on, options) => {
       if (THINK_RE.test(asked)) INV_FX = { kind: 'think', at }
       else if (GUARDIANS_RE.test(asked)) INV_FX = { kind: 'showdown', at }
       else if (isVariantsAsk(asked)) INV_FX = { kind: 'variants', at: swapped ? at + SWAP_MS + 300 : at }
+    }
+    // The Boys (the prompt goes on unchanged; these act only while wearing it): `shock and awe, my son` hijacks the feed (OFF BOOK),
+    // `never meet your heroes` puts it back ON BRAND, `solidgold` / `soldier boy` unlocks SOLID GOLD and `back on ice` leaves it.
+    // The rest of the trigger table (theboys-eggs TRIGGERS) is phase 2's.
+    if (asked && isBoys()) {
+      const at = await $.clock.now().catch(() => Date.now())
+      const t = tbTyped(asked, boysWorn())
+      if (t?.kind === 'hijack') await setBoysMode($, 'book').catch(() => false)
+      else if (t?.kind === 'onbrand') await setBoysMode($, 'brand').catch(() => false)
+      else if (t?.kind === 'solidgold') await wearBoys($, 'solidgold').catch(() => undefined)
+      else if (t?.kind === 'backonice') await wearBoys($, 'the-boys').catch(() => undefined)
+      else if (t?.kind === 'scoreboard') {
+        const sc = boysState().score
+        if (sc) scoreEnd(sc.pass, sc.fail, at)
+        setBoysFx('scoreboard', at)
+      } else if (t) setBoysFx(t.kind, at)
     }
     // Edgerunners 2's two modes (the prompt goes on unchanged): "bye capri" sends her back to D (checked first); the whole word
     // "capri" in any case, or the third episode's title "0+2=1" (which toggles), lets her in.

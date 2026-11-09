@@ -12,7 +12,7 @@ export const GROUP_TAGLINE: Record<SkinGroup, string> = {
   yours: 'from the Custom Claude Skins folder',
 }
 
-const TV_CASTS = new Set(['mentalist', 'redjohn', 'breakingbad', 'heisenberg', 'bettercallsaul', 'gene', 'invincible', 'invincible2'])
+const TV_CASTS = new Set(['mentalist', 'redjohn', 'breakingbad', 'heisenberg', 'bettercallsaul', 'gene', 'invincible', 'invincible2', 'boys', 'boys2', 'solidgold'])
 const CITY_CASTS = new Set(['runners', 'netrun', 'corpo', 'samurai', 'edgerunners2', 'capricorn'])
 
 /** The group a skin is shown under: a skin from the folder is "yours" whatever it looks like. */
@@ -42,6 +42,8 @@ const TAGLINES: Record<string, string> = {
   capricorn: 'She owns the HUD now',
   invincible: 'The comic page: Mark and Omni-Man across the panels',
   caliper: 'Graphite and ice: a dial, a ruler, one blue',
+  'the-boys': 'Vought navy and gold, until the Boys hijack the feed',
+  solidgold: 'Olive, brass and cream: live from 1983',
 }
 
 /** The card's tagline: the short line for a built-in skin, else the description's first clause. */

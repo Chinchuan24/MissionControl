@@ -298,6 +298,8 @@ declare module 'claude-code' {
       skinKit: string
       /** Invincible's era (1 the classic suit, 2 the new suit) and when it last switched (0 after a restart), as `era|since`. */
       invEra: string
+      /** The Boys' mode and when it last switched: `brand|0` or `book|<ms>`. */
+      boysMode: string
       /** Caliper's setting (dark, light or auto), when it last changed (0 after a restart) and whether the app's theme is light, as `mode|since|appIsLight`. */
       calMode: string
       /** Mission Control's settings, mirrored from `$.store` so the pane redraws. */
