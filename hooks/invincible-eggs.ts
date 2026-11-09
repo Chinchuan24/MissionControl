@@ -27,9 +27,16 @@ export const THINK_MS = 3_200
 export const VARIANTS_MS = 8_000
 /** THE FIGHT: at most once per 6 minutes, 80 % of slots, so about one per 12-15 min; only drawn while a job is working. */
 export const duelPlan = (at: any, era: any) => slotPlan(era === 2 ? 'inv-duel-2' : 'inv-duel', at, 6, 0.8, DUEL_MS)
+/** The LOCAL date's day number, the seed for a once-a-day act: a UTC day number flips mid-evening west of UTC (morning east
+ *  of +10), re-rolling the day's time halfway through it, so the act played twice or not at all. Same number as a UTC day
+ *  number wherever that never happened. */
+export const localDay = (at: number): number => {
+  const d = new Date(at)
+  return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86_400_000)
+}
 /** THE SHOWDOWN: one seeded time a day (between 09:00 and 22:00 local), plus the typed trigger `guardians`. */
 export const showdownPlan = (at: any, era: any) => {
-  const day = Math.floor(at / 86_400_000)
+  const day = localDay(at)
   const d0 = new Date(at)
   d0.setHours(9, 0, 0, 0)
   const startAt = d0.getTime() + Math.floor(unit(`inv-showdown|${era}|${day}`) * 13 * 3_600_000)
@@ -50,9 +57,7 @@ export const variantsBlocked = (startAt: number, endAt: number): boolean => {
 export const variantsPlan = (at: number) => {
   const d0 = new Date(at)
   d0.setHours(10, 0, 0, 0)
-  // The seed is the LOCAL date's day number: a UTC day number flips mid-evening west of UTC (morning east of +10), re-rolling
-  // the day's time halfway through it, so the act played twice or not at all. Same number as before wherever that never happened.
-  const day = Math.floor(Date.UTC(d0.getFullYear(), d0.getMonth(), d0.getDate()) / 86_400_000)
+  const day = localDay(at)
   for (let i = 0; i < 6; i++) {
     const startAt = d0.getTime() + Math.floor(unit(`inv-variants|${day}|${i}`) * 11 * 3_600_000)
     const endAt = startAt + VARIANTS_MS
