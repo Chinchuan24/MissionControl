@@ -68,6 +68,17 @@ Caliper is an original design that ships with the mod (a dial, a ruler, one blue
 
 The CALIBRATION card has a `⇄` button that cycles dark → light → auto. Only the setting is saved; the face it resolves to never is. The layout is the same in both faces: only colours change.
 
+## The Boys: ON BRAND, OFF BOOK
+
+The Boys (a fan homage that ships with the mod, listed under TV shows) is one skin with two modes that switch in place:
+
+| Type | What it does |
+|---|---|
+| `shock and awe, my son` | SIGNAL HIJACKED: the feed goes OFF BOOK (coat-black, marker red, tape and a LEAKED stamp on every card) |
+| `never meet your heroes` | WE APOLOGISE FOR THE INTERRUPTION: back ON BRAND (Vought navy and gold) |
+
+The mode is saved; the layout never changes, only the palette and the overlays. Other live pieces: the APPROVAL RATING (moved by your test pass rate, decaying back to 50/50), the VNN crawl with BREAKING news, the 7SPN test scoreboard, VOUGHT PR spin on failed tools, the milk glass that drains as the context fills. All text reads at 4.5:1 or better in every mode.
+
 ## Names and logos
 
 Make it your own. A skin must not use another brand's name or logo: no company, product, game or film names. `/skin new` tells the model so, and both `/skin new` and `/skin check` refuse ids and names containing `anthropic`, `claude`, `aws`, `amazon`, `cyberpunk`, `arasaka` or `cd projekt`. The `cast` field (characters in place of the crabs) picks the mod's own pixel characters (The Mentalist's, or the Cyberpunk Skins add-on's), so leave it out.

@@ -1,0 +1,92 @@
+{
+  "$schema": "./skin.schema.json",
+  "id": "the-boys",
+  "name": "The Boys",
+  "description": "Fan homage: Vought's broadcast console, navy and gold, until the Boys hijack the feed.",
+  "font": "-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',Ubuntu,Cantarell,'Noto Sans','Liberation Sans',sans-serif",
+  "corners": "round",
+  "dark": true,
+  "colors": {
+    "accent": "#C9A13B",
+    "accent2": "#F0D27A",
+    "done": "#7FD3A0",
+    "warn": "#F0D27A",
+    "alert": "#FF8A7A",
+    "meter": "#C9A13B",
+    "text": "#F4F6FB",
+    "subtext": "#BCC6DE",
+    "muted": "#8E9AB8",
+    "tile": "#13214A",
+    "track": "#1C2D5E",
+    "line": "#2C4384",
+    "grid": "#0F1B3D"
+  },
+  "boss": [
+    "#C9A13B",
+    "#F0D27A",
+    "#B22234",
+    "#EDEDED",
+    "#C9A13B"
+  ],
+  "roles": [
+    "#F0D27A",
+    "#7FD3A0",
+    "#4FC3F7",
+    "#E8848C",
+    "#BCC6DE",
+    "#C9B0F2"
+  ],
+  "effects": {
+    "scanlines": false,
+    "glitch": false
+  },
+  "backdrop": {
+    "fill": "#0A1430",
+    "pattern": "dots",
+    "ink": "rgba(240,210,122,.05)"
+  },
+  "chat": true,
+  "words": [
+    "Spinning",
+    "Focus-grouping",
+    "Running it past legal",
+    "Polling the heartland",
+    "Rehearsing the smile",
+    "Prepping the presser",
+    "Clearing it with the Tower",
+    "Testing the slogan",
+    "Running crime analytics",
+    "Sending it to R&D",
+    "Stretching with Vought for Tots",
+    "Grabbing VoughtSonic",
+    "Lunch at Planet Vought",
+    "Cueing Seven on 7",
+    "Checking the Q-Score",
+    "Re-re-releasing",
+    "Booking the ice",
+    "Lighting the crown",
+    "Issuing a statement",
+    "Good for the Soul"
+  ],
+  "toolWords": {
+    "Read": "Brief",
+    "Grep": "Track down",
+    "Glob": "Canvass",
+    "LS": "Canvass",
+    "Edit": "Spin",
+    "MultiEdit": "Spin",
+    "NotebookEdit": "Spin",
+    "Write": "Issue a statement",
+    "Bash": "Deploy a supe",
+    "PowerShell": "Deploy a supe",
+    "Agent": "Call in a supe",
+    "WebFetch": "Pull the footage",
+    "WebSearch": "Check the polls",
+    "ToolSearch": "Check the roster"
+  },
+  "tabs": {
+    "mission": "★︎ Mission Control",
+    "skins": "★︎ Skins"
+  },
+  "cast": "boys"
+}

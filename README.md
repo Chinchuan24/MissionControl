@@ -22,7 +22,7 @@
 <p align="center">
   <img alt="MIT license" src="https://img.shields.io/badge/license-MIT-2B2320?style=flat-square">
   <img alt="Platforms" src="https://img.shields.io/badge/Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-E76F51?style=flat-square&labelColor=2B2320&label=runs%20on">
-  <img alt="Skins" src="https://img.shields.io/badge/skins-11%20%2B%205%20hidden-FCEE0A?style=flat-square&labelColor=0A0A0F">
+  <img alt="Skins" src="https://img.shields.io/badge/skins-12%20%2B%207%20hidden-FCEE0A?style=flat-square&labelColor=0A0A0F">
 </p>
 
 ---
@@ -67,7 +67,7 @@
 
 <p align="center"><sub>Both zips are the full mod (Cyberpunk = Core + add-on). Unzip, <a href="#-install">point Claude Code at the folder</a>, restart.</sub></p>
 
-> **Unofficial, non-commercial fan project.** Not affiliated with, endorsed by or sponsored by CD PROJEKT S.A., CD PROJEKT RED, Studio Trigger or Netflix. Cyberpunk 2077, Cyberpunk: Edgerunners, Edgerunners 2 and all related names, characters and terms belong to their respective owners and are used as fan homage only. The Mentalist and its characters belong to CBS and Warner Bros. Television, used as fan homage only. Breaking Bad and Better Call Saul and their characters belong to Sony Pictures Television and AMC, used as fan homage only. Invincible and its characters belong to Robert Kirkman, Cory Walker, Ryan Ottley, Image Comics, Skybound and Amazon MGM Studios, used as fan homage only. The MIT license covers this project's code, not those properties. Removal requests: open an issue.
+> **Unofficial, non-commercial fan project.** Not affiliated with, endorsed by or sponsored by CD PROJEKT S.A., CD PROJEKT RED, Studio Trigger or Netflix. Cyberpunk 2077, Cyberpunk: Edgerunners, Edgerunners 2 and all related names, characters and terms belong to their respective owners and are used as fan homage only. The Mentalist and its characters belong to CBS and Warner Bros. Television, used as fan homage only. Breaking Bad and Better Call Saul and their characters belong to Sony Pictures Television and AMC, used as fan homage only. Invincible and its characters belong to Robert Kirkman, Cory Walker, Ryan Ottley, Image Comics, Skybound and Amazon MGM Studios, used as fan homage only. The Boys and its characters belong to Eric Kripke, Garth Ennis, Darick Robertson, Sony Pictures Television and Amazon MGM Studios, used as fan homage only; the pixel art is original (text prompts only, no stills, no actor likenesses). The MIT license covers this project's code, not those properties. Removal requests: open an issue.
 
 ---
 
@@ -139,7 +139,7 @@ The add-on swaps the crabs for a pixel-art cast, moves the HUD to Night City and
 | Feature | Core | Cyberpunk |
 |---|:---:|:---:|
 | HUD band, pane, crew, Token Manager, crew mode, done chime, rich replies | ✓ | ✓ |
-| 7 core skins: default, Crab Classic, Caliper, The Mentalist, Breaking Bad, Better Call Saul, Invincible; custom JSON skins | ✓ | ✓ |
+| 8 core skins: default, Crab Classic, Caliper, The Mentalist, Breaking Bad, Better Call Saul, Invincible, The Boys; custom JSON skins | ✓ | ✓ |
 | **Cyberpunk Edgerunner**, **Lucy · Edgerunners**, **Arasaka**, **Edgerunners 2** skins | — | ✓ |
 | **Edgerunners 2** (fan homage): D's optics, a cobalt glass HUD, Roman's Tape, and Capri who walks in now and then | — | ✓ |
 | Pixel-art cast: David, Lucy, Rebecca, Maine, Kiwi, Johnny… Saburo and Adam Smasher on Arasaka | — | ✓ |
@@ -164,12 +164,13 @@ Pick one in the **Skins** tab (a gallery of preview cards), with `/skins` (a liv
 | ⚗️ Breaking Bad | `breaking-bad` | Mr. White, Jesse and the lab, crystal blue on desert green-black. |
 | ⚖️ Better Call Saul | `better-call-saul` | Saul's strip-mall law office, powder blue and gold on dark walnut. |
 | 💥 Invincible | `invincible` | The comic page: Mark and Omni-Man fight across the panels. |
+| ⭐ The Boys | `the-boys` | Vought's broadcast console in navy and gold: an approval meter that follows your tests, a VNN news crawl, spin on every error. Then the Boys hijack the feed. |
 | 🟡 Cyberpunk Edgerunner | `cyberpunk-2077` | Neon yellow, cyan and hot red. David leads the crew. |
 | 🌙 Lucy · Edgerunners | `lucy-edgerunners` | Rose-pink and cyan under the moon. Lucy runs the net. |
 | 🔴 Arasaka | `arasaka` | Corporate red and black. Saburo at the top, Smasher on call. |
 | ✂️ Edgerunners 2 | `edgerunners-2` | D's optics: a cobalt glass HUD. Capri visits. |
 
-The first seven ship with Core; the last four need the Cyberpunk add-on. Five more skins are hidden: see [Easter eggs](#-easter-eggs).
+The first eight ship with Core; the last four need the Cyberpunk add-on. Seven more skins are hidden: see [Easter eggs](#-easter-eggs).
 
 <details open>
 <summary><b>⚪ default</b> · Core</summary>
@@ -252,15 +253,18 @@ Type a word anywhere in your prompt (any case) while its skin is on.
 | Invincible | `guardians` | The Guardians take on Omni-Man |
 | Invincible | `multiverse`, `invincible war` or just `what have i done` | Rifts open and a flock of evil Marks flies across |
 | Invincible | `new suit` (or `season 3`/`4`) · `classic suit` (or `old suit`, `season 1`/`2`) | Swap to the S3 suit's black and blue, and back |
+| The Boys | `shock and awe, my son` · `never meet your heroes` | SIGNAL HIJACKED: OFF BOOK (Butcher's black and red), and back ON BRAND |
+| The Boys | `7spn` | The test scoreboard comes back for a look |
+| The Boys | 60 phrases from the show (`oh, diabolical`, `hughie, blink`, `turbo rush`, `vought on ice`…) | See the spoiler list below |
 | Better Call Saul | `chicanery` | Chuck: "I AM NOT CRAZY!" |
 | Better Call Saul | `1216` | The number flip |
 | Better Call Saul | `namaste` | A bowling ball meets Howard's car |
 | Better Call Saul | `ding` | Hector's bell rings |
 | Better Call Saul | `saul3d` | Saul's bust zooms to a beat |
 
-**Replays (Invincible only):** `/missioncontrol play <name>` plays one now. Names: `fight`, `showdown`, `think`, `eve`, `oliver`, `cecil`, `newsuit`, `classic`.
+**Replays:** `/missioncontrol play <name>` plays one now. Invincible: `fight`, `showdown`, `think`, `eve`, `oliver`, `cecil`, `newsuit`, `classic`. The Boys: `/missioncontrol play` lists all of them (every typed egg, the event eggs, `ambush`, `ambush-a`/`-b`/`-c`, the roamers).
 
-**They also play by themselves:** daily Invincible events, cameos while jobs run, show toasts on job and tool events, and something extra on most skins when context passes 85% and 95%.
+**They also play by themselves:** daily Invincible and The Boys set pieces, THE AMBUSH, cameos while jobs run, show toasts on job and tool events, and something extra on most skins when context passes 85% and 95%.
 
 <details>
 <summary>Spoilers: hidden skins</summary>
@@ -275,10 +279,121 @@ Hidden skins are not in the gallery, the picker or `/skin` until you wear one.
 | GENE | type `takavic` on Better Call Saul, or `/skin gene` (`saul goodman` goes back) | Core |
 | CAPRI (Edgerunners 2's CAPRI mode) | type `capri` or `0+2=1` on Edgerunners 2, answer one of Capri's takeovers with `hi capri` within a minute, or `/skin capricorn`; `bye capri` goes back | Cyberpunk add-on |
 | SAMURAI | `/skin samurai` only (no typed word) | Cyberpunk add-on |
+| SOLID GOLD | type `solidgold` or `soldier boy` on The Boys, or `/skin solidgold`; `back on ice` goes back. Its own badge and its own secret flag | Core |
+| THIS MEANS NOIR | type `this means noir` on The Boys, or `/skin noir`; `curtain call` goes back. The silent one: a real quiet mode (toasts are `…`). Its own badge and its own secret flag | Core |
 
 The Saul words also work on GENE.
 
 </details>
+
+<details>
+<summary>Spoilers: The Boys, every egg</summary>
+<br>
+
+**Typed** (the whole phrase, any case, while The Boys is on; the prompt goes on unchanged). One act at a time, each on the band and a pane card.
+
+| # | Type | Act |
+|---|---|---|
+| T1 | `oh, diabolical` | diabolical |
+| T2 | `ashley, look at me` | lookatme |
+| T3 | `shock and awe, my son` | hijack |
+| T4 | `never meet your heroes` | onbrand |
+| T5 | `i can do whatever i want` (alone, or ending in `!`) | whatever |
+| T6 | `pinocchio is stayin' put` | whale |
+| T7 | `timothy the octopus` | timothy |
+| T8 | `vought on ice` | ice |
+| T9 | `laser baby` | laserbaby |
+| T10 | `mon cœur` | dance |
+| T11 | `buster beaver` | beaver |
+| T12 | `seen the memes` | memes |
+| T13 | `billy joel` | joel |
+| T14 | `solidgold / soldier boy` | solidgold |
+| T15 | `back on ice` | backonice |
+| T16 | `tall glass of milk` | milk |
+| T17 | `compound v` | compoundv |
+| T18 | `hughie, blink` | blink |
+| T19 | `turbo rush` | turbo |
+| T20 | `training a-train` | training |
+| T21 | `brave maeve` | bravemaeve |
+| T22 | `seven on 7` | sevenon7 |
+| T23 | `dawn of the seven` | premiere |
+| T24 | `fun cut` | funcut |
+| T25 | `invisible force` | invisible |
+| T26 | `this means noir` | noirmode |
+| T27 | `vivant! / cirque de vought` | vivant |
+| T28 | `not without my dolphin` | dolphin |
+| T29 | `ambrosius` | ambrosius |
+| T30 | `american hero` | americanhero |
+| T31 | `rock my kiss / super-sweet (alone)` | rockmykiss |
+| T32 | `smartest person on the planet` | knight |
+| T33 | `wakey wakey` | wakey |
+| T34 | `class dismissed (alone)` | dismissed |
+| T35 | `you guys are the real heroes` | realheroes |
+| T36 | `you're bad product` | badproduct |
+| T37 | `really a pharmaceutical company` | pharma |
+| T38 | `storage boy` | storage |
+| T39 | `red scare / vought rising` | redscare |
+| T40 | `godolkin` | godolkin |
+| T41 | `little cricket (alone)` | cricket |
+| T42 | `monster club` | puppets |
+| T43 | `v52 expo` | expo |
+| T44 | `good boy, terror` | terror |
+| T45 | `full roster (alone)` | fullroster |
+| T46 | `hometeamers` | hometeamers |
+| T47 | `starlighters` | starlighters |
+| T48 | `saving america` | savingamerica |
+| T49 | `vought for tots` | tots |
+| T50 | `planet vought` | planetvought |
+| T51 | `it's what clara would have wanted (spoilers on)` | clara |
+| T52 | `cracked mirror` | mirror |
+| T53 | `it's a deepfake` | deepfake |
+| T54 | `the boys are back in town` | walk |
+| T55 | `tell you about nicaragua` | nicaragua |
+| T56 | `payback (alone)` | payback |
+| T57 | `red thunder` | redthunder |
+| T58 | `vought classic` | vclassic |
+| T59 | `truthbomb` | truthbomb |
+| T60 | `7spn` | scoreboard |
+
+**Events** (they play by themselves from what Claude Code does):
+
+| # | When | Act |
+|---|---|---|
+| E1 | a test run fails | scorch |
+| E2 | tests fail twice in a row | disgusted |
+| E3 | the failing test passes | regen |
+| E4 | a job is cancelled (Esc) | sweep |
+| E5 | the context is compacted or cleared | blackout |
+| E6 | a tool is refused permission | legalno |
+| E7 | `git push --force` | rewind |
+| E8 | a plan is approved (ExitPlanMode) | knight |
+| E9 | the first prompt of the day | wakey |
+| E10 | context passes 85% | toast / BREAKING |
+| E11 | context passes 95% (once a session) | lookatme |
+| E12 | a job of 3+ minutes ends (and a tool call over 60 s shows the PREMIERE FACE) | toast / BREAKING |
+| E13 | 4+ tools at once | turbo |
+| E14 | after midnight (midnight to 5 AM local) | toast / BREAKING |
+| E15 | 10 min idle (20 min: a line once a session) | terror |
+| E16 | the session passes $1, $5, $20 | toast / BREAKING |
+| E17 | a subagent spawns (the first to finish gets a line) | recruit |
+| E18 | 3 tool errors in a row | mirror |
+| E19 | a Write creates a new file | blink |
+| E20 | a test run with 0 failures | toast / BREAKING |
+| E21 | lint/typecheck passes after failing | toast / BREAKING |
+| E22 | WebFetch / WebSearch fails | fish |
+| E23 | the daily cap is hit | toast / BREAKING |
+| E24 | a test command starts (the 7SPN scoreboard) | toast / BREAKING |
+
+**Daily set pieces** (seeded by your local day, once each in its window): RED SCARE newsreel 08:00–12:00 · VOUGHT ON ICE 09:00–22:00 · THE WHALE 10:00–21:00 · V52 EXPO 14:00–18:00 · THE PREMIERE 19:00–22:30 · the SOLID GOLD teaser 18:00–23:00 (never within 2 min of the premiere) · THE WALK 11:00–20:00 (twice in OFF BOOK) · BRAVE MAEVE pop-up (June only).
+
+**Rare roamers** (one 6-minute slot, about two in three slots, never inside another act): Hughie (`…sorry, wrong room.`), Starlight, Kimiko (`[signs: hi]`: she signs, in closed captions), Frenchie, Black Noir (one time in five he carries a `1979` tape: the clue), A-Train, Terror, the fish school, Timothy, Ambrosius, Buster Beaver, the VNN blimp, and Butcher's `Oi.` (at most once per 48 min).
+
+**THE AMBUSH** (12 s, band and CRISIS DESK, every 15–20 min while a job works; three choreographies that take turns): A · THE LANDING, B · THE DROP (Noir first), C · THE SNATCH (A-Train steals your real progress bar, then brings it back: `my bad`).
+
+**Replays:** `/missioncontrol play` lists all 92 names, e.g. `ambush`, `ambush-c`, `scorch`, `sweep`, `blackout`, `shredder`, `teaser`, `kimiko`, `atrain`, `oi`, `whale`, `premiere`.
+
+</details>
+
 
 ---
 

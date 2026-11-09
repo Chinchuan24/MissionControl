@@ -12,6 +12,7 @@
 // `hair` sways, `vis` (a visor, a screen, a cyber-eye) flickers, `led` pulses.
 // The rows under the gap between the legs step left and right while it works.
 
+import { TB_ATRAIN, TB_BUTCHER, TB_FRENCHIE, TB_HOMELANDER, TB_HUGHIE, TB_KIMIKO, TB_NOIR, TB_SOLDIERBOY, TB_STARLIGHT } from './theboys-sprites'
 import { INV_AGENT, INV_AGENT2, INV_AGENT3, INV_ALLEN, INV_BATTLEBEAST, INV_CECIL, INV_DEBBIE, INV_EVE, INV_KATE, INV_MARK, INV_MARK_S3, INV_OMNI, INV_RAE, INV_REX, INV_SAMSON } from './invincible-sprites'
 
 export type Sprite = {
@@ -3878,6 +3879,14 @@ const CAL_RING: Sprite = {
 }
 const CAL_CAST: Cast = { name: 'Caliper', bossName: 'Claude', boss: CAL_RING, roles: {}, crew: [CAL_RING] }
 
+// The Boys' cast, one roles table for its three looks; only the boss changes.
+const BOYS_CAST = (boss: Sprite, bossName: string, name: string): Cast => ({
+  name,
+  bossName,
+  boss,
+  roles: { explore: TB_HUGHIE, fable: TB_SOLDIERBOY, heavy: TB_BUTCHER, careful: TB_STARLIGHT, medium: TB_FRENCHIE, light: TB_ATRAIN, artist: TB_KIMIKO, writer: TB_STARLIGHT, banker: TB_NOIR, other: TB_KIMIKO },
+  crew: [TB_HUGHIE, TB_FRENCHIE, TB_KIMIKO],
+})
 export const CASTS: Record<string, Cast> = {
   // David leads; Lucy, Maine, Rebecca, Kiwi, Dorio, Pilar, Falco and Johnny take the roles.
   runners: { name: 'Edgerunners', bossName: 'David', boss: DAVID, roles: CREW_ROLES, crew: [CHOOM, GANGER, NEON] },
@@ -4024,6 +4033,12 @@ export const CASTS: Record<string, Cast> = {
   // places a pixel figure is asked for (the pane's agent rows). Both faces share it.
   caliper: CAL_CAST,
   caliperlight: CAL_CAST,
+  // The Boys (fan homage): Homelander fronts ON BRAND, Butcher OFF BOOK, Soldier Boy SOLID GOLD; Hughie, Starlight, Kimiko,
+  // Frenchie, Black Noir, A-Train and the rest take the roles.
+  boys: BOYS_CAST(TB_HOMELANDER, 'Homelander', 'The Boys'),
+  boys2: BOYS_CAST(TB_BUTCHER, 'Butcher', 'The Boys (off book)'),
+  solidgold: BOYS_CAST(TB_SOLDIERBOY, 'Soldier Boy', 'SOLID GOLD'),
+  boysnoir: BOYS_CAST(TB_NOIR, 'Black Noir', 'THIS MEANS NOIR'),
   // Edgerunners 2 (fan homage): D leads, Roman, Talia, Weak and Jessie work, the Kings and the teal-jacket runners back them.
   edgerunners2: {
     name: 'Edgerunners 2',

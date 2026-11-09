@@ -14,8 +14,25 @@ export type Cred = {
   chromed: boolean
   samurai: boolean
   badges: string[]
+  /** Per-skin secret flags: the ids of the hidden skins found (The Boys' `solidgold`). Separate from `samurai`, the shared one, so
+   *  finding one skin's secret never lights another skin's badge. */
+  found?: string[]
+  /** When the last three jobs finished (ms), for a badge that counts jobs inside an hour (The Boys' LATE EDITION). */
+  jobTimes?: number[]
+  /** Badges only one skin lists (SKIN_BADGES), kept apart from `badges` so no other card counts them. */
+  skinBadges?: string[]
 }
 export const BLANK_CRED: Cred = { xp: 0, jobs: 0, longJobs: 0, agents: 0, crewJobs: 0, nightJobs: 0, chromed: false, samurai: false, badges: [] }
+/** Has this skin's own secret been found (the per-skin flag)? */
+export const foundOf = (c: Cred, id: string): boolean => (c.found ?? []).includes(id)
+/** Marks a skin's secret as found (and pays the finder once). */
+export const withFound = (c: Cred, id: string, xp = 50): Cred => (foundOf(c, id) ? c : { ...c, found: [...(c.found ?? []), id], xp: c.xp + xp })
+/** Three jobs finished inside one hour (the news cycle), from the last three finish times. */
+export const lateEditionOf = (c: Cred): number => {
+  const t = (c.jobTimes ?? []).slice(-3)
+  if (t.length < 3) return t.length / 3
+  return (t[2] as number) - (t[0] as number) <= 3_600_000 ? 1 : 2 / 3
+}
 
 // Level L needs 25·L·(L−1) XP: 0, 50, 150, 300, 500, 750…
 export const levelOf = (xp: number): number => Math.max(1, Math.floor((1 + Math.sqrt(1 + Math.max(0, xp) / 6.25)) / 2))
@@ -49,9 +66,20 @@ export const BADGES: Badge[] = [
 // The badges a cred has just earned, and the cred with them recorded.
 // The words a skin can swap on the card: its badges' names and the stat labels.
 export type CredWords = { badges: Badge[]; cases: string; long: string; all: string }
-export const award = (c: Cred): { cred: Cred; fresh: Badge[] } => {
+// Badges one skin lists beside the shared ones (The Boys: LATE EDITION, SOLID GOLD). Earned whatever is worn, stored in
+// `skinBadges`, shown and toasted only by the skin whose card lists the id.
+export const SKIN_BADGES: Badge[] = [
+  { id: 'lateedition', name: 'LATE EDITION', icon: '▤', how: '3 jobs finished inside one hour', progress: lateEditionOf },
+  { id: 'solidgold', name: 'SOLID GOLD', icon: '◉', how: 'Found the B-side.', progress: c => (foundOf(c, 'solidgold') ? 1 : 0) },
+  { id: 'noir', name: 'THIS MEANS NOIR', icon: '▪', how: 'Found the silent one.', progress: c => (foundOf(c, 'noir') ? 1 : 0) },
+]
+export const award = (c: Cred): { cred: Cred; fresh: Badge[]; freshSkin: Badge[] } => {
   const fresh = BADGES.filter(b => !c.badges.includes(b.id) && b.progress(c) >= 1)
-  return { cred: fresh.length ? { ...c, badges: [...c.badges, ...fresh.map(b => b.id)] } : c, fresh }
+  const have = c.skinBadges ?? []
+  const freshSkin = SKIN_BADGES.filter(b => !have.includes(b.id) && b.progress(c) >= 1)
+  let next = fresh.length ? { ...c, badges: [...c.badges, ...fresh.map(b => b.id)] } : c
+  if (freshSkin.length) next = { ...next, skinBadges: [...have, ...freshSkin.map(b => b.id)] }
+  return { cred: next, fresh, freshSkin }
 }
 
 export const cleanCred = (v: unknown): Cred => {
@@ -67,6 +95,9 @@ export const cleanCred = (v: unknown): Cred => {
     chromed: r.chromed === true,
     samurai: r.samurai === true,
     badges: Array.isArray(r.badges) ? [...new Set(r.badges.filter((b): b is string => typeof b === 'string' && BADGES.some(x => x.id === b)))] : [],
+    ...(Array.isArray(r.found) ? { found: [...new Set(r.found.filter((f): f is string => typeof f === 'string' && /^[a-z0-9-]{1,24}$/.test(f)))].slice(0, 20) } : {}),
+    ...(Array.isArray(r.jobTimes) ? { jobTimes: r.jobTimes.filter((t): t is number => typeof t === 'number' && Number.isFinite(t) && t > 0).slice(-3) } : {}),
+    ...(Array.isArray(r.skinBadges) ? { skinBadges: [...new Set(r.skinBadges.filter((b): b is string => typeof b === 'string' && SKIN_BADGES.some(x => x.id === b)))] } : {}),
   }
 }
 

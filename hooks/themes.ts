@@ -38,6 +38,7 @@ import { zoomWrap } from './bettercallsaul-fx'
 import type { Fx } from './bettercallsaul-fx'
 import { invTheme } from './invincible-theme'
 import { calTheme } from './caliper-theme'
+import { boysTheme } from './theboys-theme'
 import { roamPlan } from './roamer'
 import type { HackArgs } from './edgerunners2-hack'
 import { ER_CAPRI } from './cast'
@@ -48,11 +49,11 @@ import type { Legend } from './eggs'
 
 /** What the band's figure slot knows: the clock, the context, and whether the job-done celebration is drawing. */
 export type FigureCtx = { at: number; ctxPct: number; party?: boolean; fx?: { kind: string; at: number }; /** A job is running. */ working?: boolean; /** The job's progress, 0 to 100 (absent before a plan). */ progress?: number }
-export type ThemeKey = 'mentalist' | 'redjohn' | 'breakingbad' | 'heisenberg' | 'edgerunners2' | 'capricorn' | 'bettercallsaul' | 'gene' | 'invincible' | 'invincible2' | 'caliper' | 'caliperlight'
+export type ThemeKey = 'mentalist' | 'redjohn' | 'breakingbad' | 'heisenberg' | 'edgerunners2' | 'capricorn' | 'bettercallsaul' | 'gene' | 'invincible' | 'invincible2' | 'caliper' | 'caliperlight' | 'boys' | 'boys2' | 'solidgold' | 'boysnoir'
 /** The pane cards a roaming act can belong to: the level card, the task card, the log. */
 export type PaneCard = 'cred' | 'task' | 'log'
 /** What a theme's rare scheduled eggs know (all from the clock, so an idle draw still shows them). */
-export type ExtraArgs = { W: number; H: number; surface: 'band' | 'pane'; at: number; ctxPct: number; party?: boolean; card?: PaneCard; unplugAt?: number; fx?: { kind: string; at: number }; /** A job is running (a theme's fights only play then). */ working?: boolean; /** When the last era swap started (Invincible's title-card slam transition). */ swapAt?: number }
+export type ExtraArgs = { W: number; H: number; surface: 'band' | 'pane'; at: number; ctxPct: number; party?: boolean; card?: PaneCard; unplugAt?: number; fx?: { kind: string; at: number }; /** A job is running (a theme's fights only play then). */ working?: boolean; /** When the last era swap started (Invincible's title-card slam transition). */ swapAt?: number; /** The band only: the task title and the width it is drawn in (The Boys' title SPIN). */ task?: string; titleW?: number }
 /** One node of the hierarchy as a theme's `org` drawer sees it (a structural copy of the engine's). */
 export type ThemeOrg = { label: string; color: string; kind: string; status?: string; isQuiet?: boolean; children: ThemeOrg[] }
 /** The skin colours a theme's drawers read. */
@@ -395,6 +396,11 @@ export const THEMES: Record<ThemeKey, ThemeEggs> = {
   invincible: invTheme(1),
   invincible2: invTheme(2),
   caliper: calTheme('dark'),
+  // The Boys: ON BRAND, OFF BOOK (one skin, two modes) and the hidden SOLID GOLD.
+  boys: boysTheme('brand'),
+  boys2: boysTheme('book'),
+  solidgold: boysTheme('gold'),
+  boysnoir: boysTheme('noir'),
   caliperlight: calTheme('light'),
   bettercallsaul: saulTheme(false),
   gene: saulTheme(true),
