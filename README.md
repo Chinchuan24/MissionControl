@@ -9,6 +9,8 @@
   who's working, on what, how far along, and what it costs.
 </p>
 
+<p align="center">🎤 <b>Presented at Claude Code Meetup #13</b></p>
+
 <p align="center">
   <a href="#-choose-your-edition">Download</a> ·
   <a href="#-what-mission-control-does">Features</a> ·
