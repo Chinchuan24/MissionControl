@@ -31,13 +31,21 @@ type State = {
   /** The run of failed test runs behind the toasts (E1-E3). */
   testFails: number
   lastToast: Record<string, number>
+  /** When each typed egg last started (its cooldown), the APPROVAL boost a typed egg holds (T46/T47), T19's 10 s of TURBO RUSH,
+   *  the title SPIN after a failed run, LOOK AT ME's one auto play, and the newest draw's clock. */
+  lastAct: Record<string, number>
+  boost: { delta: number; at: number; until: number } | null
+  turboUntil: number
+  spinAt: number
+  lookedAt: boolean
+  drawAt: number
 }
-const blank = (): State => ({ approval: 50, approvalSince: 0, score: null, breaking: null, inFlight: 0, turboSince: 0, failedAt: [], fx: undefined, testFails: 0, lastToast: {} })
+const blank = (): State => ({ approval: 50, approvalSince: 0, score: null, breaking: null, inFlight: 0, turboSince: 0, failedAt: [], fx: undefined, testFails: 0, lastToast: {}, lastAct: {}, boost: null, turboUntil: 0, spinAt: 0, lookedAt: false, drawAt: 0 })
 let S: State = blank()
 /** A fresh session (and every test) starts at 50/50 with nothing on the wire. */
 export const resetBoys = (): void => { S = blank() }
 /** A copy for tests and the handoff's debugging. */
-export const boysState = (): Readonly<State> => ({ ...S, failedAt: [...S.failedAt], lastToast: { ...S.lastToast } })
+export const boysState = (): Readonly<State> => ({ ...S, failedAt: [...S.failedAt], lastToast: { ...S.lastToast }, lastAct: { ...S.lastAct } })
 
 // --- M1 APPROVAL RATING: starts 50/50; a passing test run +3, a failing one -4, a clean run +5 more, a tool error -2, a job done
 // +5; it decays 1 point a minute back toward 50. Clamped 0..100. The band's face follows it (theboys.ts faceOf).
@@ -45,12 +53,14 @@ export const APPROVAL = { pass: 3, fail: -4, clean: 5, error: -2, job: 5, decayP
 export const approvalAt = (at: number): number => {
   const mins = S.approvalSince > 0 ? Math.max(0, (at - S.approvalSince) / 60_000) : 0
   const d = Math.min(Math.abs(S.approval - 50), mins * APPROVAL.decayPerMin)
-  return Math.round(S.approval > 50 ? S.approval - d : S.approval + d)
+  const b = S.boost && at >= S.boost.at - 1000 && at < S.boost.until ? S.boost.delta : 0
+  return Math.max(0, Math.min(100, Math.round((S.approval > 50 ? S.approval - d : S.approval + d) + b)))
 }
 /** The approval as last set (no decay): for drawers without a clock (THE TABLE's buzz). */
 export const lastApproval = (): number => S.approval
 export const bumpApproval = (delta: number, at: number): number => {
-  S.approval = Math.max(0, Math.min(100, approvalAt(at) + delta))
+  const b = S.boost && at >= S.boost.at - 1000 && at < S.boost.until ? S.boost.delta : 0
+  S.approval = Math.max(0, Math.min(100, approvalAt(at) - b + delta))
   S.approvalSince = at
   return S.approval
 }
@@ -100,7 +110,9 @@ export const setInFlight = (n: number, at: number): void => {
   if (n < 4) S.turboSince = 0
   S.inFlight = n
 }
-export const turboAt = (_at: number): boolean => S.inFlight >= 4 && S.turboSince > 0
+export const turboAt = (at: number): boolean => (S.inFlight >= 4 && S.turboSince > 0) || (at >= S.turboUntil - actMs('turbo') - 1000 && at < S.turboUntil)
+/** How many agents are in flight (the SPEED SMEAR's lines follow it). */
+export const inFlight = (): number => S.inFlight
 
 // --- the FOCUS GROUP's dips: the times tool calls failed.
 export const noteFailed = (at: number): void => { S.failedAt = [...S.failedAt, at].slice(-40) }
@@ -163,6 +175,7 @@ const core = (ev: BoysEvent, a: BoysEventArgs): BoysAct[] => {
     case 'test-fail': {
       scoreEnd(a.pass ?? 0, a.fail ?? 1, a.at)
       S.testFails++
+      S.spinAt = a.at
       const acts: BoysAct[] = [{ approval: approvalForRun(a.pass ?? 0, a.fail ?? 1, true), breaking: gold ? 'Tracking error on tonight’s tape. Please stand by.' : book ? 'THE WIRE: it failed. Obviously.' : 'Vought denies "fail" footage' }]
       if (S.testFails >= 2 && toastOk('diabolical', a.at, 3_600_000)) acts.push({ toast: gold ? 'Not my finest hour.' : 'Diabolical.' })
       return acts
@@ -215,76 +228,125 @@ export const prToast = (tool: string, text: string, mode: BoysMode): string => {
   return spin(tool, real)
 }
 
-// --- the typed-trigger table (whole phrase, any case; the prompt goes on unchanged). Phase 1 acts on the rows marked `on`; the
-// rest are the bible's T1-T60 with their regexes, for phase 2 to give an act (set `on` and draw `kind` in the extras).
-export type Trigger = { id: string; re: RegExp; kind: string; where: 'B' | 'P' | 'BP'; on?: boolean; modes?: BoysMode[]; spoiler?: boolean }
+// --- the typed-trigger table (whole phrase, any case; the prompt goes on unchanged). Every row acts: `kind` is the act the theme
+// draws on the band AND the pane (theboys-acts.ts), `ms` how long it plays (the bible's seconds), and a row may add a toast, a
+// BREAKING lower-third and an APPROVAL move. Common words never fire alone: phrases, or a prompt that is only the word.
+export type Trigger = { id: string; re: RegExp; kind: string; where: 'B' | 'P' | 'BP'; on?: boolean; modes?: BoysMode[]; spoiler?: boolean; ms?: number; toast?: Partial<Record<BoysMode, string>>; breaking?: Partial<Record<BoysMode, string>>; boost?: number }
+const ALL3 = (t: string): Partial<Record<BoysMode, string>> => ({ brand: t, book: t, gold: t })
 export const TRIGGERS: Trigger[] = [
-  { id: 'T1', re: /\boh,?\s+diabolical\b|^\s*diabolical[.!]*\s*$/i, kind: 'diabolical', where: 'B' },
-  { id: 'T2', re: /\bashley,?\s+look\s+at\s+me\b/i, kind: 'lookatme', where: 'BP' },
+  { id: 'T1', re: /\boh,?\s+diabolical\b|^\s*diabolical[.!]*\s*$/i, kind: 'diabolical', where: 'BP', on: true, ms: 2_500 },
+  { id: 'T2', re: /\bashley,?\s+look\s+at\s+me\b/i, kind: 'lookatme', where: 'BP', on: true, ms: 2_500 },
   { id: 'T3', re: /\bshock\s+(?:and|&)\s+awe,?\s+my\s+son\b/i, kind: 'hijack', where: 'BP', on: true, modes: ['brand'] },
   { id: 'T4', re: /\bnever\s+meet\s+your\s+heroes\b/i, kind: 'onbrand', where: 'BP', on: true, modes: ['book'] },
-  { id: 'T5', re: /\bi\s+can\s+do\s+whatever\s+i\s+want\b/i, kind: 'whatever', where: 'B' },
-  { id: 'T6', re: /\bpinocchio\s+is\s+stay(?:in'?|ing)\s+put\b/i, kind: 'whale', where: 'B' },
-  { id: 'T7', re: /\btimothy\s+the\s+octopus\b/i, kind: 'timothy', where: 'P' },
-  { id: 'T8', re: /\bvought\s+on\s+ice\b/i, kind: 'ice', where: 'BP' },
-  { id: 'T9', re: /\blaser\s+baby\b/i, kind: 'laserbaby', where: 'B' },
-  { id: 'T10', re: /\bmon\s+c(?:œ|oe|o)ur\b/i, kind: 'dance', where: 'BP' },
-  { id: 'T11', re: /\bbuster\s+beaver\b/i, kind: 'beaver', where: 'B' },
-  { id: 'T12', re: /\bseen\s+the\s+memes\b/i, kind: 'memes', where: 'B' },
-  { id: 'T13', re: /\bbilly\s+joel\b/i, kind: 'joel', where: 'B' },
+  { id: 'T5', re: /\bi\s+can\s+do\s+whatever\s+i\s+want\b/i, kind: 'whatever', where: 'BP', on: true, ms: 1_500 },
+  { id: 'T6', re: /\bpinocchio\s+is\s+stay(?:in'?|ing|in’)\s+put\b/i, kind: 'whale', where: 'BP', on: true, ms: 4_500, breaking: { brand: 'Speedboat meets whale; Vought cites a "marine misunderstanding"', book: 'THE WIRE: one boat, one whale, no comment', gold: 'Tonight: a whale of a tale' } },
+  { id: 'T7', re: /\btimothy\s+the\s+octopus\b/i, kind: 'timothy', where: 'BP', on: true, ms: 3_000, breaking: { brand: 'Vought Classic remembers Timothy. Gone, never forgotten', book: 'THE WIRE: the octopus deserved better', gold: 'In memoriam: Timothy' } },
+  { id: 'T8', re: /\bvought\s+on\s+ice\b/i, kind: 'ice', where: 'BP', on: true, ms: 4_000 },
+  { id: 'T9', re: /\blaser\s+baby\b/i, kind: 'laserbaby', where: 'BP', on: true, ms: 2_500 },
+  { id: 'T10', re: /\bmon\s+c(?:œ|oe|o)ur\b/i, kind: 'dance', where: 'BP', on: true, ms: 3_500 },
+  { id: 'T11', re: /\bbuster\s+beaver\b/i, kind: 'beaver', where: 'BP', on: true, ms: 3_500 },
+  { id: 'T12', re: /\bseen\s+the\s+memes\b/i, kind: 'memes', where: 'BP', on: true, ms: 2_000 },
+  { id: 'T13', re: /\bbilly\s+joel\b/i, kind: 'joel', where: 'BP', on: true, ms: 4_000 },
   { id: 'T14', re: /\bsolidgold\b|\bsoldier\s+boy\b/i, kind: 'solidgold', where: 'BP', on: true, modes: ['brand', 'book'] },
   { id: 'T15', re: /\bback\s+on\s+ice\b/i, kind: 'backonice', where: 'BP', on: true, modes: ['gold'] },
-  { id: 'T16', re: /\btall\s+glass\s+of\s+milk\b/i, kind: 'milk', where: 'B' },
-  { id: 'T17', re: /\bcompound\s+v\b/i, kind: 'compoundv', where: 'BP' },
-  { id: 'T18', re: /\bhughie,?\s+blink\b/i, kind: 'blink', where: 'BP' },
-  { id: 'T19', re: /\bturbo\s+rush\b/i, kind: 'turbo', where: 'B' },
-  { id: 'T20', re: /\btraining\s+a-?train\b/i, kind: 'training', where: 'B' },
-  { id: 'T21', re: /\bbrave\s+maeve\b/i, kind: 'bravemaeve', where: 'P' },
-  { id: 'T22', re: /\bseven\s+on\s+7\b/i, kind: 'sevenon7', where: 'B' },
-  { id: 'T23', re: /\bdawn\s+of\s+the\s+seven\b/i, kind: 'premiere', where: 'BP' },
-  { id: 'T24', re: /\bfun\s+cut\b/i, kind: 'funcut', where: 'BP' },
-  { id: 'T25', re: /\binvisible\s+force\b/i, kind: 'invisible', where: 'B' },
-  { id: 'T26', re: /\bthis\s+means\s+noir\b/i, kind: 'noirmode', where: 'BP' },
-  { id: 'T27', re: /\bvivant!?(?=\s|$|[.,!?])|\bcirque\s+de\s+vought\b/i, kind: 'vivant', where: 'B' },
-  { id: 'T28', re: /\bnot\s+without\s+my\s+dolphin\b/i, kind: 'dolphin', where: 'B' },
-  { id: 'T29', re: /\bambrosius\b/i, kind: 'ambrosius', where: 'P' },
-  { id: 'T30', re: /\bamerican\s+hero\b/i, kind: 'americanhero', where: 'P' },
-  { id: 'T31', re: /\brock\s+my\s+kiss\b|\bsupersonic\b|\bsuper-sweet\b/i, kind: 'rockmykiss', where: 'B' },
-  { id: 'T32', re: /\bsmartest\s+person\b/i, kind: 'knight', where: 'P' },
-  { id: 'T33', re: /\bwakey,?\s*-?\s*wakey\b/i, kind: 'wakey', where: 'BP' },
-  { id: 'T34', re: /\bclass\s+dismissed\b/i, kind: 'dismissed', where: 'B' },
-  { id: 'T35', re: /\bthe\s+real\s+heroes\b/i, kind: 'realheroes', where: 'BP' },
-  { id: 'T36', re: /\bbad\s+product\b/i, kind: 'badproduct', where: 'BP' },
-  { id: 'T37', re: /\bpharmaceutical\s+company\b/i, kind: 'pharma', where: 'P' },
-  { id: 'T38', re: /\bstorage\s+boy\b/i, kind: 'storage', where: 'B' },
-  { id: 'T39', re: /\bred\s+scare\b|\bvought\s+rising\b/i, kind: 'redscare', where: 'B' },
-  { id: 'T40', re: /\bgodolkin\b/i, kind: 'godolkin', where: 'BP' },
-  { id: 'T41', re: /\blittle\s+cricket\b/i, kind: 'cricket', where: 'BP' },
-  { id: 'T42', re: /\bmonster\s+club\b/i, kind: 'puppets', where: 'BP' },
-  { id: 'T43', re: /\bv52\s+expo\b/i, kind: 'expo', where: 'BP' },
-  { id: 'T44', re: /\bgood\s+boy,?\s+terror\b/i, kind: 'terror', where: 'B' },
-  { id: 'T45', re: /\bfull\s+roster\b/i, kind: 'fullroster', where: 'BP' },
-  { id: 'T46', re: /\bhometeamers\b/i, kind: 'hometeamers', where: 'B' },
-  { id: 'T47', re: /\bstarlighters\b/i, kind: 'starlighters', where: 'B' },
-  { id: 'T48', re: /\bsaving\s+america\b/i, kind: 'savingamerica', where: 'B' },
-  { id: 'T49', re: /\bvought\s+for\s+tots\b/i, kind: 'tots', where: 'B' },
-  { id: 'T50', re: /\bplanet\s+vought\b/i, kind: 'planetvought', where: 'P' },
-  { id: 'T51', re: /\bit'?s\s+what\s+clara\s+would\s+have\s+wanted\b/i, kind: 'clara', where: 'B', spoiler: true },
-  { id: 'T52', re: /\bcracked\s+mirror\b/i, kind: 'mirror', where: 'B' },
-  { id: 'T53', re: /\bit'?s\s+a\s+deepfake\b/i, kind: 'deepfake', where: 'BP' },
-  { id: 'T54', re: /\bthe\s+boys\s+are\s+back\s+in\s+town\b/i, kind: 'walk', where: 'BP' },
-  { id: 'T55', re: /\babout\s+nicaragua\b/i, kind: 'nicaragua', where: 'B' },
-  { id: 'T56', re: /^\s*payback[.!]*\s*$/i, kind: 'payback', where: 'B' },
-  { id: 'T57', re: /\bred\s+thunder\b/i, kind: 'redthunder', where: 'B' },
-  { id: 'T58', re: /\bvought\s+classic\b/i, kind: 'vclassic', where: 'P' },
-  { id: 'T59', re: /\btruthbomb\b/i, kind: 'truthbomb', where: 'B' },
-  { id: 'T60', re: /\b7spn\b/i, kind: 'scoreboard', where: 'B', on: true },
+  { id: 'T16', re: /\btall\s+glass\s+of\s+milk\b/i, kind: 'milk', where: 'BP', on: true, ms: 3_000 },
+  { id: 'T17', re: /\bcompound\s+v\b/i, kind: 'compoundv', where: 'BP', on: true, ms: 2_000 },
+  { id: 'T18', re: /\bhughie,?\s+blink\b/i, kind: 'blink', where: 'BP', on: true, ms: 2_500 },
+  { id: 'T19', re: /\bturbo\s+rush\b/i, kind: 'turbo', where: 'BP', on: true, ms: 10_000 },
+  { id: 'T20', re: /\btraining\s+a-?train\b/i, kind: 'training', where: 'BP', on: true, ms: 3_000 },
+  { id: 'T21', re: /\bbrave\s+maeve\b/i, kind: 'bravemaeve', where: 'BP', on: true, ms: 5_000, breaking: { brand: 'Brave Maeve™ line expands; sincerity sold separately', book: 'THE WIRE: lasagna as allyship. Really.', gold: 'Brave Maeve™: limited time' } },
+  { id: 'T22', re: /\bseven\s+on\s+7\b/i, kind: 'sevenon7', where: 'BP', on: true, ms: 6_000 },
+  { id: 'T23', re: /\bdawn\s+of\s+the\s+seven\b/i, kind: 'premiere', where: 'BP', on: true, ms: 6_000 },
+  { id: 'T24', re: /\bfun\s+cut\b/i, kind: 'funcut', where: 'BP', on: true, ms: 8_000 },
+  { id: 'T25', re: /\binvisible\s+force\b/i, kind: 'invisible', where: 'BP', on: true, ms: 4_000 },
+  { id: 'T26', re: /\bthis\s+means\s+noir\b/i, kind: 'noirmode', where: 'BP', on: true, ms: 3_000, toast: ALL3('…') },
+  { id: 'T27', re: /^\W*vivant\W*$|\bvivant!|\bcirque\s+de\s+vought\b/i, kind: 'vivant', where: 'BP', on: true, ms: 4_000 },
+  { id: 'T28', re: /\bnot\s+without\s+my\s+dolphin\b/i, kind: 'dolphin', where: 'BP', on: true, ms: 3_500 },
+  { id: 'T29', re: /\bambrosius\b/i, kind: 'ambrosius', where: 'BP', on: true, ms: 3_000 },
+  { id: 'T30', re: /\bamerican\s+hero\b/i, kind: 'americanhero', where: 'BP', on: true, ms: 5_000 },
+  { id: 'T31', re: /\brock\s+my\s+kiss\b|^\W*supersonic\W*$|\bsuper-sweet\b/i, kind: 'rockmykiss', where: 'BP', on: true, ms: 3_500 },
+  { id: 'T32', re: /\bsmartest\s+person\b/i, kind: 'knight', where: 'BP', on: true, ms: 3_000, toast: { brand: 'Smartest person.', book: 'Smartest person. Allegedly.', gold: 'Smartest person.' } },
+  { id: 'T33', re: /\bwakey,?\s*-?\s*wakey\b/i, kind: 'wakey', where: 'BP', on: true, ms: 1_500 },
+  { id: 'T34', re: /^\W*class\s+dismissed\W*$/i, kind: 'dismissed', where: 'BP', on: true, ms: 2_000 },
+  { id: 'T35', re: /\bthe\s+real\s+heroes\b/i, kind: 'realheroes', where: 'BP', on: true, ms: 3_000 },
+  { id: 'T36', re: /\b(?:you'?re|you’re|you\s+are|he'?s|he’s|he\s+is)\s+bad\s+product\b|^\W*bad\s+product\W*$/i, kind: 'badproduct', where: 'BP', on: true, ms: 2_000 },
+  { id: 'T37', re: /\breally,?\s+(?:is\s+)?a\s+pharmaceutical\s+company\b|^\W*pharmaceutical\s+company\W*$/i, kind: 'pharma', where: 'BP', on: true, ms: 5_000, breaking: { brand: 'Edgar: Vought is, really, a pharmaceutical company', book: 'THE WIRE: follow the pharmacy', gold: 'Sponsored by Vought Pharmaceuticals' } },
+  { id: 'T38', re: /\bstorage\s+boy\b/i, kind: 'storage', where: 'BP', on: true, ms: 4_000 },
+  { id: 'T39', re: /\bred\s+scare\b|\bvought\s+rising\b/i, kind: 'redscare', where: 'BP', on: true, ms: 5_000 },
+  { id: 'T40', re: /\bgodolkin\b/i, kind: 'godolkin', where: 'BP', on: true, ms: 4_000 },
+  { id: 'T41', re: /^\W*little\s+cricket\W*$/i, kind: 'cricket', where: 'BP', on: true, ms: 1_500 },
+  { id: 'T42', re: /\bmonster\s+club\b/i, kind: 'puppets', where: 'BP', on: true, ms: 4_000 },
+  { id: 'T43', re: /\bv52\s+expo\b/i, kind: 'expo', where: 'BP', on: true, ms: 8_000 },
+  { id: 'T44', re: /\bgood\s+boy,?\s+terror\b/i, kind: 'terror', where: 'BP', on: true, ms: 4_000 },
+  { id: 'T45', re: /^\W*full\s+roster\W*$/i, kind: 'fullroster', where: 'BP', on: true, ms: 2_000 },
+  { id: 'T46', re: /\bhometeamers\b/i, kind: 'hometeamers', where: 'BP', on: true, ms: 5_000, boost: 10 },
+  { id: 'T47', re: /\bstarlighters\b/i, kind: 'starlighters', where: 'BP', on: true, ms: 5_000, boost: -10 },
+  { id: 'T48', re: /\bsaving\s+america\b/i, kind: 'savingamerica', where: 'BP', on: true, ms: 3_000 },
+  { id: 'T49', re: /\bvought\s+for\s+tots\b/i, kind: 'tots', where: 'BP', on: true, ms: 3_000 },
+  { id: 'T50', re: /\bplanet\s+vought\b/i, kind: 'planetvought', where: 'BP', on: true, ms: 4_000 },
+  { id: 'T51', re: /\bit(?:'|’)?s\s+what\s+clara\s+would\s+have\s+wanted\b/i, kind: 'clara', where: 'BP', on: true, spoiler: true, ms: 3_000 },
+  { id: 'T52', re: /\bcracked\s+mirror\b/i, kind: 'mirror', where: 'BP', on: true, ms: 8_000, boost: -5 },
+  { id: 'T53', re: /\bit(?:'|’)?s\s+a\s+deepfake\b/i, kind: 'deepfake', where: 'BP', on: true, ms: 2_500 },
+  { id: 'T54', re: /\bthe\s+boys\s+are\s+back\s+in\s+town\b/i, kind: 'walk', where: 'BP', on: true, ms: 6_000, toast: { brand: 'The Boys are back in town. Vought is aware.', book: 'The Boys are back in town.', gold: 'The Boys are back in town.' } },
+  { id: 'T55', re: /\btell\s+(?:you|me|ya|them)\s+about\s+nicaragua\b/i, kind: 'nicaragua', where: 'BP', on: true, ms: 3_000 },
+  { id: 'T56', re: /^\s*payback[.!]*\s*$/i, kind: 'payback', where: 'BP', on: true, ms: 2_500 },
+  { id: 'T57', re: /\bred\s+thunder\b/i, kind: 'redthunder', where: 'BP', on: true, ms: 3_000 },
+  { id: 'T58', re: /\bvought\s+classic\b/i, kind: 'vclassic', where: 'BP', on: true, ms: 4_000, breaking: { brand: 'Vought Classic: gone, never forgotten', book: 'THE WIRE: Vought Classic, the reruns of regret', gold: 'Vought Classic: tonight, a rerun' } },
+  { id: 'T59', re: /\btruthbomb\b/i, kind: 'truthbomb', where: 'BP', on: true, ms: 3_000 },
+  { id: 'T60', re: /\b7spn\b/i, kind: 'scoreboard', where: 'BP', on: true, ms: 6_000 },
 ]
 /** The words that must never trigger on their own (the bible's hard-NO list): the corpus test types each alone. */
 export const BANNED_BARE = ['milk', 'boys', 'seven', 'oi', 'hughie', 'homelander', 'better', 'perfect', 'whale', 'noir', 'clara', 'solid', 'gold', 'payback now', 'deepfake', 'nicaragua', 'diabolical regex', 'back on brand', 'solid gold', 'shock and awe', 'pinocchio']
-/** What a typed prompt asks of the skin in `mode`: the first live trigger that matches (phase 1: the switches, SOLID GOLD, 7SPN). */
+/** What a typed prompt asks of the skin in `mode`: the first live trigger that matches. The finale and death eggs (`spoiler`) only
+ *  with the `boysSpoilers` setting on. */
 export const typed = (text: string, mode: BoysMode, o: { spoilers?: boolean; all?: boolean } = {}): Trigger | undefined =>
   TRIGGERS.find(t => (t.on || o.all) && (!t.modes || t.modes.includes(mode)) && (!t.spoiler || o.spoilers) && t.re.test(text))
+
+// --- the typed acts' clock: how long each plays, one at a time, and a cooldown per egg (as Invincible's: a pinned start, one fx).
+const MS = new Map<string, number>(TRIGGERS.filter(t => t.ms).map(t => [t.kind, t.ms as number]))
+/** How long the act `kind` plays (ms); 3 s for a kind with no row. */
+export const actMs = (kind: string): number => MS.get(kind) ?? 3_000
+/** Is an act playing at `at`? */
+export const actLive = (at: number): boolean => Boolean(S.fx && at >= S.fx.at - 1000 && at < S.fx.at + actMs(S.fx.kind))
+/** The same egg again within this long is ignored (its act and its toast). */
+export const ACT_COOLDOWN_MS = 20_000
+/** Typed `t` at `at` in `mode`: starts its act unless one is playing or it just played; returns what the register shows (a toast),
+ *  after raising its BREAKING line and APPROVAL move. `undefined` when it was held back. */
+export const fireTyped = (t: Trigger, at: number, mode: BoysMode): { toast?: string } | undefined => {
+  if (actLive(at)) return undefined
+  if (at - (S.lastAct[t.kind] ?? -Infinity) < ACT_COOLDOWN_MS) return undefined
+  S.lastAct[t.kind] = at
+  setBoysFx(t.kind, at)
+  if (t.kind === 'turbo') S.turboUntil = at + actMs('turbo')
+  if (t.boost) S.boost = { delta: t.boost, at, until: at + actMs(t.kind) }
+  if (t.kind === 'mirror') bumpApproval(-5, at)
+  const br = t.breaking?.[mode]
+  if (br) vnnBreak(br, at, t.kind)
+  const toast = t.toast?.[mode]
+  return toast && toastOk(`typed:${t.kind}`, at, 60_000) ? { toast } : {}
+}
+/** LOOK AT ME plays by itself the first time the context passes 95% in a session (when no act is playing). */
+export const autoLookAtMe = (ctxPct: number, at: number): boolean => {
+  if (ctxPct < 95 || S.lookedAt || actLive(at)) return false
+  S.lookedAt = true
+  setBoysFx('lookatme', at)
+  return true
+}
+/** The clock of the newest draw (THE TABLE's drawer has none of its own; it reads this to know whether an act is on). */
+export const noteDraw = (at: number): void => { S.drawAt = Math.max(S.drawAt, at) }
+export const drawAt = (): number => S.drawAt
+// --- the PR SPIN title glitch (plan row 11): every ~10 minutes while a job works (a seeded moment in each 10-min slot), and right
+// after a failed test run. 2.5 s each.
+export const SPIN_SLOT_MS = 600_000
+export const spinDue = (at: number, working: boolean | undefined): number | undefined => {
+  if (S.spinAt > 0 && at >= S.spinAt - 1000 && at < S.spinAt + 2_500) return S.spinAt
+  if (!working) return undefined
+  const slot = Math.floor(at / SPIN_SLOT_MS)
+  let h = 2166136261
+  for (const ch of `tbspin|${slot}`) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0 }
+  const start = slot * SPIN_SLOT_MS + (h % (SPIN_SLOT_MS - 10_000))
+  return at >= start && at < start + 2_500 ? start : undefined
+}
 
 // --- the replay registry: `/missioncontrol play <name>` while The Boys is worn. Phase 1 registers its own; later phases add rows.
 export type Replay = { name: string; what: string; run: (at: number, mode: BoysMode) => { fx?: string; mode?: BoysMode; toast?: string } }
@@ -296,6 +358,8 @@ export const REPLAYS: Replay[] = [
   { name: 'spin', what: 'a VOUGHT PR toast', run: (_at, m) => ({ toast: prToast('Bash', 'Error: command failed', m) }) },
   { name: 'turbo', what: 'TURBO RUSH for a moment', run: at => { setInFlight(4, at); return { fx: 'turbo' } } },
 ]
+// Every typed act replays by its kind (`/missioncontrol play whale`); the spoiler eggs stay off the list.
+for (const t of TRIGGERS) if (t.ms && !t.spoiler && !REPLAYS.some(r => r.name === t.kind)) REPLAYS.push({ name: t.kind, what: `the ${t.id} act`, run: () => ({ fx: t.kind }) })
 export const registerReplay = (r: Replay): void => {
   const i = REPLAYS.findIndex(x => x.name === r.name)
   if (i >= 0) REPLAYS[i] = r

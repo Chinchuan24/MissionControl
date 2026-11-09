@@ -24,7 +24,7 @@ import { ERA1, ERA2, TITLE_WORDS as INV_WORDS } from './invincible'
 import { BOOK as TB_BOOK, BRAND as TB_BRAND, GOLD as TB_GOLD } from './theboys'
 import type { Mode as BoysMode } from './theboys'
 import { GREETINGS as TB_GREETINGS } from './theboys-theme'
-import { REPLAYS as TB_REPLAYS, SPIN_BOOK, SPIN_BRAND, SPIN_GOLD, TOOLS_BRAND as TB_TOOLS, TOOLS_GOLD as TB_TOOLS_GOLD, boysEvent, parseCounts, prToast, resetBoys, scoreEnd, boysState, setBoysFx, setInFlight, toastOk as tbToastOk, typed as tbTyped } from './theboys-eggs'
+import { REPLAYS as TB_REPLAYS, SPIN_BOOK, SPIN_BRAND, SPIN_GOLD, TOOLS_BRAND as TB_TOOLS, TOOLS_GOLD as TB_TOOLS_GOLD, boysEvent, fireTyped as tbFire, parseCounts, prToast, resetBoys, scoreEnd, boysState, setBoysFx, setInFlight, toastOk as tbToastOk, typed as tbTyped } from './theboys-eggs'
 import { VERBS as INV_VERBS } from './invincible-cards'
 import { BYE_CAPRI_RE, CAPRICORN_RE, CAPRI_WORD_RE, ER2_FONT, ER2_TOOLS, ER2_WORDS } from './edgerunners2'
 import { CAPRI_MODE, ER2_MODE_DEFAULT } from './edgerunners2-duet'
@@ -2079,6 +2079,8 @@ const boysUnpack = (v: string): { mode: 'brand' | 'book'; since: number } => {
 let BOYS_MODE: { mode: 'brand' | 'book'; since: number } = { mode: 'brand', since: 0 }
 // When SOLID GOLD was put on or taken off (its own transition), 0 after a restart.
 let BOYS_GOLD_SINCE = 0
+// The Boys' spoiler setting (`boysSpoilers`, OFF by default): the finale and death eggs act only while it is on.
+let BOYS_SPOILERS = false
 const isBoys = (): boolean => SKIN.id === 'the-boys' || SKIN.id === 'solidgold'
 const boysWorn = (): BoysMode => (SKIN.id === 'solidgold' ? 'gold' : BOYS_MODE.mode)
 const boysSwapAt = (): number | undefined => (SKIN.id === 'solidgold' ? (BOYS_GOLD_SINCE > 0 ? BOYS_GOLD_SINCE : undefined) : BOYS_MODE.since > 0 ? BOYS_MODE.since : undefined)
@@ -2123,7 +2125,7 @@ const bcsToast = ($: EngineInterface, key: ToastKey, now: number): void => {
   $.ui.toast(TOASTS[key])
 }
 // Settings the pane's checkboxes change: kept in the store, mirrored here to redraw.
-const settings = atom({ plugin: 'crab-progress', key: 'settings' } as const, { openOnStart: true, crewMode: true, crewAlways: false, currency: 'USD', sounds: true, simple: true, calm: false, voice: false, staffing: false, brain: true, oneShot: 'ask' as OneShot, ultraBy: 'me' as UltraBy, dailyUsd: 0, autopilot: false, keepWarm: false, budgetUsd: 0, tkOn: true, tkJobMin: 60, tkAgentMin: 20, ramLimit: 'auto', maxAgents: 0, killSwitch: 'on' })
+const settings = atom({ plugin: 'crab-progress', key: 'settings' } as const, { openOnStart: true, crewMode: true, crewAlways: false, currency: 'USD', sounds: true, simple: true, calm: false, voice: false, staffing: false, brain: true, oneShot: 'ask' as OneShot, ultraBy: 'me' as UltraBy, dailyUsd: 0, autopilot: false, keepWarm: false, budgetUsd: 0, tkOn: true, tkJobMin: 60, tkAgentMin: 20, ramLimit: 'auto', maxAgents: 0, killSwitch: 'on', boysSpoilers: false })
 // Machine Guard (hooks/machineguard.ts): what the Settings pane and the band draw. Written only when it changes.
 const guard = atom({ plugin: 'crab-progress', key: 'guard' } as const, { line: 'unknown machine', usedGb: -1, limitGb: 0, max: 4, calibrated: 4, autoLabel: 'Auto · 4 (machine unknown)', perAgent: '≈0.5 GB per agent (default)', isTight: false, others: 0, sessions: 1 })
 // The part of it the Settings pane shows. The RAM in use, the crew and the other sessions
@@ -2168,6 +2170,7 @@ const readSettings = async ($: EngineInterface) => {
     ramLimit: cleanRamLimit(await $.store.get('ramLimit').catch(() => undefined)),
     maxAgents: cleanMaxAgents(await $.store.get('maxAgents').catch(() => undefined)),
     killSwitch: cleanKillSwitch(await $.store.get('killSwitch').catch(() => undefined)),
+    boysSpoilers: (await $.store.get('boysSpoilers').catch(() => undefined)) === true,
   }
 }
 
@@ -2225,10 +2228,11 @@ async function setBudget($: EngineInterface, dollars: number): Promise<void> {
 }
 
 // One switch of the Settings section: the store keeps it, the atom redraws the pane.
-type Flag = 'simple' | 'calm' | 'voice' | 'staffing' | 'brain'
-const FLAG_KEY: Record<Flag, string> = { simple: 'simpleBand', calm: 'calm', voice: 'voice', staffing: 'smartStaffing', brain: BRAIN_KEY }
+type Flag = 'simple' | 'calm' | 'voice' | 'staffing' | 'brain' | 'boysSpoilers'
+const FLAG_KEY: Record<Flag, string> = { simple: 'simpleBand', calm: 'calm', voice: 'voice', staffing: 'smartStaffing', brain: BRAIN_KEY, boysSpoilers: 'boysSpoilers' }
 async function setFlag($: EngineInterface, flag: Flag, isOn: boolean): Promise<void> {
   await $.store.set(FLAG_KEY[flag], isOn).catch(() => undefined)
+  if (flag === 'boysSpoilers') BOYS_SPOILERS = isOn
   if (flag === 'staffing') smartStaffing = isOn
   if (flag === 'brain') brainOn = isOn
   if (flag === 'calm' && !isOn) $.ui.status(undefined)
@@ -6372,7 +6376,7 @@ const slimBandSvg = (OW: number, d: HudData): string => {
   const trLayer = transitionLayer(th, { W, H, surface: 'band', since: ER2.since, now: d.at, party: d.isParty, ...(chip.w ? { chip: { x: chipX, y: y - 11.5, w: chip.w, h: 16 } } : {}) })
   // Rare scheduled eggs (a car, a face, a dim): from the clock, over the band and under the roamer.
   if (th.extras && !d.isParty) running4(d.crew.filter(m => m.status === 'running').length, d.at)
-  const extras = th.extras ? th.extras({ W, H, surface: 'band', at: d.at, ctxPct: d.ctxPct, ...(d.isParty ? { party: true } : {}), ...(BCS_UNPLUG_AT !== undefined ? { unplugAt: BCS_UNPLUG_AT } : {}), ...(activeFx() ? { fx: activeFx() as { kind: string; at: number } } : {}), working: d.isWorking, ...(swapAtNow() !== undefined ? { swapAt: swapAtNow() } : {}) }) : ''
+  const extras = th.extras ? th.extras({ W, H, surface: 'band', at: d.at, ctxPct: d.ctxPct, ...(d.isParty ? { party: true } : {}), ...(BCS_UNPLUG_AT !== undefined ? { unplugAt: BCS_UNPLUG_AT } : {}), ...(activeFx() ? { fx: activeFx() as { kind: string; at: number } } : {}), working: d.isWorking, ...(swapAtNow() !== undefined ? { swapAt: swapAtNow() } : {}), task: d.title, titleW }) : ''
   const body = `${s.join('\n')}${extras}${d.isParty ? th.cheer(W, H, FONT, c, d.partyAt) : ''}${d.isParty && th.roamer?.hushParty ? '' : roam}${trLayer}`
   return shakeInto(glitchPanel(svg(W, H, body), th, { at: d.at, ctxPct: d.ctxPct, party: d.isParty }), th, { W, H, surface: 'band', at: d.at, working: d.isWorking, party: d.isParty, fx: activeFx(), ...(swapAtNow() !== undefined ? { swapAt: swapAtNow() } : {}) })
 }
@@ -7341,6 +7345,7 @@ export const register: Register = (on, options) => {
     await update($, invEra, () => invPack(INV_ERA))
     BOYS_MODE = { mode: (await $.store.get('boysMode').catch(() => undefined)) === 'book' ? 'book' : 'brand', since: 0 }
     BOYS_GOLD_SINCE = 0
+    BOYS_SPOILERS = (await $.store.get('boysSpoilers').catch(() => undefined)) === true
     await update($, boysModeAtom, () => `${BOYS_MODE.mode}|0`)
     const savedCal = await $.store.get('calMode').catch(() => undefined)
     CAL_MODE = { mode: savedCal === 'dark' || savedCal === 'light' ? savedCal : 'auto', since: 0 }
@@ -7433,6 +7438,13 @@ export const register: Register = (on, options) => {
       if (!mode) return { text: `One-shot is ${oneShotWord(cleanOneShot((await read($, settings)).oneShot))}. Use /missioncontrol oneshot on, off or ask.` }
       await setOneShot($, mode)
       return { text: oneShotSaid(mode) }
+    }
+    // `/missioncontrol spoilers on|off`: The Boys' finale and death eggs (OFF by default; also a switch in Settings while worn).
+    const spoil = /^spoilers(?:\s+(on|off))?\s*$/i.exec((e.args ?? '').trim())
+    if (spoil) {
+      if (!spoil[1]) return { text: `The Boys' spoilers are ${BOYS_SPOILERS ? 'on' : 'off'}. Use /missioncontrol spoilers on or off.` }
+      await setFlag($, 'boysSpoilers', spoil[1].toLowerCase() === 'on')
+      return { text: BOYS_SPOILERS ? 'Spoilers on: The Boys’ finale eggs can play (S5).' : 'Spoilers off: no finale or death eggs.' }
     }
     // Unlisted on purpose: `/missioncontrol play <egg>` replays one of Invincible's eggs now (no help text names it).
     const replay = /^play(?:\s+(\S+))?\s*$/i.exec((e.args ?? '').trim())
@@ -8726,16 +8738,22 @@ export const register: Register = (on, options) => {
     // The rest of the trigger table (theboys-eggs TRIGGERS) is phase 2's.
     if (asked && isBoys()) {
       const at = await $.clock.now().catch(() => Date.now())
-      const t = tbTyped(asked, boysWorn())
+      const t = tbTyped(asked, boysWorn(), { spoilers: BOYS_SPOILERS })
       if (t?.kind === 'hijack') await setBoysMode($, 'book').catch(() => false)
       else if (t?.kind === 'onbrand') await setBoysMode($, 'brand').catch(() => false)
       else if (t?.kind === 'solidgold') await wearBoys($, 'solidgold').catch(() => undefined)
       else if (t?.kind === 'backonice') await wearBoys($, 'the-boys').catch(() => undefined)
-      else if (t?.kind === 'scoreboard') {
+      else if (t) {
+        // The other 56: one act at a time, each with its own cooldown (theboys-eggs fireTyped); 7SPN also re-shows the last run.
         const sc = boysState().score
-        if (sc) scoreEnd(sc.pass, sc.fail, at)
-        setBoysFx('scoreboard', at)
-      } else if (t) setBoysFx(t.kind, at)
+        const fired = tbFire(t, at, boysWorn())
+        if (fired && t.kind === 'scoreboard' && sc) scoreEnd(sc.pass, sc.fail, at)
+        if (fired?.toast) $.ui.toast(fired.toast)
+        if (fired) {
+          await update($, bandTick, () => at)
+          await update($, paneTick, () => at)
+        }
+      }
     }
     // Edgerunners 2's two modes (the prompt goes on unchanged): "bye capri" sends her back to D (checked first); the whole word
     // "capri" in any case, or the third episode's title "0+2=1" (which toggles), lets her in.
@@ -9382,6 +9400,7 @@ export const register: Register = (on, options) => {
       ),
       SKIN.cast ? null : switchRow('opt-simple', tl, '📏', 'Simple band', 'The band in three rows', prefs.simple, async () => setFlag($, 'simple', !(await read($, settings)).simple)),
       switchRow('opt-calm', tl, '🧘', 'Calm mode', 'One status line, no band', prefs.calm, async () => setFlag($, 'calm', !(await read($, settings)).calm)),
+      isBoys() ? switchRow('opt-boys-spoilers', tl, '🎬', 'The Boys: spoilers', 'Finale and death eggs (S5)', prefs.boysSpoilers === true, async () => setFlag($, 'boysSpoilers', !(await read($, settings)).boysSpoilers)) : null,
       switchRow('opt-sounds', tl, '🔔', 'Sounds', cyberOf() ? 'Chimes, blips, the MaxTac siren' : "A chime when a job's done", prefs.sounds, async () => {
         const isOn = !(await read($, settings)).sounds
         await $.store.set('sounds', isOn).catch(() => undefined)

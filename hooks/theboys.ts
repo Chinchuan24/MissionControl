@@ -177,10 +177,12 @@ export const name = (x: number, y: number, W: number, m: Mode, usd: number, at: 
 }
 /** A row of marquee bulbs (SOLID GOLD), every other one lit, the lit ones chasing. */
 export const bulbs = (x: number, y: number, w: number, _m: Mode, _at: number) => {
+  // Two patterns (every other bulb lit, the lit ones chasing) in place of one circle per bulb: a band-wide row stays small.
   const n = Math.max(2, Math.floor(w / 6))
-  let s = '<g>'
-  for (let i = 0; i < n; i++) s += `<circle cx="${r1(x + 3 + i * 6)}" cy="${r1(y)}" r="1.1" fill="${i % 2 ? GOLD.a : '#FFF3C4'}"${i % 2 ? '' : ' class="tb-run"'}/>`
-  return `${s}</g>`
+  const id = `tbb${hash(`${r1(x)}|${r1(y)}|${n}`) % 100000}`
+  const ww = r1(n * 6)
+  const pat = (k: string, cx: number, fill: string) => `<pattern id="${id}${k}" x="${r1(x)}" y="${r1(y - 2)}" width="12" height="4" patternUnits="userSpaceOnUse"><circle cx="${cx}" cy="2" r="1.1" fill="${fill}"/></pattern>`
+  return `<g><defs>${pat('l', 3, '#FFF3C4')}${pat('u', 9, GOLD.a)}</defs><rect x="${r1(x)}" y="${r1(y - 2)}" width="${ww}" height="4" fill="url(#${id}u)"/><rect class="tb-run" x="${r1(x)}" y="${r1(y - 2)}" width="${ww}" height="4" fill="url(#${id}l)"/></g>`
 }
 /** The context chip: 85-94 STAY ON BRAND with the stressed smile; 95+ LOOK AT ME. in laser red with two eye glints. */
 export const CHIP_WORDS: Record<Mode, [string, string]> = { brand: ['STAY ON BRAND', 'LOOK AT ME.'], book: ['DIRT RUNNING OUT', 'CLEAR THE DECKS, MATE'], gold: ['THAWING…', 'CHEST GLOW'] }

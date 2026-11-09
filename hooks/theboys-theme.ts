@@ -7,8 +7,9 @@ import { BAND_H, BOOTS, CSS, PROPS, SCORE_W, WARNINGS, bootLine, chip, cheer, cr
 import type { Mode } from './theboys'
 import { BADGES, TITLES, credCard, credToast, deskAlt, deskCard, dialAlt, dialCard, rankOf, tableCard } from './theboys-cards'
 import type { BoysOrg } from './theboys-cards'
-import { SPIN_BOOK, SPIN_BRAND, SPIN_GOLD, TOOLS_BOOK, TOOLS_BRAND, TOOLS_GOLD } from './theboys-eggs'
-import type { ExtraArgs, ThemeEggs } from './themes'
+import { SPIN_BOOK, SPIN_BRAND, SPIN_GOLD, TOOLS_BOOK, TOOLS_BRAND, TOOLS_GOLD, actMs, autoLookAtMe, boysFx, drawAt, inFlight, noteDraw, spinDue } from './theboys-eggs'
+import { actOn, actShake, speedSmear, titleSpin } from './theboys-acts'
+import type { ExtraArgs, PaneCard, ThemeEggs } from './themes'
 import { pin } from './smooth'
 
 export const GREETINGS: Record<Mode, string> = { brand: 'Welcome back. Smile for the cameras.', book: "Oi. Kettle's on.", gold: 'Thawed out and ready to roll.' }
@@ -31,18 +32,58 @@ export const swapLayer = (W: number, H: number, to: Mode, since: number): string
 /** Is the swap still playing at `at`? */
 export const swapLive = (since: number | undefined, at: number): since is number => since !== undefined && since > 0 && at >= since - 1000 && at < since + SWAP_MS
 
-/** The scheduled and live layers: the swap, the 7SPN scoreboard on the band's task row. */
+/** The typed act playing at `at` (its kind and start), or undefined. */
+export const actAt = (at: number): { kind: string; at: number } | undefined => {
+  const fx = boysFx()
+  return fx && at >= fx.at - 1000 && at < fx.at + actMs(fx.kind) ? fx : undefined
+}
+/** Characters the pane keeps free while a job works for the typed acts (drawn between `<!--dl-->` markers, so the layout never
+ *  flips as they come and go). Phase 3's AMBUSH raises it. */
+export const BOYS_PANE_RESERVE = 40_000
+/** The scheduled and live layers: the swap, the 7SPN scoreboard on the band's task row, the SPEED SMEAR and the title SPIN, LOOK
+ *  AT ME the first time the context passes 95%, and the typed act now playing (on the band, and on its pane card). */
 export const boysExtras = (m: Mode) => (o: ExtraArgs): string => {
   if (o.party) return ''
+  noteDraw(o.at)
   const out: string[] = []
-  if (swapLive(o.swapAt, o.at)) out.push(swapLayer(o.W, o.H, m, o.swapAt))
+  const swapping = swapLive(o.swapAt, o.at)
+  if (swapping) out.push(swapLayer(o.W, o.H, m, o.swapAt))
   if (o.surface === 'band') {
+    if (!swapping) autoLookAtMe(o.ctxPct, o.at)
     // The 7SPN bug sits just left of the CONTEXT readouts (or the band's right edge when they are folded away).
     const rw = o.W < 1100 ? 62 : 100
     const xr = o.W >= 520 ? o.W - 20 - rw * 3 - 18 - 10 : o.W - 14
     out.push(scoreboard(xr - SCORE_W, 42, o.at, m))
   }
+  const act = swapping ? undefined : actAt(o.at)
+  if (o.surface === 'band') {
+    if (o.working && !act && inFlight() >= 2) out.push(speedSmear(m, inFlight()))
+    const sp = act ? undefined : spinDue(o.at, o.working)
+    if (sp !== undefined && o.task) out.push(titleSpin(o.W, o.task, o.titleW ?? 300, m, sp))
+  }
+  if (act) {
+    const on = o.surface === 'band' ? 'band' : (o.card ?? 'cred')
+    const s = actOn(act.kind, { W: o.W, H: o.H, m, at: act.at, on, ...(o.task ? { task: o.task } : {}), ...(o.titleW ? { titleW: o.titleW } : {}) })
+    if (s) out.push(on === 'band' ? s : `<!--dl-->${s}<!--/dl-->`)
+  }
   return out.join('')
+}
+/** A typed act's camera move on a whole panel (LOOK AT ME's beat drop, the WHATEVER float, LITTLE CRICKET's shrink). */
+export const boysShake = (o: { surface: 'band' | 'pane'; at: number; card?: PaneCard }): string => {
+  const act = actAt(o.at)
+  return act ? actShake(act.kind, o.surface === 'band' ? 'band' : (o.card ?? 'cred'), act.at) : ''
+}
+/** THE TABLE with the typed act's layer for it (AMERICAN HERO's spotlights, THE REAL HEROES, GOD U., FULL ROSTER). The org
+ *  drawer has no clock: it reads the newest draw's. */
+export const withTableAct = (svg: string, m: Mode): string => {
+  const act = actAt(drawAt())
+  const root = /^<svg\b[^>]*>/.exec(svg)?.[0]
+  if (!act || !root) return svg
+  const W = Number(/\bwidth="([\d.]+)"/.exec(root)?.[1])
+  const H = Number(/\bheight="([\d.]+)"/.exec(root)?.[1])
+  if (!Number.isFinite(W) || !Number.isFinite(H)) return svg
+  const s = actOn(act.kind, { W, H, m, at: act.at, on: 'table' })
+  return s ? `${svg.slice(0, svg.lastIndexOf('</svg>'))}<!--dl-->${s}<!--/dl--></svg>` : svg
 }
 
 export const boysTheme = (m: Mode): ThemeEggs => {
@@ -81,13 +122,15 @@ export const boysTheme = (m: Mode): ThemeEggs => {
     },
     legends: { title: m === 'book' ? 'OFF THE RECORD' : 'PRESS RELEASES', empty: 'No statements issued yet. A job of 3+ minutes gets one.', icon: '', alt: 'Press releases', toast: task => (m === 'book' ? `Off the record: ${task}` : `Statement issued: ${task}`), hidden: true },
     log: { draw: (W, beats, pick) => dialCard(W, beats, pick, m), hasControls: true, alt: dialAlt },
-    org: (W, root) => tableCard(W, root as BoysOrg, m),
+    org: (W, root) => withTableAct(tableCard(W, root as BoysOrg, m), m),
     boot: BOOTS[m],
     bootDraw: W => bootLine(W, m),
     greeting: GREETINGS[m],
     words: m === 'book' ? SPIN_BOOK : m === 'gold' ? SPIN_GOLD : SPIN_BRAND,
     tools: m === 'book' ? TOOLS_BOOK : m === 'gold' ? TOOLS_GOLD : TOOLS_BRAND,
     extras: boysExtras(m),
+    shake: boysShake,
+    paneReserve: BOYS_PANE_RESERVE,
   }
 }
 // The pieces the tests and the handoff reach for.
