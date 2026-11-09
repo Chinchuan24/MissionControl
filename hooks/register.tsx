@@ -25,7 +25,7 @@ import { BOOK as TB_BOOK, BRAND as TB_BRAND, GOLD as TB_GOLD, NOIR as TB_NOIR } 
 import type { Mode as BoysMode } from './theboys'
 import { GREETINGS as TB_GREETINGS } from './theboys-theme'
 import { COST_STEPS as TB_COST_STEPS, CURTAIN_RE as TB_CURTAIN_RE, IDLE_NAP_MS as TB_IDLE_MS, idleFor as tbIdleFor, isCompaction as tbIsCompaction, isNight as tbIsNight, localDay as tbDay, noteBusy as tbNoteBusy, quiet as tbQuiet, resetEvents as tbResetEvents, resetShow as tbResetShow, toolEnd as tbToolEnd, toolStart as tbToolStart } from './theboys-show'
-import { REPLAYS as TB_REPLAYS, SPIN_BOOK, SPIN_BRAND, SPIN_GOLD, SPIN_NOIR, TOOLS_BRAND as TB_TOOLS, TOOLS_GOLD as TB_TOOLS_GOLD, boysEvent, errRun as tbErrRun, inFlight as tbInFlight, toolOk as tbToolOk, fireTyped as tbFire, parseCounts, prToast, resetBoys, scoreEnd, boysState, setBoysFx, setInFlight, toastOk as tbToastOk, typed as tbTyped } from './theboys-eggs'
+import { REPLAYS as TB_REPLAYS, SPIN_BOOK, SPIN_BRAND, SPIN_GOLD, SPIN_NOIR, TOOLS_BRAND as TB_TOOLS, TOOLS_GOLD as TB_TOOLS_GOLD, boysEvent, errRun as tbErrRun, inFlight as tbInFlight, toolOk as tbToolOk, fireTyped as tbFire, parseCounts, prToast, resetBoys, scoreEnd, scoreStop as tbScoreStop, boysState, setBoysFx, setInFlight, toastOk as tbToastOk, typed as tbTyped } from './theboys-eggs'
 import { VERBS as INV_VERBS } from './invincible-cards'
 import { BYE_CAPRI_RE, CAPRICORN_RE, CAPRI_WORD_RE, ER2_FONT, ER2_TOOLS, ER2_WORDS } from './edgerunners2'
 import { CAPRI_MODE, ER2_MODE_DEFAULT } from './edgerunners2-duet'
@@ -2535,20 +2535,19 @@ async function setBoysMode($: EngineInterface, mode: 'brand' | 'book'): Promise<
 async function wearBoys($: EngineInterface, id: 'the-boys' | 'solidgold' | 'noir'): Promise<void> {
   const k = SKINS.get(id)
   if (!k) return
+  // The skin being left, read before the switch: NOIR may have been put on by `/skin noir` or kept across a restart.
+  const from = SKIN.id
   BOYS_GOLD_SINCE = id === 'noir' ? 0 : await $.clock.now().catch(() => Date.now())
   applySkin(k)
   await $.store.set('skin', k.id).catch(() => undefined)
   await update($, skin, () => k.id)
   await retitle($).catch(() => undefined)
-  const from = SKIN_FROM
-  SKIN_FROM = id
   if (id === 'solidgold' || id === 'noir') await foundSecret($, k).catch(() => undefined)
   else if (from === 'noir') {
     setBoysFx('curtain', BOYS_GOLD_SINCE + 2_300)
     $.ui.toast('Curtain call. (Noir bows.)')
   } else $.ui.toast('Back in storage.')
 }
-let SKIN_FROM = ''
 // The Boys' clock eggs, once a second while worn: E15 idle (10 min: Terror trots in and naps; 20 min: a line, once a session),
 // E14 after midnight (midnight to 5 AM local, once a night), E16 the session's cost passing $1, $5 and $20.
 async function boysTick($: EngineInterface, at: number, busy: boolean): Promise<void> {
@@ -2566,7 +2565,9 @@ async function boysTick($: EngineInterface, at: number, busy: boolean): Promise<
     out.push(...boysEvent('midnight', { at, mode }))
   }
   const usd = (await read($, env)).costUsd
-  for (const [step, ev] of TB_COST_STEPS) if (usd >= step && TB_COST < step) out.push(...boysEvent(ev, { at, mode }))
+  // Only the highest step crossed speaks (a resumed session already past $5 gets one line, not two at once).
+  const crossed = TB_COST_STEPS.filter(([step]) => usd >= step && TB_COST < step).pop()
+  if (crossed) out.push(...boysEvent(crossed[1], { at, mode }))
   TB_COST = Math.max(TB_COST, usd)
   for (const t of out) tbToast($, t)
 }
@@ -2594,7 +2595,11 @@ async function boysSpin($: EngineInterface, tool: string, res: unknown): Promise
 // `/missioncontrol play <name>` while The Boys is worn: the shared registry in theboys-eggs.ts (later phases add rows to it).
 async function boysReplay($: EngineInterface, name: string): Promise<string> {
   const r = TB_REPLAYS.find(x => x.name === name)
-  if (!r) return `Play which? The Boys has ${TB_REPLAYS.length}: ${TB_REPLAYS.filter(x => SKIN.id === 'noir' || !['curtain'].includes(x.name)).map(x => x.name).join(', ')}`
+  if (!r) {
+    // The curtain call is NOIR's own; the count matches the names listed.
+    const names = TB_REPLAYS.filter(x => SKIN.id === 'noir' || x.name !== 'curtain').map(x => x.name)
+    return `Play which? The Boys has ${names.length}: ${names.join(', ')}`
+  }
   const at = await $.clock.now().catch(() => Date.now())
   const out = r.run(at, boysWorn())
   if (out.mode && SKIN.id === 'the-boys' && (out.mode === 'brand' || out.mode === 'book')) {
@@ -2743,13 +2748,14 @@ let er2Dismissed = false
 async function er2ContextRule($: EngineInterface, ctx: number): Promise<void> {
   er2Ctx = ctx
   // The Boys: E10 at 85%, E11 at 95% (each when crossed going up), E5 when the context drops like a compaction or a /clear.
+  // The context is followed whatever is worn, so putting the skin on (or a /skin switch) never reads as a compaction or a crossing.
   if (isBoys()) {
     const at = await $.clock.now().catch(() => Date.now())
     const mode = boysWorn()
     const evs = tbIsCompaction(TB_CTX, ctx) ? boysEvent('compact', { at, mode }) : ctx >= 95 && TB_CTX < 95 ? boysEvent('ctx95', { at, mode }) : ctx >= 85 && TB_CTX < 85 ? boysEvent('ctx85', { at, mode }) : []
     TB_CTX = ctx
     for (const t of evs) tbToast($, t)
-  }
+  } else TB_CTX = ctx
   // Invincible: the first time the context passes 95% Omni-Man drops in with his line.
   if (isInv() && ctx >= 95 && INV_CTX < 95) INV_FX = { kind: 'think', at: await $.clock.now().catch(() => Date.now()) }
   INV_CTX = ctx
@@ -7683,10 +7689,22 @@ export const register: Register = (on, options) => {
   // with BREAKING); a force push breaks news too. A garnish only: never in the way of the call.
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     if (!isBoys()) return next(e)
-    const kind = cmdKind(String((e as unknown as { command?: string }).command ?? ''))
+    const input = e as unknown as { command?: string; run_in_background?: boolean }
+    const said = cmdKind(String(input.command ?? ''))
+    // A run sent to the background answers "started" here and reports later: no scoreboard and no verdict from it.
+    const kind = said !== 'force' && input.run_in_background === true ? null : said
     if (kind === 'test') boysEvent('test-start', { at: await $.clock.now().catch(() => Date.now()), mode: boysWorn() })
-    const res = await next(e)
+    // A run that never comes back (cancelled, aborted) leaves no LIVE scoreboard behind.
+    const res = await next(e).catch((err: unknown) => {
+      if (kind === 'test') tbScoreStop()
+      throw err
+    })
     if (!kind) return res
+    // A denied run never ran: nothing to judge.
+    if ((res as { deny?: unknown } | null)?.deny !== undefined) {
+      if (kind === 'test') tbScoreStop()
+      return res
+    }
     if (kind === 'lint') {
       // E21: a lint or type check that passes after one failed.
       const bad = resultFailed(res)
@@ -7700,10 +7718,12 @@ export const register: Register = (on, options) => {
       let toasts: string[] = []
       if (kind === 'force') toasts = boysEvent('force-push', { at, mode })
       else {
-        const r = res as { result?: unknown }
+        const r = res as { result?: unknown; isError?: boolean; is_error?: boolean; error?: unknown }
         const text = typeof r?.result === 'string' ? r.result : JSON.stringify(r?.result ?? '')
         const n = parseCounts(text)
-        const failed = resultFailed(res) || (n?.fail ?? 0) > 0
+        // The runner's own counts decide when it printed some ("42 passed, 0 errors" is green), with the error flag; else the text.
+        const flagged = r?.isError === true || r?.is_error === true || Boolean(r?.error)
+        const failed = n && n.pass + n.fail > 0 ? n.fail > 0 || flagged : resultFailed(res)
         toasts = boysEvent(failed ? 'test-fail' : 'test-pass', { at, mode, pass: n?.pass ?? 0, fail: n?.fail ?? (failed ? 1 : 0) })
       }
       for (const t of toasts) tbToast($, t)

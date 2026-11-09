@@ -105,6 +105,8 @@ export const parseCounts = (text: string): { pass: number; fail: number } | unde
 }
 export const scoreStart = (at: number): void => { S.score = { pass: S.score?.running ? S.score.pass : 0, fail: S.score?.running ? S.score.fail : 0, running: true, at, endAt: 0 } }
 export const scoreEnd = (pass: number, fail: number, at: number): void => { S.score = { pass, fail, running: false, at: S.score?.at ?? at, endAt: at } }
+/** A run that never reported (cancelled, denied): the LIVE board goes away instead of waiting out its 30 minutes. */
+export const scoreStop = (): void => { if (S.score?.running) S.score = null }
 export const scoreAt = (at: number): Score | null => {
   const sc = S.score
   if (!sc) return null

@@ -63,7 +63,7 @@ export const boysExtras = (m: Mode) => (o: ExtraArgs): string => {
   // One thing on stage at a time (theboys-show stageAt): a typed act or an event egg, else THE AMBUSH (while a job works), else the
   // day's set piece, else a rare roamer. A scheduled piece may be drawn ahead of its start (an idle band redraws once a minute).
   if (o.surface === 'band') {
-    noteWorking(o.working)
+    noteWorking(o.working, m)
     if (o.working) noteBusy(o.at)
   }
   const st = swapping ? undefined : stageAt(o.at, { working: o.working, mode: m, ...(o.swapAt !== undefined ? { swapAt: o.swapAt } : {}) })

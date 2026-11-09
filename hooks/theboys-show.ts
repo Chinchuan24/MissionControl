@@ -174,6 +174,8 @@ setApprovalMod(at => {
 // The live state the overlays read: when the last work was seen (idle), and the tool calls in flight (PREMIERE FACE, M9).
 let BUSY_AT = 0
 let LAST_WORKING = false
+// The look last drawn: OFF BOOK has its second WALK, NOIR has no set pieces, so what is on stage depends on it.
+let LAST_MODE: Mode = 'brand'
 const TOOLS = new Map<string, number>()
 export const noteBusy = (at: number): void => { BUSY_AT = Math.max(BUSY_AT, at) }
 export const idleFor = (at: number): number => (BUSY_AT > 0 ? Math.max(0, at - BUSY_AT) : 0)
@@ -183,11 +185,11 @@ export const toolEnd = (id: string): void => { TOOLS.delete(id) }
 export const longestCall = (at: number): number => Math.max(0, ...[...TOOLS.values()].map(t => at - t))
 export const PREMIERE_FACE_MS = 60_000
 export const IDLE_NAP_MS = 600_000
-export const noteWorking = (w: boolean | undefined): void => { LAST_WORKING = Boolean(w) }
+export const noteWorking = (w: boolean | undefined, m?: Mode): void => { LAST_WORKING = Boolean(w); if (m) LAST_MODE = m }
 export const lastWorking = (): boolean => LAST_WORKING
 
 setStageBusy(at => {
-  const s = stageAt(at, { working: LAST_WORKING, mode: 'brand' })
+  const s = stageAt(at, { working: LAST_WORKING, mode: LAST_MODE })
   return Boolean(s && (s.src === 'ambush' || s.src === 'piece') && at >= s.startAt - 1000 && at < s.endAt)
 })
 

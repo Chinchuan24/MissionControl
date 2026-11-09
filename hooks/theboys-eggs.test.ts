@@ -229,9 +229,12 @@ test('LOOK AT ME plays by itself the first time the context passes 95%, once a s
   expect(boysState().fx?.kind).toBe('lookatme')
   expect(autoLookAtMe(97, NOW + 60_000)).toBe(false)
   resetBoys()
-  base(on, 960_000)
+  const clock = base(on, 960_000)
   await start($)
+  // Put on at 96% the skin has seen no crossing (the context is followed whatever is worn), so the first prompt's wake-up (E9)
+  // plays first and LOOK AT ME takes the stage the moment it ends.
   await say($, 'Vought Tower incident report')
+  await clock.advance(2_000)
   expect((await svgs($, 'AbovePrompt')).join('')).toContain('data-egg="act-lookatme"')
 })
 test('shakes: LOOK AT ME, WHATEVER and LITTLE CRICKET move whole panels for their act only, pinned', () => {
