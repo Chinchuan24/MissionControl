@@ -1,6 +1,6 @@
 """Build the three release zips from the files git tracks.
 
-  mission-control-core.zip       the mod, default and Crab Classic (no addons/)
+  mission-control-core.zip       the mod and its 7 core skins (no addons/)
   mission-control-cyberpunk.zip  the mod with the Cyberpunk Skins add-on
   cyberpunk-skins-addon.zip      just addons/cyberpunk/, to unzip into a Core install
 
