@@ -165,7 +165,7 @@ const CBI_NAMES: Record<string, [string, string, string]> = {
   netrunner: ['THE TEAM', '⌁', 'Call 100 sub-agents'],
   crewboss: ['ALL HANDS', '⚑', 'Run a case with 5+ sub-agents'],
   chromed: ['NEEDS TEA', '♨', 'Push the context past 90%'],
-  owl: ['NIGHT SHIFT', '☾', 'Close a case after midnight'],
+  owl: ['NIGHT SHIFT', '☾', 'Close a case between midnight and 5 am'],
   samurai: ['TYGER TYGER', '☺', 'Keep exploring.'],
 }
 export const CBI_BADGES: Badge[] = BADGES.map(b => {

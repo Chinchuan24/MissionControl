@@ -269,9 +269,13 @@ test('settings: the pane toggle turns it off and on, and off hides every budget'
   await clock.advance(MIN)
   const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'desktop', component: 'Pane', requestId: 'crab-settings', props: pane(120) as never })
   const label = async () => String(((await ui.find({ key: 'set-timekeeper' })) as { props?: { label?: string } } | undefined)?.props?.label ?? '')
-  expect(await label()).toMatch(/^☑︎ Timekeeper: 60 min per job, 20 min per sub-agent$/)
+  // The row's picture draws the switch and the budgets; its button says what a press does.
+  const art = async () => (await ui.findAll({ type: 'Svg' })).map(el => String(el.props.alt ?? '')).find(a => a.startsWith('Timekeeper')) ?? ''
+  expect(await label()).toBe('Turn off')
+  expect(await art()).toStartWith('Timekeeper: ON · 60/20 min.')
   await ui.press({ key: 'set-timekeeper' })
-  expect(await label()).toMatch(/^☐ Timekeeper/)
+  expect(await label()).toBe('Turn on')
+  expect(await art()).toStartWith('Timekeeper: off.')
   await ui.unmount()
   expect(await rule($)).toBeUndefined()
   expect(await paneTexts($)).not.toContain('⏱')

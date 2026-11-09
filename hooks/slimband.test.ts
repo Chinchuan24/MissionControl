@@ -8,12 +8,14 @@ import { serifW } from './mentalist-cards'
 const NOW = Date.parse('2026-10-20T10:00:00Z')
 const BAND = { hasSurvey: false, isWorking: true, maxRows: 14 } as const
 const COLS: Record<number, number> = { 750: 106, 900: 126, 1250: 173 }
+// What the session has cost so far, and how every slim band must show it: TOTAL and the figure.
+const SESSION_USD = 7.89
 
 const base = (on: On, skin: string) => {
   mock.clock(on, { now: NOW })
   mock.env(on, { LANG: 'en_US.UTF-8' })
   mock.store(on, { skin })
-  on('fs.exists', async () => ({ value: false }) as never)
+  on('fs.exists', async (_$, e) => ({ value: /addons[\\/]cyberpunk[\\/]addon\.json$/.test(String((e as { path: string }).path)) }) as never)
   on('settings.read', async () => ({ value: {} }) as never)
   on('tool.register', async () => ({ value: undefined }) as never)
   on('command.register', async () => ({ value: undefined }) as never)
@@ -27,12 +29,12 @@ const base = (on: On, skin: string) => {
   on('prompt.submit', async (_$, e) => ({ text: (e as { text: string }).text }) as never)
   let n = 0
   on('agent.spawn', () => ({ model: 'claude-opus-5-5', agentId: `a${++n}` }) as never)
-  on('session.usage', async () => ({ value: { startedAt: 0, context: { window: 1_000_000, tokens: 300_000 }, rateLimits: [] } }) as never)
+  on('session.usage', async () => ({ value: { startedAt: 0, context: { window: 1_000_000, tokens: 300_000 }, rateLimits: [], cost: { usd: SESSION_USD } } }) as never)
   on('session.start', async () => ({ cwd: '/repo' }) as never)
 }
 const band = async ($: Engine, skin: string, W: number): Promise<string> => {
   await $.session.start({ source: 'startup', cwd: '/repo', surface: 'desktop', isInteractive: true } as never)
-  if (skin === 'heisenberg') await $.command.run({ command: 'skin', args: 'heisenberg' } as never)
+  if (skin === 'heisenberg' || skin === 'capricorn' || skin === 'edgerunners-2' || skin === 'better-call-saul' || skin === 'gene' || skin === 'invincible' || skin === 'caliper') await $.command.run({ command: 'skin', args: skin } as never)
   await $.prompt.submit({ text: 'crack the case', cursor: 0 } as never)
   // @ts-ignore TS2589: the plugin's tool-name types are deep; the same call is already ignored in the other tests' budget
   await $.tool.call({ tool: 'mcp__crab-progress__progress', title: 'Red-herring audit', total: 5, done: 1, phase: 'delegate', tasks: [{ title: 'Lead: run the case', tier: 'fable' }, { title: 'Researcher: map the API', tier: 'medium' }, { title: 'Engineer: wire the parser', tier: 'careful' }] } as never)
@@ -73,6 +75,8 @@ for (const [skin, serif] of [['mentalist', true], ['red-john', true], ['breaking
       expect(svg).toContain('>30%<') // the context readout (its short label at a narrow width)
       expect(svg).toMatch(/>\d\/\d</)
       expect(svg).toMatch(/>(CTX|CONTEXT)</)
+      expect(svg).toContain('>TOTAL<') // the session's total in dollars, at every width
+      expect(svg).toContain('>$7.89<')
       const bs = boxes(svg, (s, size, ls, bold) => (serif ? serifW(s, size, ls, bold) : sansW(s, size, ls, bold)))
       const hits: string[] = []
       for (let i = 0; i < bs.length; i++) for (let j = i + 1; j < bs.length; j++) {
@@ -92,3 +96,50 @@ test('slim band: the title is never animated away (the Mentalist glitch only fli
   expect(svg).not.toContain('class="mx-ttl"')
   expect(svg).toContain('>Red-herring audit</text>')
 })
+
+// Edgerunners 2 and its hidden CAPRI mode draw the same slim band in their own type; the total must be on it at every width too.
+for (const skin of ['edgerunners-2', 'capricorn']) {
+  for (const W of [750, 900, 1250]) {
+    test(`slim band ${skin} at ${W}: the title, the Tasks pill, the context and the session total stay`, async ($, on) => {
+      base(on, skin === 'capricorn' ? 'edgerunners-2' : skin)
+      const svg = await band($, skin, W)
+      expect(svg).toContain('Red-herring audit')
+      expect(svg).toContain('Tasks 1/5')
+      expect(svg).toContain('>30%<')
+      expect(svg).toMatch(/>(CTX|CONTEXT)</)
+      expect(svg).toContain('>TOTAL<')
+      expect(svg).toContain('>$7.89<')
+    })
+  }
+}
+
+test('slim band: the total is the whole session\'s cost, not today\'s', async ($, on) => {
+  base(on, 'mentalist')
+  const svg = await band($, 'mentalist', 900)
+  // Both readouts can share the band; the session figure sits beside TOTAL.
+  expect(svg).toMatch(/>\$7\.89<\/text>\s*<text[^>]*>TOTAL</)
+})
+
+// Better Call Saul and its hidden GENE skin draw their own "Total $x" by the name; the generic TOTAL readout is left out, so the band shows ONE total.
+for (const skin of ['better-call-saul', 'gene', 'invincible']) {
+  for (const W of [750, 900, 1250]) {
+    test(`slim band ${skin} at ${W}: exactly one session total, in the skin's own hand`, async ($, on) => {
+      base(on, skin)
+      const svg = await band($, skin, W)
+      expect(svg).toContain('Red-herring audit')
+      expect(svg).toContain('Tasks 1/5')
+      expect(svg.match(/Total <tspan[^>]*>\$7\.89<\/tspan>/g)?.length).toBe(1) // the skin's own
+      expect(svg).not.toContain('>TOTAL<') // no generic readout beside it
+      expect(svg.match(/\$7\.89/g)?.length).toBe(1) // the figure appears once
+    })
+  }
+}
+
+for (const W of [750, 900, 1250]) {
+  test(`slim band caliper at ${W}: the session total shows`, async ($, on) => {
+    base(on, 'caliper')
+    const svg = await band($, 'caliper', W)
+    expect(svg).toContain('Tasks 1/5')
+    expect((svg.match(/7\.89/g)?.length ?? 0) >= 1).toBe(true)
+  })
+}

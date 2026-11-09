@@ -294,6 +294,8 @@ declare module 'claude-code' {
       skin: string
       /** Edgerunners 2's mode (D or CAPRI), when it last switched (0 after a restart) and whether the context rule did it, as `mode|since|auto`. */
       er2Mode: string
+      /** The Skins pane's last Skin kit reply (a draft saved, a file checked, a reload); '' when none. */
+      skinKit: string
       /** Invincible's era (1 the classic suit, 2 the new suit) and when it last switched (0 after a restart), as `era|since`. */
       invEra: string
       /** Caliper's setting (dark, light or auto), when it last changed (0 after a restart) and whether the app's theme is light, as `mode|since|appIsLight`. */

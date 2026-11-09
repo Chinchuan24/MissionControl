@@ -23,7 +23,7 @@ export const ER2_BADGES: Badge[] = [
   { id: 'netrunner', name: 'SNAKE NATION', icon: '≈', how: 'Call 100 sub-agents', progress: c => share(c.agents, 100) },
   { id: 'crewboss', name: 'FULL CREW', icon: '⚑', how: 'Run a job with 5+ sub-agents', progress: c => share(c.crewJobs, 1) },
   { id: 'chromed', name: 'POSSESSED', icon: '✕', how: 'Push the context past 90%', progress: c => (c.chromed ? 1 : 0) },
-  { id: 'owl', name: 'WATSON NIGHTS', icon: '☾', how: 'Finish a job after midnight', progress: c => share(c.nightJobs, 1) },
+  { id: 'owl', name: 'WATSON NIGHTS', icon: '☾', how: 'Finish a job between midnight and 5 am', progress: c => share(c.nightJobs, 1) },
   { id: 'samurai', name: '0+2=1', icon: '∞', how: 'Keep exploring.', progress: c => (c.samurai ? 1 : 0) },
 ]
 export const ER2_WORDS = { badges: ER2_BADGES, cases: 'JOBS', long: 'LONG JOBS', all: 'EVERY FRAGMENT RECOVERED.' }

@@ -29,6 +29,7 @@ export const invTheme = (era: Era): ThemeEggs => {
       sw: (s, size, ls = 0, bold = false) => sansW(s, size, ls, bold),
       head: () => ({ svg: '', w: 0 }),
       name: (x, y, W, _t, _f, ctx) => name(x, y, W, era, ctx?.totalUsd ?? 0),
+      ownsTotal: true,
       ep: { w: epW, draw: (xr, y, code, title, full) => ep(xr, y, code, title, full, era) },
       tear: (x, y, w, pct, _t, ctx) => flightBar(x, y, w, pct, era, { near: (ctx?.ctxPct ?? 0) >= 95, working: ctx?.isWorking }),
       pill: (x, y, w, h, fill, opacity) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${fill}" fill-opacity="${opacity}" stroke="#0B0D14" stroke-width="1.5"/>`,

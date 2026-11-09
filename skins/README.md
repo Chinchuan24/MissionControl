@@ -2,7 +2,7 @@
 
 Skins for the **Mission Control** mod: the band above the prompt, the Mission Control pane, its cards and the hierarchy.
 
-Skins load from, in order: the folder you used last, a `Custom Claude Skins/` folder in your working folder (on Linux, or a case-sensitive Mac drive, the name must match exactly), then the `skins/` examples shipped with the mod. The JSON files here are copies of the built-in skins: copy one to start your own. `mentalist.json` is The Mentalist, a fan-homage skin with Jane and the CBI team as its pixel cast. `breaking-bad.json` is the Breaking Bad fan-homage skin (Mr. White, Jesse and the lab). `better-call-saul.json` is the Better Call Saul fan-homage skin (Saul's strip-mall law office). `caliper.json` is Caliper, an original Mission Control design. The cyberpunk ones live in `addons/cyberpunk/skins/` (Cyberpunk Skins add-on).
+Skins load from, in order: the folder you used last, a `Custom Claude Skins/` folder in your working folder (on Linux, or a case-sensitive Mac drive, the name must match exactly), then the `skins/` examples shipped with the mod. The JSON files here are copies of the built-in skins: copy one to start your own. `mentalist.json` is The Mentalist, a fan-homage skin with Jane and the CBI team as its pixel cast. `breaking-bad.json` is the Breaking Bad fan-homage skin (Mr. White, Jesse and the lab). `better-call-saul.json` is the Better Call Saul fan-homage skin (Saul's strip-mall law office). `caliper.json` is Caliper, an original Mission Control design. The cyberpunk ones (Cyberpunk Edgerunner, Lucy · Edgerunners, Arasaka, Edgerunners 2) live in `addons/cyberpunk/skins/` and need the Cyberpunk Skins add-on.
 
 > Unofficial, non-commercial fan project. Cyberpunk 2077, Cyberpunk: Edgerunners and all related names and characters belong to their respective owners (CD PROJEKT S.A., Studio Trigger, Netflix) and are used as fan homage only. The Mentalist and its characters belong to CBS and Warner Bros. Television, likewise used as fan homage only. Breaking Bad and its characters belong to Sony Pictures Television and AMC, used as fan homage only. Invincible and its characters belong to Robert Kirkman, Cory Walker, Ryan Ottley, Image Comics, Skybound and Amazon MGM Studios, used as fan homage only. Better Call Saul and its characters belong to Sony Pictures Television and AMC, used as fan homage only.
 
@@ -10,12 +10,12 @@ Caliper is an original Mission Control design (no homage): a dark face, a light 
 
 ## Use
 
-- `/skins`: open the skin picker panel
+- `/skins`: open the skin picker panel (the **Skins** tab is a gallery: a preview card per skin, under Classics, TV shows, Night City and Your skins)
 - `/skin`: list skins (▸ marks the one that's on)
 - `/skin crab-classic`: switch, live
 - `/skin mentalist`: Jane and the CBI team (dark, its own pixel cast)
 - `/skin breaking-bad`: Mr. White, Jesse and the lab (dark, crystal blue, its own pixel cast)
-- `/skin better-call-saul`: Saul's strip-mall law office (dark walnut, powder blue and gold, Mike roams). A hidden black-and-white skin hides inside it
+- `/skin better-call-saul`: Saul's strip-mall law office (dark walnut, powder blue and gold, Mike roams)
 - `/skin invincible`: the comic page that became the show (the classic suit: sky blue with yellow accents, the whole interface). Mark and Omni-Man fight across the band and the pane now and then, the Guardians take on Omni-Man once a day (or type `guardians`), a rift spills a flock of evil Marks across the screen once a day too (or type `multiverse`), and a second era hides behind `new suit`: the S3 suit's black and blue (`classic suit` goes back to the sky blue).
 - `/skin caliper`: graphite and ice, a dial and a ruler. `/skin caliper light`, `dark` or `auto` picks the face; the CALIBRATION card's `⇄` button cycles it.
 - `/skin off`: back to Default (no skin)
@@ -24,6 +24,29 @@ Caliper is an original Mission Control design (no homage): a dark face, a light 
 - `/skin check <file>`: check a skin file; `skin.schema.json` lets your editor do it too
 
 Guide: [`docs/SKINS.md`](../docs/SKINS.md).
+
+## Easter eggs
+
+Type the word anywhere in a prompt (any case) while the skin is on.
+
+- **Invincible**: `think, mark`, `guardians`, `multiverse`, `new suit` / `classic suit`
+- **Better Call Saul**: `chicanery`, `namaste`, `ding`, `1216`, `saul3d`
+- **Replays** (Invincible only): `/missioncontrol play fight|showdown|think|eve|oliver|cecil|newsuit|classic`
+- Many eggs also play by themselves: daily events, cameos, and extras at 85% and 95% context.
+
+<details>
+<summary>Spoilers: hidden skins</summary>
+<br>
+
+Not listed anywhere until worn.
+
+- **Red John**: type `tyger tyger` on The Mentalist, or `/skin red-john`
+- **Heisenberg**: type `say my name` on Breaking Bad, or `/skin heisenberg`
+- **GENE**: type `takavic` on Better Call Saul, or `/skin gene`; `saul goodman` goes back
+- **CAPRI** (add-on, Edgerunners 2's CAPRI mode): type `capri` or `0+2=1` on Edgerunners 2, `hi capri` within a minute of a takeover, or `/skin capricorn`; `bye capri` goes back
+- **SAMURAI** (add-on): `/skin samurai` only
+
+</details>
 
 ## Make your own
 

@@ -28,7 +28,7 @@ export const BADGES = [
   { id: 'netrunner', name: 'COALITION', how: '100 team-ups', icon: '⚑', progress: (c: any) => share(c.agents, 100) },
   { id: 'crewboss', name: 'DUPLI-KATE', how: 'A mission with 5+ agents', icon: '⁂', progress: (c: any) => share(c.crewJobs, 1) },
   { id: 'chromed', name: 'THAT HURT', how: 'Context past 90%', icon: '!', progress: (c: any) => (c.chromed ? 1 : 0) },
-  { id: 'owl', name: 'NIGHT PATROL', how: 'A mission after midnight', icon: '☾', progress: (c: any) => share(c.nightJobs, 1) },
+  { id: 'owl', name: 'NIGHT PATROL', how: 'A mission between midnight and 5 am', icon: '☾', progress: (c: any) => share(c.nightJobs, 1) },
   { id: 'samurai', name: 'NEW SUIT', how: 'Keep exploring.', icon: '◈', progress: (c: any) => (c.samurai ? 1 : 0) },
 ]
 export const WORDS = { cases: 'MISSIONS', long: 'LONG MISSIONS', all: 'EVERY PATCH STITCHED. INVINCIBLE.' }

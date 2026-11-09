@@ -14,6 +14,7 @@
   <a href="#-what-mission-control-does">Features</a> ·
   <a href="#-what-the-cyberpunk-skins-add">Cyberpunk Skins</a> ·
   <a href="#-skin-showcase">Skins</a> ·
+  <a href="#-easter-eggs">Easter eggs</a> ·
   <a href="#-install">Install</a> ·
   <a href="#-commands">Commands</a>
 </p>
@@ -21,7 +22,7 @@
 <p align="center">
   <img alt="MIT license" src="https://img.shields.io/badge/license-MIT-2B2320?style=flat-square">
   <img alt="Platforms" src="https://img.shields.io/badge/Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-E76F51?style=flat-square&labelColor=2B2320&label=runs%20on">
-  <img alt="Skins" src="https://img.shields.io/badge/skins-5%20%2B%201%20hidden-FCEE0A?style=flat-square&labelColor=0A0A0F">
+  <img alt="Skins" src="https://img.shields.io/badge/skins-11%20%2B%205%20hidden-FCEE0A?style=flat-square&labelColor=0A0A0F">
 </p>
 
 ---
@@ -32,18 +33,18 @@
   <tr>
     <td align="center" width="50%" valign="top">
       <a href="https://github.com/Chinchuan24/MissionControl/releases/latest/download/mission-control-core.zip">
-        <img src="docs/edition-core.png" alt="Mission Control Core: default and Crab Classic skins" width="100%">
+        <img src="docs/edition-core.png" alt="Mission Control Core: the live dashboard and its seven core skins" width="100%">
       </a>
     </td>
     <td align="center" width="50%" valign="top">
       <a href="https://github.com/Chinchuan24/MissionControl/releases/latest/download/mission-control-cyberpunk.zip">
-        <img src="docs/edition-cyberpunk.png" alt="Cyberpunk Skins: Cyberpunk Edgerunner, Lucy Edgerunners, Arasaka and a hidden skin" width="100%">
+        <img src="docs/edition-cyberpunk.png" alt="Cyberpunk Skins: Cyberpunk Edgerunner, Lucy Edgerunners, Arasaka and Edgerunners 2" width="100%">
       </a>
     </td>
   </tr>
   <tr>
     <td align="center" valign="top">
-      <b>The live dashboard.</b><br>Clean, light, free.
+      <b>The live dashboard.</b><br>Seven skins, free.
     </td>
     <td align="center" valign="top">
       <b>Jack in, choom.</b><br>Your crew just moved to Night City.
@@ -66,7 +67,7 @@
 
 <p align="center"><sub>Both zips are the full mod (Cyberpunk = Core + add-on). Unzip, <a href="#-install">point Claude Code at the folder</a>, restart.</sub></p>
 
-> **Unofficial, non-commercial fan project.** Not affiliated with, endorsed by or sponsored by CD PROJEKT S.A., CD PROJEKT RED, Studio Trigger or Netflix. Cyberpunk 2077, Cyberpunk: Edgerunners, Edgerunners 2 and all related names, characters and terms belong to their respective owners and are used as fan homage only. Better Call Saul and its characters belong to Sony Pictures Television and AMC, used as fan homage only. Invincible and its characters belong to Robert Kirkman, Cory Walker, Ryan Ottley, Image Comics, Skybound and Amazon MGM Studios, used as fan homage only. The MIT license covers this project's code, not those properties. Removal requests: open an issue.
+> **Unofficial, non-commercial fan project.** Not affiliated with, endorsed by or sponsored by CD PROJEKT S.A., CD PROJEKT RED, Studio Trigger or Netflix. Cyberpunk 2077, Cyberpunk: Edgerunners, Edgerunners 2 and all related names, characters and terms belong to their respective owners and are used as fan homage only. The Mentalist and its characters belong to CBS and Warner Bros. Television, used as fan homage only. Breaking Bad and Better Call Saul and their characters belong to Sony Pictures Television and AMC, used as fan homage only. Invincible and its characters belong to Robert Kirkman, Cory Walker, Ryan Ottley, Image Comics, Skybound and Amazon MGM Studios, used as fan homage only. The MIT license covers this project's code, not those properties. Removal requests: open an issue.
 
 ---
 
@@ -76,18 +77,22 @@ Claude works in steps, calls tools and spins up sub-agents. Mission Control show
 
 ![Mission Control: the HUD band and the pane](docs/mission-control.png)
 
-- 📊 **HUD band** above the prompt, always on: the boss, the task, what it's doing now, a progress gauge
+- 📊 **HUD band** above the prompt, always on: the boss, the task, what it's doing now, a progress gauge, and the session **Total** cost on every skin
 - 🧪 **Readouts**: context, 5-hour limit, burn rate, tok/s, turn and total cost, prompt-cache countdown
 - 👥 **Crew** and 🪜 **Steps**: every sub-agent by role, the plan as pips
 - 💸 **Token Manager**: cost per task, cache hits, budget warnings; optional **Haiku autopilot** for read-only explorers
 - 🧊 **Smart Keep-Warm**: refreshes the prompt cache just before it expires, only when that saves more than it costs (`/tokens warm on`)
 - 🗓️ **Spend card**: what Today, this week (Mon–Sun), one calendar month or your own date range cost, read from Claude Code's own history (`/tokens spend week`, `/tokens spend month 2026-06`, `/tokens spend 2026-10-01 2026-10-15`); `/tokens export` saves the period as a FinOps-style CSV in Downloads ([Athena sample](docs/athena.sql))
-- 🚀 **Crew mode**: big jobs get split across sub-agents automatically
+- 🚀 **Crew mode**: big jobs get split across sub-agents automatically (`/autocrew`)
+- 🧠 **Staffing brain** (on by default): the Manager picks each worker's model and effort, with a one-line why on its card. A model or effort you name wins (`/tokens brain on|off`)
+- ⏱️ **Timekeeper** (on by default): every job (60 min) and sub-agent (20 min) gets a time budget; it warns at 80% and flags overruns once (`/timekeeper`)
 - ⚡ **Ultra decided by** (Settings > 🦀 Crew, or `/tokens ultra manager|me`): with **Manager**, the main session flags `ultra: true` on only the plan tasks that really need max effort and a deep check (hard design, tricky debugging, security, risky migrations). An agent whose description matches a flagged task starts on Ultra and the card reads "max + Ultra (Manager's call)". Your ⚡ button always wins, and role rules still apply. **Me** (default) ignores the flags.
 - 🚨 **Stuck alarm** (2 min quiet) and 🔔 **done chime** (toast, notification, sound)
 - 🧾 **Rich replies**: diffs, code, tables, math and mermaid as cards
 - 🌍 **7 currencies**, **3 languages** (English, Russian, Hebrew)
-- 🎨 **Skins**: `default` (the app's own look) and **Crab Classic** (a crab in costume per role), or [make your own](skins/README.md)
+- 🎨 **Skins**: 7 in Core, 4 more in the Cyberpunk add-on, or [make your own](skins/README.md). The **Skins** tab is a gallery: one preview card per skin (its colours, mascot and palette), grouped under Classics, TV shows, Night City and Your skins
+- ⚙️ **Settings cards**: Money, Machine Guard, Crew, Look and feel, and Billing, each a card in the skin's colours with one row per setting and drawn on/off toggles
+- 🥚 **[Easter eggs](#-easter-eggs)** in every skin
 
 <details>
 <summary><b>The <code>/missioncontrol</code> pane, section by section</b></summary>
@@ -102,7 +107,7 @@ Claude works in steps, calls tools and spins up sub-agents. Mission Control show
 | **Token Manager** | Burn rate, cost per task, cache hits, budget warnings, optional Haiku autopilot and Smart Keep-Warm |
 | **Crew** | Every agent at work by role in one long list, however big the crew, the newest finished ones beside them and one "+N more finished" row for the rest of a long session, plus a hierarchy from the manager down. When a skin's cards add up to more than the app can draw, the pane gives up its decoration a part at a time (replay log first), never the whole pane. **Collapse** folds the whole list into a short view; **▾ Finished** folds finished agents and steps into one line each. Both are remembered. |
 | **Memory** | Answer rules Claude follows in every session (`/prefs`) |
-| **Settings** | ☑ open on start · ☑ crew mode · currency · ☑ sounds · change skin |
+| **Settings** | Cards: 💰 Money (budget per task, daily cap) · 🛡 Machine Guard (RAM limit, max agents, RAM per agent, kill switch) · 🦀 Crew (crew mode, one-shot plans, Ultra decided by, Smart staffing, Staffing brain, Timekeeper) · 🎨 Look and feel (skin, currency, simple band, calm mode, sounds, spoken status, open on start) · 💳 Billing (who pays, API key) |
 
 </details>
 
@@ -134,9 +139,9 @@ The add-on swaps the crabs for a pixel-art cast, moves the HUD to Night City and
 | Feature | Core | Cyberpunk |
 |---|:---:|:---:|
 | HUD band, pane, crew, Token Manager, crew mode, done chime, rich replies | ✓ | ✓ |
-| `default` and Crab Classic skins, custom JSON skins | ✓ | ✓ |
-| **Cyberpunk Edgerunner**, **Lucy · Edgerunners**, **Arasaka**, **Edgerunners 2** skins + two hidden ones 🎸 | — | ✓ |
-| **Edgerunners 2** (fan homage): torn magenta paper on black, BIOCHIP, Roman's Tape, the Watson Wall, and Capri who walks in now and then | — | ✓ |
+| 7 core skins: default, Crab Classic, Caliper, The Mentalist, Breaking Bad, Better Call Saul, Invincible; custom JSON skins | ✓ | ✓ |
+| **Cyberpunk Edgerunner**, **Lucy · Edgerunners**, **Arasaka**, **Edgerunners 2** skins | — | ✓ |
+| **Edgerunners 2** (fan homage): D's optics, a cobalt glass HUD, Roman's Tape, and Capri who walks in now and then | — | ✓ |
 | Pixel-art cast: David, Lucy, Rebecca, Maine, Kiwi, Johnny… Saburo and Adam Smasher on Arasaka | — | ✓ |
 | **Street Cred**: XP per job, ranks NOBODY → LEGEND OF THE AFTERLIFE, 9 badges | — | ✓ |
 | **Braindance**: replay the session, every tool call a mark | — | ✓ |
@@ -148,17 +153,23 @@ The add-on swaps the crabs for a pixel-art cast, moves the HUD to Night City and
 
 ## 🎨 Skin showcase
 
-Pick one with `/skins` (a live picker) or `/skin <id>`. Each skin restyles the band, the pane, the chat's tool rows and the spinner.
+Pick one in the **Skins** tab (a gallery of preview cards), with `/skins` (a live picker) or `/skin <id>`. Each skin restyles the band, the pane, the chat's tool rows and the spinner.
 
 | Skin | id | One line |
 |---|---|---|
 | default | `default` | Keeps the app's own look. Just the data. |
 | 🦀 Crab Classic | `crab-classic` | The original. A working crab in costume for every role. |
+| 📐 Caliper | `caliper` | Graphite and ice: a dial, a ruler, one blue. Dark, light or auto. |
+| 🕵️ The Mentalist | `mentalist` | Jane and the CBI team in black, navy and crisp white. |
+| ⚗️ Breaking Bad | `breaking-bad` | Mr. White, Jesse and the lab, crystal blue on desert green-black. |
+| ⚖️ Better Call Saul | `better-call-saul` | Saul's strip-mall law office, powder blue and gold on dark walnut. |
+| 💥 Invincible | `invincible` | The comic page: Mark and Omni-Man fight across the panels. |
 | 🟡 Cyberpunk Edgerunner | `cyberpunk-2077` | Neon yellow, cyan and hot red. David leads the crew. |
 | 🌙 Lucy · Edgerunners | `lucy-edgerunners` | Rose-pink and cyan under the moon. Lucy runs the net. |
 | 🔴 Arasaka | `arasaka` | Corporate red and black. Saburo at the top, Smasher on call. |
-| ✂️ Edgerunners 2 | `edgerunners-2` | Torn magenta paper on black. D and the Kings; Capri visits. |
-| 🎸 ??? | — | Not in the picker. Wake up… |
+| ✂️ Edgerunners 2 | `edgerunners-2` | D's optics: a cobalt glass HUD. Capri visits. |
+
+The first seven ship with Core; the last four need the Cyberpunk add-on. Five more skins are hidden: see [Easter eggs](#-easter-eggs).
 
 <details open>
 <summary><b>⚪ default</b> · Core</summary>
@@ -226,6 +237,46 @@ Skins are small `.json` files; see [`skins/README.md`](skins/README.md) for ever
 Copy an example, give it a new `id`, edit it, then run `/skin reload` and `/skin <id>`.
 
 Or skip the editing: `/skin new ocean sunset` drafts one for you, and `/skin check <file>` checks one. See [`docs/SKINS.md`](docs/SKINS.md) for the guide, the schema and how to share a skin (Skin jam).
+
+</details>
+
+---
+
+## 🥚 Easter eggs
+
+Type a word anywhere in your prompt (any case) while its skin is on.
+
+| Skin | Type | What happens |
+|---|---|---|
+| Invincible | `think, mark` | Omni-Man drops in: "THINK, MARK." |
+| Invincible | `guardians` | The Guardians take on Omni-Man |
+| Invincible | `multiverse`, `invincible war` or just `what have i done` | Rifts open and a flock of evil Marks flies across |
+| Invincible | `new suit` (or `season 3`/`4`) · `classic suit` (or `old suit`, `season 1`/`2`) | Swap to the S3 suit's black and blue, and back |
+| Better Call Saul | `chicanery` | Chuck: "I AM NOT CRAZY!" |
+| Better Call Saul | `1216` | The number flip |
+| Better Call Saul | `namaste` | A bowling ball meets Howard's car |
+| Better Call Saul | `ding` | Hector's bell rings |
+| Better Call Saul | `saul3d` | Saul's bust zooms to a beat |
+
+**Replays (Invincible only):** `/missioncontrol play <name>` plays one now. Names: `fight`, `showdown`, `think`, `eve`, `oliver`, `cecil`, `newsuit`, `classic`.
+
+**They also play by themselves:** daily Invincible events, cameos while jobs run, show toasts on job and tool events, and something extra on most skins when context passes 85% and 95%.
+
+<details>
+<summary>Spoilers: hidden skins</summary>
+<br>
+
+Hidden skins are not in the gallery, the picker or `/skin` until you wear one.
+
+| Hidden skin | How to find it | Needs |
+|---|---|---|
+| Red John | type `tyger tyger` on The Mentalist, or `/skin red-john` | Core |
+| Heisenberg | type `say my name` (or `what's my name`) on Breaking Bad, or `/skin heisenberg` | Core |
+| GENE | type `takavic` on Better Call Saul, or `/skin gene` (`saul goodman` goes back) | Core |
+| CAPRI (Edgerunners 2's CAPRI mode) | type `capri` or `0+2=1` on Edgerunners 2, answer one of Capri's takeovers with `hi capri` within a minute, or `/skin capricorn`; `bye capri` goes back | Cyberpunk add-on |
+| SAMURAI | `/skin samurai` only (no typed word) | Cyberpunk add-on |
+
+The Saul words also work on GENE.
 
 </details>
 
@@ -346,6 +397,7 @@ Expand-Archive -Force "$env:USERPROFILE\Downloads\cyberpunk-skins-addon.zip" -De
 | `/skin` | `/skin` to list, `/skin <id>` to switch, `/skin off`, `/skin reload` |
 | `/autocrew` | Crew mode: state, `on` (big jobs only), `always` (every job, small ones too), `off`, or `<context %>` to call the crew |
 | `/tokens` | Token Manager report, `budget <dollars\|off>`, `autopilot <on\|off>`, `warm <on\|off>` (Smart Keep-Warm), `staffing <on\|off>` (cheapest model and effort per crew job), `brain <on\|off>` (🧠 Staffing brain, on by default: the Manager picks each worker's model and effort with a one-line why, shown on its card; a model or effort you name in your prompt wins, e.g. "opus, max effort"; Fable only when you ask for it; never lowered by role; with nothing picked the plan's tier fills it in, as the pane shows it (heavy: Opus · xhigh, careful: Opus · high, medium: Opus · medium, light: Opus · low, fable: Fable · high, Opus unless you name Fable), else Smart staffing's read when Smart staffing is on; a model you name counts only next to an ask ("use opus", "run it on sonnet", "opus, max effort"), not in a question or complaint; off passes the Agent call through untouched; `guardrails` is the old name and still works), `ultra <manager\|me\|add\|remove\|list\|off> [role]` (max effort and a deep check for a role; the card shows "max + Ultra"; `manager` lets the Manager flag the tasks that need it, `me` is the default), `spend today\|week\|month [YYYY-MM]\|<from> <to>`, `export [period]` (CSV in Downloads), `daily <dollars\|off>` (a soft daily cap), `receipt` (the job's markdown receipt, copied), `pr` (a PR cost badge, copied), `whatif` (this session re-priced under cheaper setups; Tab takes the best one's command), `rescue [retry\|nudge <n\|all>]` (quiet agents), `model <id or ARN> <opus\|sonnet\|haiku\|fable\|off>` (price a Bedrock application inference profile ARN, or any id with no model name, as that model; no args lists the map) |
+| `/timekeeper` | Time budgets: state, `on\|off`, `job <minutes>`, `agent <minutes>` |
 | `/prefs` | How Claude should answer you, in every session: `add <rule>`, `remove <n>`, `clear` |
 
 ---
@@ -356,7 +408,9 @@ Expand-Archive -Force "$env:USERPROFILE\Downloads\cyberpunk-skins-addon.zip" -De
 
 - `hooks/register.tsx`: hooks, UI and commands
 - `hooks/cast.ts`: the pixel casts
-- `hooks/eggs.ts`: the easter eggs
+- `hooks/eggs.ts` and the per-skin files (`invincible-eggs.ts`, `bettercallsaul-fx.ts`, …): the easter eggs
+- `hooks/settingslook.ts`, `hooks/skinslook.ts`: the Settings cards' and Skins gallery's look
+- `hooks/staffing-brain.ts`: the Staffing brain
 - `hooks/richtext.ts`: diffs, tables, math and mermaid in replies
 - `hooks/warm.ts`: Smart Keep-Warm's arithmetic (when a refresh pays)
 - `hooks/billing.ts` and `scripts/anthropic-key-helper.sh`: the API key in the macOS Keychain and the `apiKeyHelper` link ([docs/SECURITY-billing.md](docs/SECURITY-billing.md))

@@ -33,7 +33,7 @@ export const MARKS: Badge[] = [
   { id: 'netrunner', name: 'HUNDRED HANDS', icon: '|', how: 'Call 100 sub-agents', progress: c => share(c.agents, 100) },
   { id: 'crewboss', name: 'FULL CREW', icon: '|', how: 'A job with 5+ sub-agents', progress: c => share(c.crewJobs, 1) },
   { id: 'chromed', name: 'OFF THE SCALE', icon: '|', how: 'Push the context past 90 %', progress: c => (c.chromed ? 1 : 0) },
-  { id: 'owl', name: 'NIGHT SHIFT', icon: '|', how: 'Finish a job after midnight', progress: c => share(c.nightJobs, 1) },
+  { id: 'owl', name: 'NIGHT SHIFT', icon: '|', how: 'Finish a job between midnight and 5 am', progress: c => share(c.nightJobs, 1) },
   { id: 'samurai', name: 'CALIBRATED', icon: '|', how: 'Keep exploring.', progress: c => (c.samurai ? 1 : 0) },
 ]
 export const CAL_CRED_WORDS: CredWords = { badges: MARKS, cases: 'JOBS', long: 'LONG JOBS', all: 'EVERY MARK EARNED. CALIBRATED.' }

@@ -159,6 +159,8 @@ export type ThemeEggs = {
     gauge: (xr: number, y: number, isWorking: boolean, done: number, total: number, t: ThemeColors, font: string, ctx?: ThemeCtx) => { svg: string; w: number }
     /** The strip along the foot, with the hidden corner egg. */
     foot: (W: number, H: number, t: ThemeColors, ctx: ThemeCtx) => string
+    /** The theme's `name` already draws the session total ("Total $1.23") in its own hand, so the band leaves out its generic TOTAL readout. */
+    ownsTotal?: boolean
     /** The header's name in the theme's own hand (a paper label, a patch, a line of identity), in place of the plain label; `w` is what it takes. */
     name?: (x: number, y: number, W: number, t: ThemeColors, font: string, ctx?: ThemeCtx) => { svg: string; w: number }
     /** The episode in place of the plain text: its width, and it drawn right-aligned at `xr`; `full` shows the title, else only the code. */
@@ -359,6 +361,7 @@ const saulTheme = (gene: boolean): ThemeEggs => ({
     sw: sansW,
     head: () => ({ svg: '', w: 0 }),
     name: (x, y, W, _t, _f, ctx) => bcsName(x, y, W, gene, ctx?.totalUsd ?? 0),
+    ownsTotal: true,
     ep: { w: bcsEpW, draw: (xr, y, code, title, full) => bcsEp(xr, y, code, title, full, gene) },
     tear: (x, y, w, pct, _t, ctx) => bcsTear(x, y, w, pct, ctx?.ctxPct ?? 0, gene),
     figure: ctx => zoomWrap(bcsFigure(gene), ctx?.fx as Fx | undefined, ctx?.at ?? 0),

@@ -200,7 +200,7 @@ export const ELEMENTS: Record<string, [string, string, string, string]> = {
   netrunner: ['Na', '11', 'THE ORGANIZATION', 'Call 100 sub-agents'],
   crewboss: ['Fe', '26', 'HAZMAT CREW', 'Run a batch with 5+ sub-agents'],
   chromed: ['Cl', '17', 'NO HALF MEASURES', 'Push the context past 90%'],
-  owl: ['Si', '14', 'NIGHT SHIFT', 'Finish a batch after midnight'],
+  owl: ['Si', '14', 'NIGHT SHIFT', 'Finish a batch between midnight and 5 am'],
   samurai: ['He', '2', 'SAY MY NAME', 'Keep exploring.'],
 }
 export const EMPIRE_BADGES: Badge[] = BADGES.map(b => {

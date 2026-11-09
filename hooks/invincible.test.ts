@@ -5,7 +5,7 @@ import { CASTS } from './cast'
 import type { Sprite } from './cast'
 import { BADGES, RANKS, VERBS, coverCard, coverHeight, pageCard, rankOf, tierOf, wallCard } from './invincible-cards'
 import { ACT_LEN, ACT_OFF, BAND_CUT, FIGHT_CSS, FIGHT_MS, FIGHT_PANE_RESERVE, FRAME_KEYS, chainOfAct, fightAct, fightBand, frameSprite } from './invincible-fight'
-import { CAMEO_CSS, CAM_JITTER_MS, CAM_SLOT_MS, CECIL_LINES, DUR_MS, EVE_LINE, OLIVER_LINE, camBlocked, camDue, camExtras, camPlanOfSlot } from './invincible-cameos'
+import { CAMEO_CSS, CAM_JITTER_MS, CAM_SLOT_MS, CECIL_LINES, DUR_MS, EVE_LINE, OLIVER_LINE, camBlocked, camDue, camExtras, camPlanOfSlot, camReplay } from './invincible-cameos'
 import type { CamPlan } from './invincible-cameos'
 import { AHEAD_MS, CLASSIC_RE, DUEL_MS, GUARDIANS_RE, NEW_SUIT_RE, SHOWDOWN_MS, SWAP_MS, THINK_RE, VARIANTS_MS, VARIANTS_RE, VARIANTS_SOLO_RE, duelPlan, fightDue, isVariantsAsk, opOnly, showdown, showdownDue, showdownPlan, slotPlan, variantsDue, variantsPlan } from './invincible-eggs'
 import { VARIANTS_CSS, variants } from './invincible-variants'
@@ -1008,6 +1008,64 @@ test('skins: Invincible is one entry in the picker, ships in the core edition, a
   const r = String(((await $.command.run({ command: 'skin', args: 'invincible' } as never)) as { text?: string }).text)
   expect(r).toContain('Skin: Invincible')
 })
+
+// --- the unlisted replay: /missioncontrol play <egg> --------------------------------------------------------------------
+const play = async ($: Engine, egg: string) => String(((await $.command.run({ command: 'missioncontrol', args: `play ${egg}` } as never)) as { text?: string }).text)
+const allSvg = async ($: Engine) => (await bandAt($, 1250, false)) + (await svgs($, 'Pane')).join('')
+
+test('replay: refused unless Invincible is worn', async ($, on) => {
+  base(on, 100_000, quietAt())
+  await start($, 'mentalist')
+  expect(await play($, 'fight')).toBe('Wear the Invincible skin first.')
+})
+
+/** A quiet moment (no fight, no showdown) with no cameo due either. */
+const calmAt = (from: number): number => {
+  for (let t = quietAt(1, from); ; t = quietAt(1, t + 61_000)) if (!camDue(t) && !camDue(t + 2 * AHEAD_MS) && !camDue(t + 30_000)) return t
+}
+
+test('replay: every egg draws now, with no job working', async ($, on) => {
+  let now = calmAt(NOW)
+  const clock = base(on, 100_000, now)
+  await start($, 'invincible')
+  const marks: Record<string, string> = { fight: 'dl-c', showdown: 'sd-anim', think: 'THINK, MARK.', eve: 'data-cam="eve"', oliver: 'data-cam="oliver"', cecil: 'data-cam="cecil"' }
+  for (const [egg, mark] of Object.entries(marks)) {
+    const next = calmAt(now + 10 * 60_000)
+    await clock.advance(next - now)
+    now = next
+    expect(`${egg} before:${(await allSvg($)).includes(mark)}`).toBe(`${egg} before:false`)
+    expect(await play($, egg)).toBe(`▶ ${egg}`)
+    expect(`${egg}:${(await allSvg($)).includes(mark)}`).toBe(`${egg}:true`)
+  }
+  await clock.advance(60_000)
+  expect(await play($, 'newsuit')).toBe('▶ newsuit')
+  expect((await allSvg($)).includes('sw-still')).toBe(true)
+  expect(await play($, 'newsuit')).toBe('Already in the new suit.')
+  await clock.advance(60_000)
+  expect(await play($, 'classic')).toBe('▶ classic')
+  expect(await play($, 'nope')).toContain('Play which?')
+})
+
+test('replay: a fight replay draws in its own time and ends on its own', async ($, on) => {
+  const clock = base(on, 100_000, quietAt())
+  await start($, 'invincible')
+  expect((await allSvg($)).includes('dl-c')).toBe(false)
+  await play($, 'fight')
+  expect((await allSvg($)).includes('dl-c')).toBe(true)
+  await clock.advance(FIGHT_MS + 5000)
+  expect((await bandAt($, 1250, false)).includes('dl-c')).toBe(false)
+})
+
+test('replay: play think has Omni-Man drop in on the band for 3 s, ending on its own', async ($, on) => {
+  const clock = base(on, 100_000, calmAt(NOW))
+  await start($, 'invincible')
+  expect(await bandAt($, 1250, false)).not.toContain('THINK, MARK.')
+  expect(await play($, 'think')).toBe('▶ think')
+  expect(await bandAt($, 1250, false)).toContain('THINK, MARK.')
+  await clock.advance(4_500)
+  expect(await bandAt($, 1250, false)).not.toContain('THINK, MARK.')
+})
+
 // --- THE MULTIVERSE: Angstrom's rifts and the flock of other-universe Marks ------------------------------------------------
 const EGG = 'data-egg="variants"'
 /** The act's one pinned delay in seconds (the shared class rule), or NaN when the egg is not in the source. */
