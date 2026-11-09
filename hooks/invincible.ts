@@ -9,16 +9,25 @@ import { pin } from './smooth'
 
 export { SP, pin }
 export type Era = 1 | 2
+// Era 1: the classic suit (S1-S2). Chin's ask: the whole interface wears the suit's light blue, the yellow as its accents, ink
+// type on top (body text 13:1, the quietest text 5.8:1 on the tile). Yellow never carries text on the light tile: it fills the
+// caption boxes, the chip, the done pips and the bars, and `heroT` (the suit's deep blue) carries the words and thin lines.
 export const ERA1 = {
-  tile: '#0E1322', tile2: '#151C30', line: '#273354', track: '#1A2340',
-  a: '#3D7FE0', aT: '#8FC0FF', hero: '#F5C518', heroInk: '#0B0D14', text: '#F3F5FA', sub: '#B9C3D8', muted: '#8C98B3',
-  done: '#7FD39A', warn: '#F5C518', alert: '#E8453C', name: 'classic', season: 'S1',
+  light: true, tile: '#C9E6FB', tile2: '#B3DBF8', line: '#7FB6E6', track: '#A6D1F3',
+  a: '#1A5FB8', aT: '#0B4A9E', hero: '#F5C518', heroInk: '#0B0D14', heroT: '#123E8C', text: '#0B1A33', sub: '#24395E', muted: '#3E5578',
+  done: '#176B36', warn: '#7A5000', alert: '#A3221B', name: 'classic', season: 'S1',
+  bg: '#AED6F4', dots: 'rgba(11,13,20,.07)',
+  roles: ['#0B4A9E', '#176B36', '#7A5000', '#9C2B63', '#A3221B', '#5B3FA0'],
+  boss: ['#1A5FB8', '#F5C518', '#0B0D14', '#C9E6FB', '#1A5FB8'],
 }
-// Era 2: the new suit. Light blue and platinum on black.
+// Era 2: the new suit (S3). Light blue and platinum on black.
 export const ERA2 = {
-  tile: '#0A0B10', tile2: '#13151C', line: '#262B36', track: '#181B24',
-  a: '#3F8FE0', aT: '#8BC6FF', hero: '#6FB4F5', heroInk: '#07090E', text: '#F4F6FA', sub: '#B6BFCC', muted: '#8893A6',
+  light: false, tile: '#0A0B10', tile2: '#13151C', line: '#262B36', track: '#181B24',
+  a: '#3F8FE0', aT: '#8BC6FF', hero: '#6FB4F5', heroInk: '#07090E', heroT: '#6FB4F5', text: '#F4F6FA', sub: '#B6BFCC', muted: '#8893A6',
   done: '#7FD39A', warn: '#F5C518', alert: '#E8453C', name: 'new suit', season: 'S3',
+  bg: '#090C18', dots: 'rgba(245,197,24,.05)',
+  roles: ['#8FC0FF', '#7FD39A', '#F5C518', '#F28CB1', '#E8453C', '#B39DDB'],
+  boss: ['#3D7FE0', '#F5C518', '#0B0D14', '#F3F5FA', '#3D7FE0'],
 }
 export const pal = (era: any): Record<string, any> => (era === 2 ? ERA2 : ERA1)
 // Props keep their own colours in both eras.
@@ -217,16 +226,17 @@ export const flightBar = (x: any, y: any, w: any, pct: any, era: any, o: any = {
   const fx = x + (w - 14) * p
   const sp = era === 2 ? SP.INV_MARK_S3_FLY : SP.INV_MARK_FLY
   let s = `<line x1="${r1(x)}" y1="${y + 3}" x2="${r1(x + w)}" y2="${y + 3}" stroke="${P.track}" stroke-width="2" stroke-dasharray="2 3"/>`
+  if (P.light) s += `<line x1="${r1(x)}" y1="${y + 3}" x2="${r1(fx)}" y2="${y + 3}" stroke="${PROPS.ink}" stroke-width="4"/>`
   s += `<line x1="${r1(x)}" y1="${y + 3}" x2="${r1(fx)}" y2="${y + 3}" stroke="${o.near ? P.alert : P.hero}" stroke-width="2"/>`
   s += `<circle cx="${r1(x + w - 2)}" cy="${y + 3}" r="3.5" fill="none" stroke="${p >= 1 ? P.done : P.muted}" stroke-width="1.2"/>${p >= 1 ? `<circle cx="${r1(x + w - 2)}" cy="${y + 3}" r="1.5" fill="${P.done}"/>` : ''}`
-  if (pct > 0 || o.working) s += speedLines(fx - 2, y + 3, 10, 3, 1, P.hero, { op: 0.6, gap: 3 }) + px(sp, fx - 2, y - 1.5, 0.55, { cls: o.working ? 'inv-bob' : '' })
+  if (pct > 0 || o.working) s += speedLines(fx - 2, y + 3, 10, 3, 1, P.heroT, { op: 0.6, gap: 3 }) + px(sp, fx - 2, y - 1.5, 0.55, { cls: o.working ? 'inv-bob' : '' })
   return s
 }
 /** A step pip: comic panels. done = ink panel with a hero star; running = outline with a pulsing core; todo = outline; failed = red X; stopped = faint. */
 export const pip = (st: any, cx: any, cy: any, era: any) => {
   const P = pal(era)
   const box = (fill: any, stroke: any, op: any = 1) => `<rect x="${r1(cx - 4.5)}" y="${r1(cy - 4.5)}" width="9" height="9" fill="${fill}" stroke="${stroke}" stroke-width="1.2" opacity="${op}"/>`
-  if (st === 'done') return `${box(P.hero, P.hero)}${star(cx, cy, 3, P.heroInk)}`
+  if (st === 'done') return `${box(P.hero, P.light ? PROPS.ink : P.hero)}${star(cx, cy, 3, P.heroInk)}`
   if (st === 'running') return `${box('none', P.aT)}<rect class="inv-run" x="${r1(cx - 2)}" y="${r1(cy - 2)}" width="4" height="4" fill="${P.aT}"/>`
   if (st === 'failed') return `${box('none', P.alert)}<path d="M${r1(cx - 2.5)} ${r1(cy - 2.5)}l5 5M${r1(cx + 2.5)} ${r1(cy - 2.5)}l-5 5" stroke="${P.alert}" stroke-width="1.4"/>`
   if (st === 'stopped') return box('none', P.muted, 0.5)
@@ -296,8 +306,8 @@ export const gauge = (xr: any, y: any, isWorking: any, done: any, total: any, er
   const w = 16 + lw + 7 + cw
   const x = xr - w
   const sp = era === 2 ? SP.INV_MARK_S3_FLY : SP.INV_MARK_FLY
-  let s = isWorking ? speedLines(x + 3, y - 5, 8, 3, 1, P.hero, { op: 0.5, gap: 3 }) + px(sp, x + 1, y - 9, 0.55, { cls: 'inv-bob' }) : burger(x + 1, y - 9)
-  s += T(x + 16, y, label, 9.5, 700, isWorking ? P.hero : P.muted, 'letter-spacing=".8"')
+  let s = isWorking ? speedLines(x + 3, y - 5, 8, 3, 1, P.heroT, { op: 0.5, gap: 3 }) + px(sp, x + 1, y - 9, 0.55, { cls: 'inv-bob' }) : burger(x + 1, y - 9)
+  s += T(x + 16, y, label, 9.5, 700, isWorking ? P.heroT : P.muted, 'letter-spacing=".8"')
   s += T(x + 16 + lw + 7, y, count, 13, 700, P.text, 'font-variant-numeric="tabular-nums"')
   return { svg: s, w }
 }

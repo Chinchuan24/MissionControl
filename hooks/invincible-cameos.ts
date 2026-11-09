@@ -237,7 +237,7 @@ const oliverDash = (c: Ctx): string => {
   c.css += mover(`${c.id}m`, frames)
   const bub = p.bubble ? bubble(0, 0, p.line, 'down', { size: 9.5, tailAt: 14 }) : undefined
   const bubSvg = bub ? `<g transform="translate(${-14} ${-42 - bub.h - 4})" ${shown(c, `${c.id}b`, 0.5, D - 0.5)}>${bub.svg}</g>` : ''
-  const body = `<g class="cm-c" ${run(c, `${c.id}mr`)}><circle cy="-21" r="17" fill="${PROPS.skyLight}" fill-opacity=".25"/>${speedLines(-p.dir * 5, -20, 26, 4, p.dir, P.hero as string, { gap: 6, op: 0.85 })}<use href="#${c.id}o"/></g>`
+  const body = `<g class="cm-c" ${run(c, `${c.id}mr`)}><circle cy="-21" r="17" fill="${PROPS.skyLight}" fill-opacity=".25"/>${speedLines(-p.dir * 5, -20, 26, 4, p.dir, P.heroT as string, { gap: 6, op: 0.85 })}<use href="#${c.id}o"/></g>`
   const act = `<g class="cm-anim"><g ${run(c, `${c.id}m`)}>${body}${bubSvg}</g></g>`
   const still = stillWrap(c, `<g opacity=".5" transform="translate(${r1(W * (0.25 + 0.5 * p.x))} ${H - 8})"><use href="#${c.id}o"/>${bub ? `<g transform="translate(-14 ${-42 - bub.h - 4})">${bub.svg}</g>` : ''}</g>`)
   return frag(c, oliverDefs(c, 1), `${act}${still}`)
@@ -306,7 +306,7 @@ const recTag = (c: Ctx): string => {
   const P = pal(era)
   const x = W - 104
   c.css += kf(`${c.id}r`, [[0, 'opacity:0'], [t(0.2), 'opacity:0'], [t(0.25), 'opacity:1'], [t(0.4), 'opacity:.3'], [t(0.5), 'opacity:1'], [t(D - 0.3), 'opacity:1'], [t(D - 0.2), 'opacity:0'], [100, 'opacity:0']])
-  const tag = (still: boolean): string => `<rect x="${x}" y="2" width="68" height="12" fill="${P.tile2}" stroke="${PROPS.gda}" stroke-width="1"/>${M(x + 5, 10.8, 'GDA', 7.5, PROPS.screenGreen, 'letter-spacing=".6" font-weight="700"')}<circle ${still ? '' : 'class="cm-blink"'} cx="${x + 35}" cy="8" r="2.4" fill="${P.alert}"/>${M(x + 41, 10.8, 'REC', 7.5, PROPS.screenText, 'letter-spacing=".6"')}<title>GDA feed: recording</title>`
+  const tag = (still: boolean): string => `<rect x="${x}" y="2" width="68" height="12" fill="${PROPS.screen}" stroke="${PROPS.gda}" stroke-width="1"/>${M(x + 5, 10.8, 'GDA', 7.5, PROPS.screenGreen, 'letter-spacing=".6" font-weight="700"')}<circle ${still ? '' : 'class="cm-blink"'} cx="${x + 35}" cy="8" r="2.4" fill="${P.alert}"/>${M(x + 41, 10.8, 'REC', 7.5, PROPS.screenText, 'letter-spacing=".6"')}<title>GDA feed: recording</title>`
   return frag(c, '', `<g class="cm-anim"><g ${run(c, `${c.id}r`, 'steps(1)')}>${tag(false)}</g></g>${stillWrap(c, `<g opacity=".7">${tag(true)}</g>`)}`)
 }
 

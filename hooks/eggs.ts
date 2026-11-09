@@ -30,7 +30,7 @@ const COLORS: Record<Egg, EggColors> = {
   edgerunners2: { a: '#FD0250', b: '#E9E6D8', c: '#3E80F7', text: '#F1EEE4', dim: '#968B90', bg: '#0A0709' },
   bettercallsaul: { a: '#5B8FD6', b: '#E6C35C', c: '#D7262C', text: '#F5EEE2', dim: '#9C8C79', bg: '#1A1410' },
   gene: { a: '#9A9A9A', b: '#E4E4E4', c: '#C9C9C9', text: '#F2F2F2', dim: '#8E8E8E', bg: '#121212' },
-  invincible: { a: '#3D7FE0', b: '#F5C518', c: '#8FC0FF', text: '#F3F5FA', dim: '#8C98B3', bg: '#0E1322' },
+  invincible: { a: '#1A5FB8', b: '#F5C518', c: '#0B4A9E', text: '#0B1A33', dim: '#3E5578', bg: '#C9E6FB' },
   invincible2: { a: '#3F8FE0', b: '#6FB4F5', c: '#8BC6FF', text: '#F4F6FA', dim: '#8893A6', bg: '#0A0B10' },
   caliper: { a: '#5AA9FF', b: '#AAB2BC', c: '#ECEEF0', text: '#ECEEF0', dim: '#8A93A0', bg: '#15181B' },
   caliperlight: { a: '#1F6FE0', b: '#50575F', c: '#1A1D21', text: '#1A1D21', dim: '#646C75', bg: '#FFFFFF' },
