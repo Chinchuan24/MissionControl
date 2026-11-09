@@ -1805,12 +1805,13 @@ const GENE_SKIN: Skin = {
   tabs: { mission: '⚖\uFE0E Mission Control', skins: '⚖\uFE0E Skins' },
 }
 
-// Invincible (fan homage): the comic page that became the show. Ink navy and suit yellow (era 1, the classic suit); `new suit` puts on
-// the S3 palette (black and light blue) in place, as Edgerunners 2 switches its modes. Invincible and its characters belong to
+// Invincible (fan homage): the comic page that became the show. Era 1 (the classic suit) wears the suit's sky blue with yellow
+// accents and dark navy type, the whole interface; `new suit` puts on the S3 palette (black and light blue) in place, as Edgerunners 2
+// switches its modes. `dark: true` in both eras so the era's own colours always paint (the way Caliper's light face does). Invincible and its characters belong to
 // Robert Kirkman, Cory Walker, Ryan Ottley, Image Comics, Skybound and Amazon MGM Studios, used as fan homage only.
 const invColors = (era: 1 | 2): SkinColors => {
   const P = era === 2 ? ERA2 : ERA1
-  return { accent: P.a, accent2: P.hero, done: P.done, warn: P.warn, alert: P.alert, meter: P.a, text: P.text, subtext: P.sub, muted: P.muted, tile: P.tile, track: P.track, line: P.line, grid: P.tile2 }
+  return { accent: P.a, accent2: P.heroT, done: P.done, warn: P.warn, alert: P.alert, meter: P.a, text: P.text, subtext: P.sub, muted: P.muted, tile: P.tile, track: P.track, line: P.line, grid: P.tile2 }
 }
 const INVINCIBLE_SKIN: Skin = {
   id: 'invincible',
@@ -1821,13 +1822,13 @@ const INVINCIBLE_SKIN: Skin = {
   corners: 'round',
   dark: true,
   colors: invColors(1),
-  boss: ['#3D7FE0', '#F5C518', '#0B0D14', '#F3F5FA', '#3D7FE0'],
-  roles: ['#8FC0FF', '#7FD39A', '#F5C518', '#F28CB1', '#E8453C', '#B39DDB'],
+  boss: [...ERA1.boss],
+  roles: [...ERA1.roles],
   effects: { scanlines: false, glitch: false },
   chat: true,
   words: INV_WORDS,
   toolWords: INV_VERBS,
-  backdrop: { fill: '#090C18', pattern: 'dots', ink: 'rgba(245,197,24,.05)' },
+  backdrop: { fill: ERA1.bg, pattern: 'dots', ink: ERA1.dots },
   tabs: { mission: '★\uFE0E Mission Control', skins: '★\uFE0E Skins' },
 }
 
@@ -2378,7 +2379,8 @@ function applySkin(k: Skin): void {
   }
   // Invincible's second era: the new suit's palette and cast, the same skin.
   if (k.id === 'invincible') {
-    k = INV_ERA.era === 2 ? { ...k, cast: 'invincible2', colors: invColors(2) } : { ...k, cast: 'invincible', colors: invColors(1) }
+    const P = INV_ERA.era === 2 ? ERA2 : ERA1
+    k = { ...k, cast: INV_ERA.era === 2 ? 'invincible2' : 'invincible', colors: invColors(INV_ERA.era), boss: [...P.boss], roles: [...P.roles], backdrop: { fill: P.bg, pattern: 'dots', ink: P.dots } }
   }
   // Caliper's face: dark, light, or the app's (auto).
   if (k.id === 'caliper') {

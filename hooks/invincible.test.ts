@@ -10,7 +10,7 @@ import type { CamPlan } from './invincible-cameos'
 import { AHEAD_MS, CLASSIC_RE, DUEL_MS, GUARDIANS_RE, NEW_SUIT_RE, SHOWDOWN_MS, SWAP_MS, THINK_RE, VARIANTS_MS, VARIANTS_RE, VARIANTS_SOLO_RE, duelPlan, fightDue, isVariantsAsk, opOnly, showdown, showdownDue, showdownPlan, slotPlan, variantsDue, variantsPlan } from './invincible-eggs'
 import { VARIANTS_CSS, variants } from './invincible-variants'
 import * as VS from './invincible-variants-sprites'
-import { CSS, EPISODES, ERA1, ERA2, PROPS, SP, TITLE_WORDS, condW, contrast, episodeAt, monoW, sansW, unit as unitOf } from './invincible'
+import { CSS, EPISODES, ERA1, ERA2, PROPS, SP, TITLE_WORDS, condW, contrast, episodeAt, lum, monoW, sansW, unit as unitOf } from './invincible'
 import { THEMES } from './themes'
 
 const pane = { title: '', isFocused: false, bodyColumns: 100, placement: 'dock', scroll: { offset: 0, bodyRows: 60 }, view: {} } as const
@@ -227,6 +227,57 @@ test('eras: "new suit" puts on the blue-and-black suit with the swap, "classic s
   await clock.advance(3_000)
   await $.prompt.submit({ text: 'new suit or classic suit', cursor: 0 } as never)
   expect(await bandAt($, 1250)).not.toContain('class="sw-anim"')
+})
+test('eras: the classic suit paints the whole interface sky blue with yellow accents; the new suit keeps its black and blue', () => {
+  // Era 1: Mark's sky blue on every surface: saturated (blue well above red, never a pastel), mid-bright, the layers a step apart.
+  for (const k of ['tile', 'tile2', 'bg'] as const) {
+    const [r, g, b] = [1, 3, 5].map(i => parseInt(ERA1[k].slice(i, i + 2), 16)) as [number, number, number]
+    expect(b).toBeGreaterThan(g)
+    expect(g).toBeGreaterThan(r)
+    expect(b - r).toBeGreaterThanOrEqual(150)
+    expect(r).toBeLessThan(0x60)
+    expect(lum(ERA1[k])).toBeGreaterThan(0.25)
+    expect(lum(ERA1[k])).toBeLessThan(0.45)
+  }
+  expect(lum(ERA1.tile2)).toBeLessThan(lum(ERA1.tile))
+  expect(lum(ERA1.bg)).toBeLessThan(lum(ERA1.tile2))
+  expect(ERA1.light).toBe(true)
+  expect(ERA1.hero).toBe('#F5C518')
+  expect(contrast(ERA1.heroInk, ERA1.hero)).toBeGreaterThanOrEqual(7)
+  expect(lum(ERA1.text)).toBeLessThan(0.01)
+  expect(contrast(ERA1.text, ERA1.tile)).toBeGreaterThanOrEqual(7)
+  // Era 2: unchanged, dark.
+  expect(ERA2.light).toBe(false)
+  expect(ERA2.tile).toBe('#0A0B10')
+  expect(ERA2.hero).toBe('#6FB4F5')
+  expect(ERA2.bg).toBe('#090C18')
+  for (const k of ['tile', 'tile2', 'track', 'line', 'bg'] as const) expect(lum(ERA2[k])).toBeLessThan(0.05)
+})
+test('eras: the classic suit wears the sky palette on the band and the pane, the new suit the dark one', async ($, on) => {
+  const clock = base(on, 100_000, quietAt())
+  await start($, 'invincible')
+  await jobIn($)
+  const b1 = await bandAt($, 1250)
+  expect(b1).toContain(ERA1.tile)
+  expect(b1).not.toContain(ERA2.tile)
+  const ui1 = await $.ui.mount({ plugin: 'crab-progress', surface: 'desktop', component: 'Pane', requestId: 'crab-agents', props: pane })
+  expect(JSON.stringify(await ui1.drawn())).toContain(`"backgroundColor":"${ERA1.bg}"`)
+  const p1 = (await ui1.findAll({ type: 'Svg' })).map(el => String(el.props.source)).join('')
+  await ui1.unmount()
+  expect(p1).toContain(ERA1.tile)
+  expect(p1).toContain(ERA1.heroT)
+  expect(p1).not.toContain(ERA2.tile)
+  await $.prompt.submit({ text: 'new suit', cursor: 0 } as never)
+  await clock.advance(3_000)
+  const b2 = await bandAt($, 1250)
+  expect(b2).toContain(ERA2.tile)
+  expect(b2).not.toContain(ERA1.tile)
+  const ui2 = await $.ui.mount({ plugin: 'crab-progress', surface: 'desktop', component: 'Pane', requestId: 'crab-agents', props: pane })
+  expect(JSON.stringify(await ui2.drawn())).toContain(`"backgroundColor":"${ERA2.bg}"`)
+  await ui2.unmount()
+  await $.prompt.submit({ text: 'classic suit', cursor: 0 } as never)
+  await clock.advance(3_000)
+  expect(await bandAt($, 1250)).toContain(ERA1.tile)
 })
 test('eras: era 2 draws its own palette, its own cast key and the NEW SUIT patch', async ($, on) => {
   base(on, 100_000, quietAt(2))
@@ -506,7 +557,13 @@ for (const era of [1, 2] as const) {
   }
 }
 test('contrast: every text colour reads at 4.5:1 or better on its tile, in both eras', () => {
-  for (const P of [ERA1, ERA2]) for (const fg of [P.text, P.sub, P.muted, P.aT, P.hero, P.done, P.warn, P.alert]) expect(contrast(fg, P.tile)).toBeGreaterThanOrEqual(4.5)
+  // `heroT` carries the hero's words; in era 1 the yellow `hero` only fills boxes and bars (ink type on it), never text on the tile.
+  for (const P of [ERA1, ERA2]) for (const fg of [P.text, P.sub, P.muted, P.aT, P.heroT, P.done, P.warn, P.alert]) {
+    expect(contrast(fg, P.tile)).toBeGreaterThanOrEqual(4.5)
+    expect(contrast(fg, P.tile2)).toBeGreaterThanOrEqual(4.5)
+  }
+  expect(contrast(ERA2.hero, ERA2.tile)).toBeGreaterThanOrEqual(4.5)
+  for (const role of ERA1.roles) expect(contrast(role, ERA1.tile)).toBeGreaterThanOrEqual(4.5)
   expect(contrast(ERA1.heroInk, ERA1.hero)).toBeGreaterThanOrEqual(4.5)
   expect(contrast(ERA2.heroInk, ERA2.hero)).toBeGreaterThanOrEqual(4.5)
   expect(contrast('#FFFFFF', PROPS.red as string)).toBeGreaterThanOrEqual(4.5)

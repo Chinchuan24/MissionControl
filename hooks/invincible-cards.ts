@@ -8,7 +8,7 @@ import { nextOf, veil } from './extras'
 export const svgOpen = (W: any, H: any) => `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="font-variant-numeric:tabular-nums"><style>${CSS}</style>`
 export const frame = (W: any, H: any, P: any) => `<rect x=".5" y=".5" width="${W - 1}" height="${H - 1}" rx="10" fill="${P.tile}" stroke="${P.line}"/>`
 /** A card title: a 3 x 13 bar in the hero colour, then condensed caps 13/800 ls 1.5. */
-export const cardTitle = (x: any, y: any, text: any, P: any) => `<rect x="${x}" y="${y - 11}" width="3" height="13" fill="${P.hero}"/>${C(x + 9, y, text, 13, P.text, 'letter-spacing="1.5"')}`
+export const cardTitle = (x: any, y: any, text: any, P: any) => `<rect x="${x}" y="${y - 11}" width="3" height="13" fill="${P.hero}"${P.light ? ` stroke="${PROPS.ink}" stroke-width=".8"` : ''}/>${C(x + 9, y, text, 13, P.text, 'letter-spacing="1.5"')}`
 
 // ---------------------------------------------------------------- the ladder, the patches
 export const RANKS: [number, string][] = [[20, 'Invincible, Full Stop'], [12, "Grand Regent's Headache"], [10, 'Viltrumite-Level'], [8, 'Half-Viltrumite'], [7, 'Coalition of Planets'], [6, 'GDA Asset'], [5, 'Guardian of the Globe'], [4, 'Invincible'], [3, 'Teen Team'], [2, 'Rookie Cape'], [1, 'Burger Mart Cashier']]
@@ -49,7 +49,7 @@ export const patch = (x: any, y: any, b: any, i: any, earned: any, pctDone: any,
     const ex = cx + Math.sin(a) * 13.5
     const ey = cy - Math.cos(a) * 13.5
     s += `<circle cx="${cx}" cy="${cy}" r="15" fill="${P.tile2}" stroke="${P.muted}" stroke-width="1" stroke-dasharray="3 2"/>`
-    if (pctDone > 0) s += `<path d="M${cx} ${cy - 13.5}A13.5 13.5 0 ${a > Math.PI ? 1 : 0} 1 ${r1(ex)} ${r1(ey)}" fill="none" stroke="${P.hero}" stroke-width="2"/>`
+    if (pctDone > 0) s += `<path d="M${cx} ${cy - 13.5}A13.5 13.5 0 ${a > Math.PI ? 1 : 0} 1 ${r1(ex)} ${r1(ey)}" fill="none" stroke="${P.heroT}" stroke-width="2"/>`
     s += `<text x="${cx}" y="${cy + 3.5}" font-family="${FONT}" font-size="9" font-weight="700" fill="${P.muted}" text-anchor="middle">${Math.round(pctDone * 100)}%</text>`
   }
   const lines = b.name.split(' ')
@@ -118,13 +118,13 @@ export const coverCard = (W: any, c: any, o: any = {}) => {
   s.push(Lb(cx, 60, 'RANK'))
   let rs = 19
   while (rs > 13 && condW(rank.toUpperCase(), rs, 0.5) > colW) rs -= 0.5
-  s.push(C(cx, 82, clipC(rank.toUpperCase(), rs, colW, 0.5), rs, P.hero, `letter-spacing=".5"${o.fresh ? ' class="inv-fresh"' : ''}`))
+  s.push(C(cx, 82, clipC(rank.toUpperCase(), rs, colW, 0.5), rs, P.heroT, `letter-spacing=".5"${o.fresh ? ' class="inv-fresh"' : ''}`))
   s.push(T(cx, 100, clip(`Issue #${level} · ${TIER_NAMES[tier]}`, 11.5, colW), 11.5, 400, P.sub))
   s.push(Lb(cx, 124, 'NEXT ISSUE'))
   // the threat gauge: a GDA bar with five ticks
   const gw = colW
   const pctL = share(c.xp - have, need - have)
-  s.push(`<rect x="${cx}" y="130" width="${gw}" height="6" fill="${P.track}"/><rect x="${cx}" y="130" width="${r1(gw * pctL)}" height="6" fill="${P.hero}"/>`)
+  s.push(`<rect x="${cx}" y="130" width="${gw}" height="6" fill="${P.track}"/><rect x="${cx}" y="130" width="${r1(gw * pctL)}" height="6" fill="${P.hero}"${P.light ? ` stroke="${PROPS.ink}" stroke-width=".8"` : ''}/>`)
   for (let i = 1; i < 5; i++) s.push(`<rect x="${r1(cx + (gw * i) / 5)}" y="129" width="1" height="8" fill="${P.tile}"/>`)
   s.push(`<text x="${cx}" y="153" font-family="${FONT}" font-size="11.5" fill="${P.sub}"><tspan font-size="13" font-weight="700" fill="${P.text}" font-variant-numeric="tabular-nums">${c.xp}</tspan> punches thrown · ${toNext} to #${level + 1}</text>`)
   s.push(T(cx, 171, clip(nxt ? `${nxt[0]} at #${nxt[1]}` : 'Top of the ladder.', 11.5, colW), 11.5, 400, P.muted, 'font-style="italic"'))
@@ -258,7 +258,7 @@ export const wallCard = (W: any, task: any, isWorking: any, done: any, total: an
   const s = [svgOpen(W, H), frame(W, H, P)]
   s.push(cardTitle(16, 26, 'GDA WALL', P))
   const status = isWorking ? 'LIVE FEED…' : task ? 'FEED CLOSED.' : 'STANDBY.'
-  s.push(M(16 + 9 + condW('GDA WALL', 13, 1.5) + 12, 26, status, 9, isWorking ? PROPS.screenGreen : P.muted, 'letter-spacing="1.2"'))
+  s.push(M(16 + 9 + condW('GDA WALL', 13, 1.5) + 12, 26, status, 9, isWorking ? (P.light ? P.done : PROPS.screenGreen) : P.muted, 'letter-spacing="1.2"'))
   if (W >= 440) s.push(T(W - 16, 26, 'Global Defense Agency', 11, 400, P.muted, 'text-anchor="end" font-style="italic"'))
   // the main monitor, Cecil watching it from the right
   const mx = 16
@@ -312,7 +312,7 @@ export const bootLine = (W: any, era: any, done: any = false) => {
   const P = pal(era)
   const sp = era === 2 ? SP.INV_MARK_S3_FLY : SP.INV_MARK_FLY
   let s = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="30" viewBox="0 0 ${W} 30"><style>${CSS}</style><rect x=".5" y=".5" width="${W - 1}" height="29" rx="8" fill="${P.tile}" stroke="${P.line}"/>`
-  s += speedLines(14, 15, 10, 3, 1, P.hero, { op: 0.6, gap: 3 }) + px(sp, 14, 9, 0.6, { cls: done ? '' : 'inv-bob' })
+  s += speedLines(14, 15, 10, 3, 1, P.heroT, { op: 0.6, gap: 3 }) + px(sp, 14, 9, 0.6, { cls: done ? '' : 'inv-bob' })
   s += T(36, 19, done ? 'FEED LIVE · Invincible.' : `${BOOT[0]}  ${BOOT[1]}`, 11.5, done ? 700 : 400, P.text)
   s += flightBar(W - 134, 12, 120, done ? 100 : 55, era, { working: !done })
   return `${s}</svg>`
