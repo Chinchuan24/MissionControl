@@ -61,9 +61,14 @@ export class Camera {
     return `animation-name:${sh.map(s => `sg-sh${s[1]}`).join(',')};animation-duration:${sh.map(s => `${r3(s[2])}s`).join(',')};animation-timing-function:steps(1);animation-fill-mode:none;animation-delay:${sh.map(s => `calc(${at} + ${r3(this.act.off + s[0])}s)`).join(',')}`
   }
 
-  /** The panel's content inside the camera. Returns `inner` untouched when the camera does nothing. */
-  wrap(inner: string): string {
-    if (this.isEmpty) return inner
+  /**
+   * The panel's content inside the camera. Returns `inner` untouched when the camera does nothing. `shake: false` leaves the
+   * shake out (zoom, pan and grade only): for a skin that zooms just its act layer and shakes the whole panel through its
+   * own wrapper (`shakeStyle()` + `SHAKE_CSS`), so a push never moves the panel's working numbers.
+   */
+  wrap(inner: string, o: { shake?: boolean } = {}): string {
+    const shake = o.shake !== false && this.shakes.length > 0
+    if (!shake && !this.keys.length && !this.grades.length) return inner
     const p = `${this.act.p}C`
     const T = r3(this.act.T)
     const at = `calc(${pin(this.act.at)} + 0s)`
@@ -90,7 +95,7 @@ export class Camera {
       rows.push([100, `transform:${xf(last[1])}`])
       track(`${p}m`, rows)
     }
-    if (this.shakes.length) {
+    if (shake) {
       css += SHAKE_CSS.replace(/\n/g, '')
       open += `<g class="${p}s" style="${this.shakeStyle()}">`
       close = `</g>${close}`

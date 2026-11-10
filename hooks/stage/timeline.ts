@@ -31,6 +31,20 @@ export const r3 = (n: number): number => Math.round(n * 1000) / 1000
  * Keyframe rows without the redundant ones: a row whose value equals both neighbours' sits inside a hold (whatever the
  * timing function, the value between equal rows is constant), and a repeat of the same percent and value says nothing.
  */
+/**
+ * Path keys with no two at the same time: a key at (or before) the time of the one before it moves 10 ms after it. Two keys
+ * on one percent collapse (the later wins), so a teleport written as two keys at one time became a slow glide from the key
+ * before (Invincible's skid bug); 10 ms apart it is a cut.
+ */
+export const apart = <K extends (number | undefined)[]>(keys: K[]): K[] => {
+  let last = -Infinity
+  return [...keys].sort((a, b) => (a[0] as number) - (b[0] as number)).map(k => {
+    const t0 = k[0] as number
+    const t = t0 > last ? t0 : r3(last + 0.01)
+    last = t
+    return (t === t0 ? k : [t, ...k.slice(1)]) as K
+  })
+}
 export const slim = (rows: [number, string][]): [number, string][] =>
   rows.filter((r, i) => {
     const a = rows[i - 1]
@@ -157,7 +171,7 @@ export class Act {
   /** Moves `svg` through [t, x, y, opacity?, extra transform?] keys (freezes hold). */
   mv(svg: string, keys: [number, number, number, number?, string?][], o: { ease?: Ease | string; c?: boolean } = {}): string {
     const k = this.k()
-    const num = this.hold(keys.map(([t, x, y, op]) => [t, x, y, op] as [number, number, number, number | undefined]))
+    const num = this.hold(apart(keys.map(([t, x, y, op]) => [t, x, y, op] as [number, number, number, number | undefined])))
     const extra = new Map(keys.map(([t, , , , ex]) => [this.warp(t), ex]))
     const fades = keys.some(q => q[3] !== undefined)
     this.rows(k, num.map(([w, x, y, op]) => [this.pcw(w), `transform:translate(${r1(x)}px,${r1(y)}px)${extra.get(w) ? ` ${extra.get(w)}` : ''}${fades ? `;opacity:${op ?? 1}` : ''}`]))
@@ -214,7 +228,7 @@ export class Act {
       this.rows(fid, swapRows(wins, t => this.pc(t)))
       uses += `<g class="${this.p}f" style="animation-name:${fid}">${this.bank.use(k, 0, 0, Number(dirS) as 1 | -1, sc)}</g>`
     }
-    const keys = this.hold(path)
+    const keys = this.hold(apart(path))
     const fades = path.some(k => k[4] !== undefined)
     this.rows(id, keys.map(([w, x, y, , op]) => [this.pcw(w), `transform:translate(${r1(x)}px,${r1(y)}px)${fades ? `;opacity:${op ?? 1}` : ''}`]))
     if (rotates) this.rows(`${id}r`, keys.map(([w, , , rot, , sy]) => [this.pcw(w), `transform:rotate(${r1(rot ?? 0)}deg)${sy !== undefined && sy !== 1 ? ` scale(1,${sy})` : ''}`]))

@@ -10,7 +10,7 @@ import { FrameBank, flipbook, quantise, rectPaths, silhouette, swapRows } from '
 import * as fx from './fx'
 import * as light from './light'
 import { hide, pair, stop } from './motion'
-import { Act } from './timeline'
+import { Act, apart } from './timeline'
 
 const T0 = Date.parse('2026-11-10T10:00:00Z')
 const SP: Sprite = { rows: ['..aa..', '.abba.', 'abccba', '.abba.', '..dd..', '.d..d.'], pal: { a: '#101018', b: '#E8B48A', c: '#F4F1E8', d: '#3B6FD8' } }
@@ -186,6 +186,22 @@ test('camera: the shake list is one valid set of longhands (no shorthand glued t
   const cam = new Camera(act()).shake(1, 2, 0.12).shake(2, 4, 0.3)
   const s = cam.shakeStyle()
   expect(s.split(';').map(d => d.split(':')[0])).toEqual(['animation-name', 'animation-duration', 'animation-timing-function', 'animation-fill-mode', 'animation-delay'])
+})
+test('timeline: two path keys at one time are a cut 10 ms apart, never a glide from the key before (the skid bug)', () => {
+  expect(apart([[0, 0, 0], [1, 10, 0], [1, 50, 20], [2, 50, 20]] as [number, number, number][])).toEqual([[0, 0, 0], [1, 10, 0], [1.01, 50, 20], [2, 50, 20]])
+  const act = new Act({ id: 'tp', ms: 2000, at: T0, W: 100, H: 50 }).cast('a', SP)
+  act.actor('a', [[0, 2, 'a']], [[0, 0, 0], [1, 10, 0], [1, 50, 20], [2, 50, 20]])
+  expect(act.css).toContain('50%{transform:translate(10px,0px)}')
+  expect(act.css).toContain('50.5%{transform:translate(50px,20px)}')
+})
+test('camera: wrap without the shake zooms only (a skin shakes its whole panel itself)', () => {
+  const act = new Act({ id: 'cw', ms: 2000, at: T0, W: 100, H: 50 })
+  const cam = new Camera(act).push(0.2, 0.4, 1.1, 50, 25, 'snap').shake(0.5, 3, 0.2)
+  const w = cam.wrap('<rect/>', { shake: false })
+  expect(w).not.toContain('sg-sh3')
+  expect(w).toContain('scale(1.1)')
+  expect(cam.wrap('<rect/>')).toContain('sg-sh3')
+  expect(new Camera(act).shake(0.5, 2).wrap('<rect/>', { shake: false })).toBe('<rect/>')
 })
 test('camera: a hit-freeze holds the act and taps the camera', () => {
   const a = act()
