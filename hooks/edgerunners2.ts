@@ -14,6 +14,7 @@
 // A fan homage to Cyberpunk: Edgerunners (CD PROJEKT RED / Studio Trigger / Netflix). Only episode titles,
 // short phrases and original drawing; no logos, no spoilers.
 import { ER_CAPRI, ER_CAPRI_BIG, ER_CAPRI_BUST, ER_D, ER_RUNNER, ER_RUNNER2, ER_RUNNER3, hashOf } from './cast'
+import { heartbeat } from './edgerunners2-motion'
 import type { Sprite } from './cast'
 import type { RoamPlan, RoamTiming } from './roamer'
 
@@ -394,8 +395,8 @@ export const ER2_TOOLS: Record<string, string> = { Read: 'Probe', Grep: 'Sweep',
 export const CAPRICORN_RE = /0\s*\+\s*2\s*=\s*1/
 export const HI_CAPRI_RE = /\bhi,?\s+capri\b/i
 export const HI_CAPRI_MS = 60_000
-/** The whole word "capri" (any case) in a prompt lets her in; "bye capri" (checked first) sends her back. */
-export const CAPRI_WORD_RE = /\bcapri\b/i
+/** "hi capri" (or "let capri in") lets her in; the bare word "capri" no longer does (capri pants, the island). "bye capri" (checked first) sends her back. */
+export const CAPRI_WORD_RE = new RegExp(`${HI_CAPRI_RE.source}|\\blet\\s+capri\\s+in\\b`, 'i')
 export const BYE_CAPRI_RE = /\bbye,?\s+capri\b/i
 
 // --- the band's pieces ---------------------------------------------------------------------
@@ -429,7 +430,8 @@ export const er2Foot = (W: number, H: number, sec: boolean, ctx: BandCtx): strin
   // CAPRI mode keeps one D trace: the link rail stays his cobalt, with an ice pulse.
   s += `<line x1="5" y1="14" x2="5" y2="${H - 14}" stroke="${sec ? D_TRACE : near ? K.hot : P.a}" stroke-width="2" stroke-opacity="${sec ? 0.7 : 0.55}"/>`
   if (working) s += `<line class="v2-rail" x1="5" y1="14" x2="5" y2="${H - 14}" stroke="${sec ? '#BFD8FF' : near ? K.white : P.ice}" stroke-width="2" stroke-dasharray="12 208"/>`
-  return s + (sec ? capriCorners(W, H) : '') + corner(W, H, near, sec)
+  // CAPRI mode: her heartbeat on the frame, lub-dub, faster as the context climbs.
+  return s + (sec ? capriCorners(W, H) + heartbeat(d, ctx.ctxPct) : '') + corner(W, H, near, sec)
 }
 /** CAPRI mode: her shards in the four corners (three angular slivers each, plus two white chips), inside the chamfer. */
 export const capriCorners = (W: number, H: number): string => {
