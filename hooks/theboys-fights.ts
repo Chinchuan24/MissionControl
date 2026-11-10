@@ -35,6 +35,9 @@ const C = (x: number, y: number, text: string, size: number, fill: string, extra
 // ---------------------------------------------------------------- the camera window
 /** Where a fight plays: the window (x0..x1, y0..gy), the feet line, the sprite scale, and which surface. */
 export type Win = { x0: number; x1: number; y0: number; gy: number; sc: number; band: boolean; W: number; H: number; m: Mode; /** Readouts inside the window (holes in its clip). */ keep?: Rect[] }
+/** The pane window's top (under the card's title row) and the right-hand column it leaves free (theboys-cards.ts deskCard). */
+export const PANE_TOP = 34
+export const PANE_RIGHT = 124
 /** The band's window: right of the bust and the step count, left of the bar's percent and the cost line, under the top row. */
 export const winOf = (g: Geo): Win => {
   if (g.on === 'band') {
@@ -44,7 +47,10 @@ export const winOf = (g: Geo): Win => {
     const x1 = Math.round(Math.min(g.W * 0.6 - 6, right - 6, g.stage ? g.stage.x1 - 4 : g.W))
     return { x0: 120, x1, y0: 47, gy: GROUND, sc: 1.1, band: true, W: g.W, H: g.H, m: g.m, ...(g.stage ? { keep: g.stage.keep } : {}) }
   }
-  return { x0: 8, x1: g.W - 8, y0: 8, gy: g.H - 10, sc: Math.max(1, Math.min(1.6, (g.H - 34) / 58)), band: false, W: g.W, H: g.H, m: g.m }
+  // The CRISIS DESK (THE JOB, THE SCRIPT): under the card's title row (the title, LIVE · ON MESSAGE, the card's own line, all at
+  // y 26) and left of its right-hand column (the stamps, `N of M spun`, the percent, the releases' time and cost, all within
+  // PANE_RIGHT of the right edge), so the card keeps every number and chip while the monitor cut plays.
+  return { x0: 8, x1: g.W - PANE_RIGHT, y0: PANE_TOP, gy: g.H - 10, sc: Math.max(1, Math.min(1.6, (g.H - PANE_TOP - 26) / 58)), band: false, W: g.W, H: g.H, m: g.m }
 }
 /** The window's clip (static: the camera moves inside it); `clipDef` once per layer, `clipped` for each group in it. */
 const clipDef = (a: Act, w: Win): string => `<defs>${w.keep ? keepClip(`${a.sg.p}w`, [w.x0, w.y0, w.x1 - w.x0, w.gy + 1 - w.y0], w.keep) : `<clipPath id="${a.sg.p}w"><rect x="${w.x0}" y="${w.y0}" width="${w.x1 - w.x0}" height="${w.gy + 1 - w.y0}"/></clipPath>`}</defs>`
@@ -81,12 +87,13 @@ const RED = '#C8202C'
 /** The LIVE bug, top right of the window, for the whole act (the dot blinks). OFF BOOK records on THE WIRE. */
 const bug = (a: Act, w: Win, t1: number): string => {
   const book = w.m === 'book'
+  const noir = w.m === 'noir'
   const label = book ? 'THE WIRE' : w.m === 'gold' ? 'VNN 1983' : 'VNN'
   const x = w.x1 - 70
   const y = w.y0 + 3
   a.sg.extraCss.add('.tbfd{animation:tbfd 1s steps(2) infinite}@keyframes tbfd{50%{opacity:0}}@media (prefers-reduced-motion: reduce){.tbfd{animation:none}}')
   const dot = `<circle class="tbfd" cx="${x + 6}" cy="${y + 6}" r="2" fill="#FFFFFF"/>`
-  return a.sg.on(`<rect x="${x}" y="${y}" width="66" height="12" rx="2" fill="${INK}" opacity=".88"/><rect x="${x + 1}" y="${y + 1}" width="27" height="10" rx="1.5" fill="${RED}"/>${dot}${C(x + 18, y + 9, book ? 'REC' : 'LIVE', 6.5, '#FFFFFF', 'text-anchor="middle" letter-spacing=".5"')}${C(x + 47, y + 9, label, 6.5, '#F0D27A', 'text-anchor="middle" letter-spacing=".5"')}`, 0.05, t1)
+  return a.sg.on(`<rect x="${x}" y="${y}" width="66" height="12" rx="2" fill="${INK}" opacity=".88"/><rect x="${x + 1}" y="${y + 1}" width="27" height="10" rx="1.5" fill="${noir ? '#575757' : RED}"/>${dot}${C(x + 18, y + 9, book ? 'REC' : 'LIVE', 6.5, '#FFFFFF', 'text-anchor="middle" letter-spacing=".5"')}${C(x + 47, y + 9, label, 6.5, noir ? '#EDEDED' : '#F0D27A', 'text-anchor="middle" letter-spacing=".5"')}`, 0.05, t1)
 }
 /** The opening slate over the window: VIEWER DISCRETION ADVISED (OFF BOOK: a tape label, SOLID GOLD: a 1983 card). */
 const slate = (a: Act, w: Win, t1: number): string => {
@@ -142,7 +149,8 @@ const lowerThird = (a: Act, w: Win, t: number, line: string, sub: string, tag: s
   const x = w.x0 + 6
   const y = w.gy - 30
   const gold = w.m === 'gold'
-  const body = `<rect x="0" y="0" width="${ww}" height="22" fill="${gold ? '#2A1C08' : '#0A1430'}" opacity=".94"/><rect x="0" y="0" width="${ww}" height="1.5" fill="${gold ? '#E2C25A' : '#F0D27A'}"/><rect x="0" y="0" width="38" height="22" fill="${RED}"/>${C(19, 14, tag, 7, '#FFFFFF', 'text-anchor="middle" letter-spacing=".6"')}${C(44, 11, line, 9, '#FFFFFF', 'letter-spacing=".8"')}${C(44, 19, sub, 5.8, gold ? '#F4DC86' : '#9FC3E8', 'letter-spacing=".8"')}`
+  const noir = w.m === 'noir'
+  const body = `<rect x="0" y="0" width="${ww}" height="22" fill="${gold ? '#2A1C08' : noir ? '#161616' : '#0A1430'}" opacity=".94"/><rect x="0" y="0" width="${ww}" height="1.5" fill="${gold ? '#E2C25A' : noir ? '#C2C2C2' : '#F0D27A'}"/><rect x="0" y="0" width="38" height="22" fill="${noir ? '#575757' : RED}"/>${C(19, 14, tag, 7, '#FFFFFF', 'text-anchor="middle" letter-spacing=".6"')}${C(44, 11, line, 9, '#FFFFFF', 'letter-spacing=".8"')}${C(44, 19, sub, 5.8, gold ? '#F4DC86' : noir ? '#C2C2C2' : '#9FC3E8', 'letter-spacing=".8"')}`
   const end = a.sg.T - 0.05
   return a.sg.mv(`<g>${body}</g>`, [[0, x - ww - 20, y, 0], [t, x - ww - 20, y, 0], [t + 0.01, x - ww - 20, y, 1], [t + 0.3, x, y, 1], [end, x, y, 1]], { ease: 'settle' })
 }
@@ -151,7 +159,7 @@ const swing = (a: Act, w: Win, t: number, delta: number): string => {
   const up = delta > 0
   const x = w.x1 - 70
   const y = w.y0 + 18
-  return a.sg.cue('pop', t, `<rect x="0" y="0" width="66" height="11" rx="2" fill="${INK}" opacity=".85"/>${C(33, 8.2, `APPROVAL ${up ? '+' : '−'}${Math.abs(delta)}`, 6.5, up ? '#3DDC84' : '#FF5A5A', 'text-anchor="middle" letter-spacing=".5"')}`, { x, y, d: 1.1 })
+  return a.sg.cue('pop', t, `<rect x="0" y="0" width="66" height="11" rx="2" fill="${INK}" opacity=".85"/>${C(33, 8.2, `APPROVAL ${up ? '+' : '−'}${Math.abs(delta)}`, 6.5, w.m === 'noir' ? (up ? '#EDEDED' : '#999999') : up ? '#3DDC84' : '#FF5A5A', 'text-anchor="middle" letter-spacing=".5"')}`, { x, y, d: 1.1 })
 }
 /** A close-up CUT-IN: a letterbox strip (80 by 20, scaled) slams in from the side under the hit-stop, `d` real seconds. */
 const cutin = (a: Act, w: Win, t: number, key: string, sp: Sprite, d: number, from: 1 | -1 = 1): string => {
@@ -416,14 +424,18 @@ const curtainup = (a: Act, g: Geo): string => {
 export const F4_MS = 6_500
 const race = (a: Act, g: Geo): string => {
   const w = winOf(g)
-  cast(a, { aS: [SP.TB_ATRAIN_START, 0.5], r1: [SP.TB_ATRAIN_RUN1, 0.5], r2: [SP.TB_ATRAIN_RUN2, 0.5], r3: [SP.TB_ATRAIN_RUN3, 0.5], r4: [SP.TB_ATRAIN_RUN4, 0.5], aP: [SP.TB_ATRAIN_SPEED, 0.5] })
+  // A-Train in the look's own film: SOLID GOLD's ramp, NOIR's greys (ON BRAND and OFF BOOK keep his blue), like the cut-ins.
+  const gr = (k: string, sp: Sprite): [Sprite, number] => [gradeOf(`f4${k}`, sp, w.m), 0.5]
+  cast(a, { aS: gr('aS', SP.TB_ATRAIN_START), r1: gr('r1', SP.TB_ATRAIN_RUN1), r2: gr('r2', SP.TB_ATRAIN_RUN2), r3: gr('r3', SP.TB_ATRAIN_RUN3), r4: gr('r4', SP.TB_ATRAIN_RUN4), aP: gr('aP', SP.TB_ATRAIN_SPEED) })
+  // The race's own colours follow too: the speed lines, the bar and its fill, the start lights.
+  const k = w.m === 'noir' ? { go: '#EDEDED', bar: '#999999', well: '#262626', ink: '#C2C2C2', stop: '#575757' } : w.m === 'gold' ? { go: '#FFF3C4', bar: '#E2C25A', well: '#2A1C08', ink: '#F4DC86', stop: '#86621A' } : { go: '#3DDC84', bar: '#4FC3F7', well: '#0A1430', ink: '#9FC3E8', stop: '#FF3B3B' }
   const sc = w.sc
   const ww = w.x1 - w.x0
   const y = cy(w)
   const x0 = r1(w.x0 + 14 * sc)
   const fin = r1(w.x1 - 34 * sc)
   const cam = new Camera(a.sg)
-  const f = new Fight(a.sg, { sc, ink: INK, lines: '#3DDC84', smear: '#3DDC84', ghosts: !w.band }, cam)
+  const f = new Fight(a.sg, { sc, ink: INK, lines: k.go, smear: k.go, ghosts: !w.band }, cam)
   f.fighter('a', 'aS', x0, y, 1)
   let over = bug(a, w, 3.3)
   let fight = ''
@@ -432,10 +444,10 @@ const race = (a: Act, g: Geo): string => {
   let chk = ''
   for (let i = 0; i < 8; i++) chk += `<rect x="${r1(fin + (i % 2) * 3)}" y="${r1(w.y0 + 14 + i * ((lane - w.y0 - 14) / 8))}" width="3" height="${r1((lane - w.y0 - 14) / 8)}" fill="#F4F1E8"/>`
   fight += `<rect x="${w.x0}" y="${lane}" width="${ww}" height="1.5" fill="#F4F1E8" opacity=".5"/>${chk}`
-  const bar = `<rect x="${x0}" y="${r1(lane - 7)}" width="${r1(fin - x0)}" height="5" rx="2" fill="#0A1430" stroke="#4FC3F7" stroke-width=".6"/>`
-  fight += bar + a.sg.kf(`<rect x="${x0}" y="${r1(lane - 7)}" width="${r1(fin - x0)}" height="5" rx="2" fill="#4FC3F7"/>`, [[0, 'transform:scaleX(0)'], [1.25, 'transform:scaleX(0)'], [3.3, 'transform:scaleX(.985)'], [a.sg.T, 'transform:scaleX(.985)']], { origin: `${x0}px 0` }) + C(x0 + 4, lane - 9, 'PROGRESS', 5.5, '#9FC3E8', 'letter-spacing=".6"')
+  const bar = `<rect x="${x0}" y="${r1(lane - 7)}" width="${r1(fin - x0)}" height="5" rx="2" fill="${k.well}" stroke="${k.bar}" stroke-width=".6"/>`
+  fight += bar + a.sg.kf(`<rect x="${x0}" y="${r1(lane - 7)}" width="${r1(fin - x0)}" height="5" rx="2" fill="${k.bar}"/>`, [[0, 'transform:scaleX(0)'], [1.25, 'transform:scaleX(0)'], [3.3, 'transform:scaleX(.985)'], [a.sg.T, 'transform:scaleX(.985)']], { origin: `${x0}px 0` }) + C(x0 + 4, lane - 9, 'PROGRESS', 5.5, k.ink, 'letter-spacing=".6"')
   // 0.2-1.2: the 7SPN countdown, three lights; he waits in his crouch.
-  for (const [i, t] of [0.25, 0.6, 0.95].entries()) fight += a.sg.win(t, 1.3, `<circle cx="${r1(w.x0 + ww / 2 - 14 + i * 14)}" cy="${w.y0 + 10}" r="4.5" fill="${i === 2 ? '#3DDC84' : '#FF3B3B'}" stroke="${INK}"/>`)
+  for (const [i, t] of [0.25, 0.6, 0.95].entries()) fight += a.sg.win(t, 1.3, `<circle cx="${r1(w.x0 + ww / 2 - 14 + i * 14)}" cy="${w.y0 + 10}" r="4.5" fill="${i === 2 ? k.go : k.stop}" stroke="${INK}"/>`)
   over += a.sg.win(0.05, 1.3, `<rect x="${r1(w.x0 + ww / 2 - 26)}" y="${w.y0 + 3}" width="52" height="14" rx="3" fill="${INK}" opacity=".7"/>`)
   // 1.25: GO. A full RUN1-4 cycle (.36 s a stride), ghosts and green speed lines; SPEED at the end; the photo finish.
   const go = 1.25
@@ -443,7 +455,7 @@ const race = (a: Act, g: Geo): string => {
   f.at(go).approach('a', fin - 4 * sc, end - go, { pose: 'r1', ease: 'linear', lines: true, ghosts: true })
   for (let t = go, i = 0; t < end - 0.5; t += 0.09, i++) f.at(t).pose('a', `r${(i % 4) + 1}`)
   f.at(end - 0.5).pose('a', 'aP')
-  fight += a.sg.win(end - 0.5, end, fx.speedLines(fin - 30 * sc, y - 6 * sc, 40 * sc, 5, 1, '#3DDC84', { seed: 'f4sl' }))
+  fight += a.sg.win(end - 0.5, end, fx.speedLines(fin - 30 * sc, y - 6 * sc, 40 * sc, 5, 1, k.go, { seed: 'f4sl' }))
   f.at(end).freeze(0.35)
   fight += fx.flash(a.sg, end, { a: 0.45 })
   // The photo-finish frame holds him by a nose over the line.

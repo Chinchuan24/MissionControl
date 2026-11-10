@@ -2,12 +2,12 @@
 // (one director slot shared with THE AMBUSH), each with a replay name, inside the band and pane budgets in all four looks.
 import { expect, test } from 'claude-code/testing'
 import { actOn } from './theboys-acts'
-import { CURTAIN_UP_RE, FIGHT_KINDS, FIGHT_PLAYS, fightFor, winOf } from './theboys-fights'
-import { stageAt, resetEvents, resetShow, CURTAIN_RE } from './theboys-show'
-import { AMB_SLOT_MS, TAKEOVERS, ambushOfSlot, fightOf } from './theboys-director'
+import { CURTAIN_UP_RE, FIGHT_KINDS, FIGHT_PLAYS, PANE_RIGHT, PANE_TOP, fightFor, winOf } from './theboys-fights'
+import { FIGHT_GAP_MS, stageAt, resetEvents, resetShow, CURTAIN_RE } from './theboys-show'
+import { AMB_SLOT_MS, TAKEOVERS, ambushOfSlot, directorAt, fightOf } from './theboys-director'
 import type { Slot } from './theboys-director'
-import { REPLAYS, boysEvent, boysFx, fightDrawn, resetBoys, setBoysFx } from './theboys-eggs'
-import { syringe } from './theboys'
+import { REPLAYS, boysEvent, boysFx, boysState, fightDrawn, resetBoys, setBoysFx } from './theboys-eggs'
+import { SP, syringe } from './theboys'
 import { audit, BUDGET, chars } from './stage/budget'
 import { runPlay } from './stage/replay'
 
@@ -116,12 +116,86 @@ test('fights: a replay name each (the 92 older names still play), the typed and 
   expect(CURTAIN_UP_RE.test('ok, curtain up')).toBe(true)
   expect(CURTAIN_UP_RE.test('curtain call')).toBe(false)
   expect(CURTAIN_RE.test('curtain up')).toBe(false)
-  // TURBO RUSH: A-Train races the bar once a session, then the turbo act.
+  // TURBO RUSH: A-Train races the bar once a session (when a fight may start, below), then the turbo act.
+  const t = clearOfFights(T0)
   fresh()
-  boysEvent('turbo', { at: T0, mode: 'brand' })
+  boysEvent('turbo', { at: t, mode: 'brand' })
   expect(boysFx()?.kind).toBe('race')
-  boysEvent('turbo', { at: T0 + 60_000, mode: 'brand' })
+  boysEvent('turbo', { at: t + 60_000, mode: 'brand' })
   expect(boysFx()?.kind).toBe('turbo')
+})
+
+/** The first moment from `t` on with no director fight within the fight gap either side (minute steps). */
+const clearOfFights = (t: number): number => {
+  for (let at = t; at < t + 600 * MIN; at += MIN) if (!directorAt(at).plan(at - FIGHT_GAP_MS, at + FIGHT_GAP_MS, { working: true }).some(s => s.lane === 'ambush' && s.id === 'fight' && Math.abs(s.startAt - at) < FIGHT_GAP_MS)) return at
+  throw new Error('no clear time')
+}
+
+test('fights: the RACE on TURBO RUSH keeps the fight gap (never near a director fight, never over a live act), its replay still plays', async () => {
+  let slot = Math.floor(T0 / AMB_SLOT_MS)
+  while (ambushOfSlot(slot).src !== 'fight') slot++
+  const f = ambushOfSlot(slot)
+  // Inside the gap either side of the look's own fight: the plain turbo act, and the session's one race is not spent.
+  for (const at of [f.startAt - 10 * MIN, f.startAt - 1000, f.startAt + 5 * MIN, f.startAt + 25 * MIN]) {
+    fresh()
+    setBoysFx('none', at - 600_000)
+    boysEvent('turbo', { at, mode: 'brand' })
+    expect(boysFx()?.kind, `${(at - f.startAt) / MIN} min`).toBe('turbo')
+    expect(boysState().raced).toBe(false)
+  }
+  // Clear of every fight: the race, once.
+  const t = clearOfFights(f.startAt)
+  expect(t - f.startAt).toBeGreaterThanOrEqual(FIGHT_GAP_MS)
+  fresh()
+  boysEvent('turbo', { at: t, mode: 'noir' })
+  expect(boysFx()).toEqual({ kind: 'race', at: t })
+  boysEvent('turbo', { at: t + 20 * MIN, mode: 'noir' })
+  expect(boysFx()?.kind).toBe('turbo')
+  // One big act at a time: a fight already on stage keeps it, and the race waits for a later rush.
+  fresh()
+  setBoysFx('offthebooks', t)
+  boysEvent('turbo', { at: t + 2000, mode: 'brand' })
+  expect(boysFx()).toEqual({ kind: 'offthebooks', at: t })
+  expect(boysState().raced).toBe(false)
+  boysEvent('turbo', { at: t + 60_000, mode: 'brand' })
+  expect(boysFx()?.kind).toBe('race')
+  // The replay plays whenever it is asked for, even next to a fight.
+  fresh()
+  expect(await runPlay('the-boys', 'race', f.startAt - 1000)).toBe('▶ race')
+  expect(boysFx()?.kind).toBe('race')
+  fresh()
+})
+
+test('fights: on the CRISIS DESK every fight plays under the title row and left of the right-hand column (no number covered)', () => {
+  for (const k of FIGHT_KINDS) for (const m of LOOKS) for (const [W, H] of [[600, 311], [992, 384], [480, 240]] as const) {
+    const p = actOn(k, { W, H, m, at: T0, on: 'task' })
+    const clip = p.match(/<clipPath id="[a-z0-9-]+w"><rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)"\/><\/clipPath>/)
+    expect(clip, `${k} ${m} ${W}`).toBeTruthy()
+    const [x, y, w, h] = (clip as RegExpMatchArray).slice(1).map(Number) as [number, number, number, number]
+    expect(x, `${k} ${m} ${W} x`).toBeGreaterThanOrEqual(8)
+    expect(y, `${k} ${m} ${W} y`).toBeGreaterThanOrEqual(PANE_TOP)
+    expect(x + w, `${k} ${m} ${W} right`).toBeLessThanOrEqual(W - PANE_RIGHT)
+    expect(y + h, `${k} ${m} ${W} foot`).toBeLessThanOrEqual(H - 8)
+    // Everything of the fight is inside that window: its layers and its reduced-motion still are clipped groups.
+    expect((p.match(/clip-path="url\(#[a-z0-9-]+w\)"/g) ?? []).length, `${k} ${m}`).toBeGreaterThanOrEqual(2)
+  }
+  // The card's own readouts sit outside: `N of M spun` and the percent end at W - 16 / W - 26, its stamps start past W - 90.
+  expect(PANE_RIGHT).toBeGreaterThanOrEqual(120)
+})
+
+test('fights: A-Train races in the look\'s own film (NOIR greys, SOLID GOLD gold), his blue only ON BRAND and OFF BOOK', () => {
+  const blues = Object.values(SP.TB_ATRAIN_RUN1.pal).filter(c => { const n = parseInt(c.slice(1), 16); const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255]; return b > r + 40 && b > g + 20 })
+  expect(blues.length).toBeGreaterThan(0)
+  const has = (s: string) => blues.some(c => s.toUpperCase().includes(c.toUpperCase()))
+  for (const on of ['band', 'task'] as const) {
+    expect(has(actOn('race', { W: 900, H: on === 'band' ? 148 : 311, m: 'brand', at: T0, on })), `brand ${on}`).toBe(true)
+    for (const m of ['noir', 'gold'] as const) {
+      const s = actOn('race', { W: 900, H: on === 'band' ? 148 : 311, m, at: T0, on })
+      expect(has(s), `${m} ${on}`).toBe(false)
+      expect(s, `${m} ${on}`).not.toContain('#4FC3F7')
+      if (m === 'noir') expect(s, `${m} ${on}`).not.toContain('#3DDC84')
+    }
+  }
 })
 
 test('fights: SOLID GOLD keeps its band budget during a fight (the shield steps off the meter, the tape roll waits)', () => {

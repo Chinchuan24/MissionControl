@@ -13,13 +13,13 @@ import { Act, KIT, bub, cap, defineActs, slate } from './theboys-acts'
 import type { Geo, Row } from './theboys-acts'
 import { BUST, C, CRAWL_Y, PROPS, SP, T, condW, pal, pin, px, r1, sansW, spH, spW, stamp, tape, unit } from './theboys'
 import type { Mode } from './theboys'
-import { REPLAYS, actMs, autoLookAtMe, boysFx, fixedAt, onBoysEvent, registerReplay, setActMs, setBoysFx, setApprovalMod, setFightDrawn, setStageBusy, testFails, toastOk, vnnBreak } from './theboys-eggs'
+import { REPLAYS, actMs, autoLookAtMe, boysFx, fixedAt, onBoysEvent, registerReplay, setActMs, setBoysFx, setApprovalMod, setFightDrawn, setFightOk, setStageBusy, testFails, toastOk, vnnBreak } from './theboys-eggs'
 import { FIGHT_KINDS } from './theboys-fights'
 import type { BoysEventArgs, BoysMode } from './theboys-eggs'
 import * as fx from './stage/fx'
 import { ease } from './stage/ease'
 import * as MS from './theboys-motion-sprites'
-import { AMBUSH_MS, AMB_SLOT_MS, PIECES, ambushOfSlot, directorAt, kindOf, noirClue, stageAt } from './theboys-director'
+import { AMBUSH_MS, AMB_SLOT_MS, FIGHT_ID, PIECES, ambushOfSlot, directorAt, kindOf, noirClue, stageAt } from './theboys-director'
 import { PLAY_NAME, playsFrom, playsOf, registerPlay } from './stage/replay'
 
 const { poses, actor, stillPose, arc, runFrame, feet, GROUND, gaugeOf, coverBust, dim, poof, knight, octo, tentacle, beaver, critter, dog, pig, flashbulb, cone, vial, crowd, runner, streak, heart } = KIT
@@ -77,6 +77,10 @@ setStageBusy(at => {
   const s = stageAt(at, { working: LAST_WORKING, mode: LAST_MODE })
   return Boolean(s && (s.src === 'ambush' || s.src === 'fight' || s.src === 'piece') && at >= s.startAt - 1000 && at < s.endAt)
 })
+/** An event fight (A-Train's RACE on TURBO RUSH) keeps the director's fight gap: no scheduled fight within one AMBUSH slot
+ *  (30-45 min) either side, so it never lands next to the look's own fight (the director holds its window, so nothing stacks). */
+export const FIGHT_GAP_MS = AMB_SLOT_MS
+setFightOk(at => !directorAt(at).plan(at - FIGHT_GAP_MS, at + FIGHT_GAP_MS, { working: true }).some(s => s.lane === 'ambush' && s.id === FIGHT_ID && Math.abs(s.startAt - at) < FIGHT_GAP_MS))
 
 // ---------------------------------------------------------------- 3. the acts
 const W2 = (g: Geo) => g.W / 2

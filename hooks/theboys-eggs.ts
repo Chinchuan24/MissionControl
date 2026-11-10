@@ -61,6 +61,10 @@ export const APPROVAL = { pass: 3, fail: -4, clean: 5, error: -2, job: 5, decayP
 let BUSY: (at: number) => boolean = () => false
 export const setStageBusy = (fn: (at: number) => boolean): void => { BUSY = fn }
 const stageBusy = (at: number): boolean => { try { return BUSY(at) } catch { return false } }
+/** May an event start a FIGHT now (theboys-show.ts sets it: the stage free, no director fight within the fight gap)? */
+let FIGHT_OK: (at: number) => boolean = () => true
+export const setFightOk = (fn: (at: number) => boolean): void => { FIGHT_OK = fn }
+const fightOk = (at: number): boolean => { try { return FIGHT_OK(at) } catch { return false } }
 /** Is a FIGHT drawn on the band at `at` (ahead of its start too)? SOLID GOLD then holds its shield still and skips the tape roll,
  *  so the band keeps its budget (theboys-show.ts sets it). */
 let FIGHT_ON: (at: number) => boolean = () => false
@@ -239,8 +243,9 @@ const core = (ev: BoysEvent, a: BoysEventArgs): BoysAct[] => {
     case 'job-done':
       return [{ approval: APPROVAL.job }]
     case 'turbo':
-      // The first TURBO RUSH of a session is A-Train's RACE (F4, theboys-fights.ts); later ones the turbo act.
-      if (!S.raced) { S.raced = true; return [{ fx: 'race' }] }
+      // A TURBO RUSH may be A-Train's RACE (F4, theboys-fights.ts), once a session, and only when a fight may start (`fightOk`:
+      // nothing big on stage, no director fight within the fight gap, so fights stay rare and never stack); else the turbo act.
+      if (!S.raced && !actLive(a.at) && !stageBusy(a.at) && fightOk(a.at)) { S.raced = true; return [{ fx: 'race' }] }
       return [{ fx: 'turbo' }]
     default:
       return []
