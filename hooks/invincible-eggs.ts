@@ -320,8 +320,11 @@ export const invExtras = (era: Era, tile: string) => (o: ExtraArgs): string => {
   }
   return out.join('')
 }
-/** The panel's camera shake (animation longhands for a wrapper: every shake of the cut plays), or '' when no fight is due. */
+/** The panel's camera shake (animation longhands for a wrapper: every shake of the cut plays), or '' when no fight is due.
+ *  Never on the band: a panel shake moved every working number there by 1-4 px on each hit. The band cut keeps its hit-stops,
+ *  impact frames and camera pushes inside its own clip; the pane's acts (the fight's own cards) still shake. */
 export const invShake = (era: Era) => (o: { W: number; H: number; surface: 'band' | 'pane'; at: number; card?: PaneCard; working?: boolean; fx?: { kind: string; at: number }; swapAt?: number }): string => {
+  if (o.surface === 'band') return ''
   const f = fightOf(o.at, era, o.working, o.fx, o.swapAt)
   if (f === undefined) return ''
   if (o.surface === 'pane' && ACT_OF[o.card ?? 'cred'] >= timing(f.v).acts) return ''

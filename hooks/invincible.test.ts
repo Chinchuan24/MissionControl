@@ -479,15 +479,19 @@ test('fight: scheduled ahead (a positive pinned delay), live (a negative one), o
   for (let i = 0; i < 3; i++) await clock.advance(3_000)
   expect((await svgs($, 'Pane')).join('')).not.toContain('class="dl-anim"')
 })
-test('fight: the panel shakes (1, 3 and 4 px tiers), the sprites do not; the camera is stopped under reduced motion', async ($, on) => {
+test('fight: the pane panel shakes (1, 3 and 4 px tiers), the sprites do not; the band never shakes; reduced motion stops it', async ($, on) => {
   const st = fightStart(1, quietAt(1) + 3_600_000)
   base(on, 100_000, st + 2_000)
   await start($, 'invincible')
   await jobIn($)
   await four($)
   const band = await bandAt($, 1250)
+  // The band's working numbers never move: no panel shake there (the cut plays, with its hit-stops, inside its own clip).
+  expect(band).toContain('dl-anim')
+  expect(band).not.toContain('class="dl-cam"')
+  // The band's shake list is still built (the pane's wrapper reads the same longhands for its acts).
   // Longhands: one name, duration and delay per shake, so EVERY shake plays (v1 glued a delay list to a shorthand: one shake).
-  const cam = /class="dl-cam" style="([^"]+)"/.exec(band)?.[1] ?? ''
+  const cam = fightShake('band', st, 1250, 134, 1)
   expect(cam).toMatch(/^animation-name:sg-sh\d(,sg-sh\d)+;animation-duration:[\d.s,]+;animation-timing-function:steps\(1\);animation-fill-mode:none;animation-delay:calc\(/)
   const names = (/animation-name:([^;]+)/.exec(cam)?.[1] ?? '').split(',')
   expect(names.length).toBeGreaterThan(4)
