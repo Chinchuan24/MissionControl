@@ -34,7 +34,7 @@ import { extrasInto, glitchPanel, hackInto, overlayInto, roamOnBand, roamOverlay
 import type { ThemeCtx, ThemeEggs } from './themes'
 import { canNudge, nudge, pickQuiet, prBadge, quietOf, rememberTask, repoAndBranch, rescueText, retryOnHaiku, whatIf, whatIfText, whatIfTip } from './coach'
 import { flatSmiley, serifClip, serifW } from './mentalist-cards'
-import { BEATS_KEPT, BLANK_CRED, BOOT_H, award, withFound, rockerRankOf, bdHeight, bootStrip, braindanceCard, cleanCred, credCard, credHeight, levelOf, rankOf, shiftPick, stepPick } from './extras'
+import { BADGES, BEATS_KEPT, BLANK_CRED, BOOT_H, SECRET_BADGE, award, credFor, foundOf, secretFoundFor, withFound, rockerRankOf, bdHeight, bootStrip, braindanceCard, cleanCred, credCard, credHeight, levelOf, rankOf, shiftPick, stepPick } from './extras'
 import type { Beat, Cred } from './extras'
 import { ONESHOT_KEY, ULTRA_BY_KEY, ULTRA_BY_OPTIONS, ULTRA_KEY, ULTRA_TASK_HINT, cleanUltraBy, managerPicks, parseUltraBy, ultraBySaid, ultraBySection, ultraPlanToast, type UltraBy, pillChip, oneShotChipWord, cleanOneShot, cleanUltraRules, isUltraAgent, matchUltra, nextOneShot, oneShotChip, oneShotSaid, oneShotSection, oneShotWord, parseOneShot, resolveEffort, ultraCommand, ultraLine, withUltraBrief } from './crewcontrol'
 import type { OneShot } from './crewcontrol'
@@ -2390,14 +2390,21 @@ async function bumpCredNow($: EngineInterface, change: (c: Cred) => Cred, quiet:
   if (!eggOf()) return false
   const th = themeOf()
   if (now > was) $.ui.toast(th ? th.cred.toast(now) : `${eggOf() === 'samurai' ? 'ROCKERBOY CRED' : 'STREET CRED'} ↑ ${now} · ${eggOf() === 'samurai' ? rockerRankOf(now) : rankOf(now)}`)
+  // The secret badge is per skin (credFor): cheered when THIS skin's own secret is newly found, never for another skin's.
+  const secretNow = secretFoundFor(next, SKIN.cast) && !secretFoundFor(before, SKIN.cast)
   for (const b0 of fresh) {
+    if (b0.id === SECRET_BADGE && !secretNow) continue
     const b = th ? (th.cred.badges.find(x => x.id === b0.id) ?? b0) : b0
     $.ui.toast(`${b.icon} Badge unlocked: ${b.name}`)
+  }
+  if (secretNow && !fresh.some(b => b.id === SECRET_BADGE)) {
+    const b = (th ? th.cred.badges : BADGES).find(x => x.id === SECRET_BADGE)
+    if (b) $.ui.toast(`${b.icon} Badge unlocked: ${b.name}`)
   }
   // A badge only one skin lists (The Boys' LATE EDITION, SOLID GOLD) is earned anywhere and announced only there.
   const ownFresh = freshSkin.filter(b => th?.cred.badges.some(x => x.id === b.id))
   for (const b of ownFresh) $.ui.toast(`${b.icon} Badge unlocked: ${b.name}`)
-  const isCheer = now > was || fresh.length > 0 || ownFresh.length > 0
+  const isCheer = now > was || fresh.some(b => b.id !== SECRET_BADGE) || secretNow || ownFresh.length > 0
   if (!quiet && isCheer) void play($, cyberOf() ? `${ADDON}/assets/levelup.wav` : 'assets/done.wav')
   return isCheer
 }
@@ -2515,9 +2522,9 @@ async function foundSecret($: EngineInterface, k: Skin): Promise<void> {
   const themed = themeKeyOf(k.cast)
   $.ui.toast(themed ? THEMES[themed].greeting : GREETING.samurai)
   if (!themed) void play($, `${ADDON}/assets/done-samurai.wav`)
-  // Quiet: the badge's chime would cut the band's own. SOLID GOLD keeps its own flag: the shared one is never touched.
-  if (k.id === 'solidgold' || k.id === 'noir') await bumpCred($, c => withFound(c, k.id), true).catch(() => false)
-  else await bumpCred($, c => (c.samurai ? c : { ...c, samurai: true, xp: c.xp + 50 }), true).catch(() => false)
+  // Quiet: the badge's chime would cut the band's own. Each hidden skin sets only its OWN flag (its id): finding one never
+  // lights another skin's secret badge or button (the shared `samurai` flag is legacy, migrated by cleanCred).
+  await bumpCred($, c => withFound(c, k.id), true).catch(() => false)
 }
 
 // The Boys' mode: ON BRAND or OFF BOOK. Writes the state, redraws in the mode's palette and starts the swap (pinned to `since`).
@@ -2696,7 +2703,7 @@ async function setEr2Mode($: EngineInterface, mode: Er2ModeName, auto: boolean):
   await update($, er2Mode, () => er2Pack(ER2))
   if (SKIN.id === 'edgerunners-2') applySkin(EDGERUNNERS2_SKIN)
   if (mode === 'capri') {
-    if (auto) await bumpCred($, c => (c.samurai ? c : { ...c, samurai: true, xp: c.xp + 50 }), true).catch(() => false)
+    if (auto) await bumpCred($, c => withFound(c, 'capricorn'), true).catch(() => false)
     else await foundSecret($, CAPRICORN_SKIN).catch(() => undefined)
   }
   return true
@@ -2726,7 +2733,7 @@ async function setInvEra($: EngineInterface, era: 1 | 2): Promise<boolean> {
   await $.store.set('invEra', era).catch(() => undefined)
   await update($, invEra, () => invPack(INV_ERA))
   if (SKIN.id === 'invincible') applySkin(SKINS.get('invincible') ?? INVINCIBLE_SKIN)
-  if (era === 2) await bumpCred($, c => (c.samurai ? c : { ...c, samurai: true, xp: c.xp + 50 }), true).catch(() => false)
+  if (era === 2) await bumpCred($, c => withFound(c, 'invincible2'), true).catch(() => false)
   return true
 }
 
@@ -8252,7 +8259,8 @@ export const register: Register = (on, options) => {
     // Only the cyberpunk skins draw these: elsewhere each tool call's replay beat
     // would draw the pane again for nothing.
     const hasEggs = Boolean(eggOf())
-    const streetCred = hasEggs ? await read($, cred) : BLANK_CRED
+    // The skin's own view: its secret badge only when its own secret is found (credFor).
+    const streetCred = hasEggs ? credFor(await read($, cred), SKIN.cast) : BLANK_CRED
     const beats = hasEggs ? await read($, timeline) : []
     const pick = hasEggs ? await read($, bdPick) : -1
     const report = tokenReport(info, list, boss, tw, clockNow)
@@ -8411,9 +8419,9 @@ export const register: Register = (on, options) => {
                   source={th ? paneFinish(((src: string) => (th.roamer ? overlayInto(src, th, { at: clockNow, ctxPct: info.contextPct, party: (boss.celebrateUntil ?? 0) > clockNow }) : src))(th.cred.card ? th.cred.card(W, streetCred, SKIN.colors, FONT, cardShape) : credCard(W, streetCred, SKIN.colors, FONT, cardShape, th.cred.title, '', th.cred.ranks, th.cred.words)), th, 'cred', clockNow, info.contextPct, (boss.celebrateUntil ?? 0) > clockNow, boss.isWorking) : credCard(W, streetCred, SKIN.colors, FONT, cardShape, egg === 'samurai' ? 'ROCKERBOY CRED' : 'STREET CRED', 'ストリートクレッド', egg === 'samurai' ? rockerRankOf : rankOf)}
                   alt={`Level ${levelOf(streetCred.xp)} ${(th ? th.cred.ranks : egg === 'samurai' ? rockerRankOf : rankOf)(levelOf(streetCred.xp))}, ${streetCred.xp} XP, ${streetCred.badges.length} badges`}
                 />
-                {th?.era && (streetCred.samurai || th.era === 2) ? <Button key="inv-era" label={th.era === 2 ? '⇄\uFE0E CLASSIC SUIT' : '⇄\uFE0E NEW SUIT'} plain onPress={async () => { await setInvEra($, th.era === 2 ? 1 : 2) }} /> : null}
+                {th?.era && (foundOf(streetCred, 'invincible2') || th.era === 2) ? <Button key="inv-era" label={th.era === 2 ? '⇄\uFE0E CLASSIC SUIT' : '⇄\uFE0E NEW SUIT'} plain onPress={async () => { await setInvEra($, th.era === 2 ? 1 : 2) }} /> : null}
                 {th?.face && SKIN.id === 'caliper' ? <Button key="cal-mode" label={`⇄\uFE0E ${calNext().toUpperCase()}`} plain onPress={async () => { await setCalMode($, calNext()) }} /> : null}
-                {th?.mode && (streetCred.samurai || th.mode === 'capri') ? <Button key="er2-mode" label={th.mode === 'capri' ? '⇄\uFE0E Back to D' : '⇄\uFE0E Let Capri in'} plain onPress={async () => { await setEr2Mode($, th.mode === 'capri' ? 'd' : 'capri', false) }} /> : null}
+                {th?.mode && (foundOf(streetCred, 'capricorn') || th.mode === 'capri') ? <Button key="er2-mode" label={th.mode === 'capri' ? '⇄\uFE0E Back to D' : '⇄\uFE0E Let Capri in'} plain onPress={async () => { await setEr2Mode($, th.mode === 'capri' ? 'd' : 'capri', false) }} /> : null}
               </Box>
             ) : null}
             <Box key="workflow" marginBottom={1}>
