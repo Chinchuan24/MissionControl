@@ -3,7 +3,7 @@
 //      a cancel, a compaction, a plan, a new file, the context, the cost, idle...) with a toast, a BREAKING line and an act.
 //   2. THE SCHEDULE, from the clock alone (so a redraw anywhere resumes it): the daily SET PIECES (seeded by the local day, as
 //      Invincible's showdown), the 13 rare ROAMERS (one 6-minute slot, 65% of slots), and THE AMBUSH v2 (12 s, both panels, every
-//      15-20 min while a job works; three choreographies, never the same twice running). `stageAt` picks what is on now.
+//      30-45 min while a job works (the director's `rare` cadence); three choreographies, never the same twice running). `stageAt` picks what is on now.
 //   3. THE ACTS those draw (band AND pane), built with theboys-acts' Act: one CSS duration, one pinned delay. Kimiko never speaks:
 //      she gets closed captions, `[signs: …]` (M4). PG-13: no hit lands; a scorch line, a smoke puff and flashbulbs are the impacts.
 //   4. THIS MEANS NOIR's pieces (the curtain call, the Buster Beaver cheer) and the replays (`/missioncontrol play <name>`).
@@ -15,6 +15,7 @@ import { BUST, C, CRAWL_Y, PROPS, SP, T, condW, pal, pin, px, r1, sansW, spH, sp
 import type { Mode } from './theboys'
 import { actMs, autoLookAtMe, boysFx, fixedAt, onBoysEvent, registerReplay, setActMs, setApprovalMod, setStageBusy, testFails, toastOk, vnnBreak } from './theboys-eggs'
 import type { BoysEventArgs, BoysMode } from './theboys-eggs'
+import { cadence } from './stage/director'
 
 const { feet, GROUND, gaugeOf, coverBust, dim, poof, knight, octo, tentacle, beaver, critter, dog, pig, flashbulb, cone, vial, crowd, runner, streak, heart } = KIT
 const by = (m: BoysMode, brand: string, book: string, gold: string, noir = brand): string => (m === 'book' ? book : m === 'gold' ? gold : m === 'noir' ? noir : brand)
@@ -88,10 +89,12 @@ export const dayPlan = (at: number): Slot[] => {
 const near = (a: { startAt: number; endAt: number }, b: { startAt: number; endAt: number }, gap: number): boolean => a.startAt < b.endAt + gap && b.startAt < a.endAt + gap
 const pieceNear = (s: { startAt: number; endAt: number }): boolean => [s.startAt, s.endAt].some(t => dayPlan(t).some(q => near(s, q, PIECE_GAP_MS)))
 
-// THE AMBUSH v2: slots of 17.5 min, each starting in its first 2.5 min, so one fires every 15-20 min while a job works.
+// THE AMBUSH v2: rare, through the stage director's `rare` cadence (30-45 min): slots of 37.5 min, each AMBUSH at a seeded
+// moment in its slot's first 15 min, so one fires about every 37 min while a job works (never closer than ~22 min). It was
+// every 15-20 min, a 12 s takeover with the scrim over the working numbers: tens a day.
 export const AMBUSH_MS = 12_000
-export const AMB_SLOT_MS = 1_050_000
-export const AMB_JITTER_MS = 150_000
+export const AMB_SLOT_MS = cadence('rare').slotMs
+export const AMB_JITTER_MS = cadence('rare').jitterMs
 export const CHOREOS = ['a', 'b', 'c'] as const
 /** The slot's AMBUSH: its start and its choreography (the three take turns, so the same one never plays twice running). */
 export const ambushOfSlot = (slot: number): Slot => {
