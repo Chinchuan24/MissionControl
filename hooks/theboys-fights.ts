@@ -95,7 +95,7 @@ const slate = (a: Act, w: Win, t1: number): string => {
   const book = w.m === 'book'
   const gold = w.m === 'gold'
   const card = book
-    ? `<rect x="${w.x0}" y="${w.y0}" width="${w.x1 - w.x0}" height="${w.gy - w.y0}" fill="#16181B"/><g transform="rotate(-2 ${r1(cx)} ${r1(my)})"><rect x="${r1(cx - 92)}" y="${r1(my - 13)}" width="184" height="24" fill="${PROPS.tape}"/>${C(cx, my + 4, 'THE WIRE · UNEDITED', 11, PROPS.paperInk, 'text-anchor="middle" letter-spacing="1.4"')}</g>`
+    ? `<rect x="${w.x0}" y="${w.y0}" width="${w.x1 - w.x0}" height="${w.gy - w.y0}" fill="#16181B"/><g transform="rotate(-2 ${r1(cx)} ${r1(my)})"><rect x="${r1(cx - 92)}" y="${r1(my - 13)}" width="184" height="24" fill="${PROPS.tape}"/>${C(cx, my + 4, 'THE WIRE · UNEDITED', 11, PROPS.paperInk as string, 'text-anchor="middle" letter-spacing="1.4"')}</g>`
     : `<rect x="${w.x0}" y="${w.y0}" width="${w.x1 - w.x0}" height="${w.gy - w.y0}" fill="${gold ? '#1E1406' : INK}"/><rect x="${r1(cx - 110)}" y="${r1(my - 15)}" width="220" height="1" fill="${gold ? '#C9A13B' : '#F0D27A'}"/>${C(cx, my + 2, 'VIEWER DISCRETION ADVISED', 12, gold ? '#F4DC86' : '#F0D27A', 'text-anchor="middle" letter-spacing="1.6"')}${w.band ? '' : C(cx, my + 14, gold ? 'RECORDED LIVE · 1983' : 'THE FOLLOWING FOOTAGE HAS NOT BEEN APPROVED', 6.5, '#ECE6DA', 'text-anchor="middle" letter-spacing="1"')}`
   return a.sg.on(card, 0, t1)
 }

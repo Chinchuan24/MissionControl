@@ -724,7 +724,7 @@ const ROWS: Record<string, Row> = {
       for (let i = 0; i < 9; i++) heads += a.kf(bank.use(`h${i}`, x + 31 + i * 31, y0 + 34, 1, 1.5), [[0, 'opacity:0;transform:scale(.2)'], [0.12 + i * 0.06, 'opacity:0;transform:scale(.2)'], [0.3 + i * 0.06, 'opacity:1;transform:scale(1.15)'], [0.4 + i * 0.06, 'opacity:1;transform:none'], [2, 'opacity:1;transform:none']], { c: true, ease: ease('overshoot') })
       s += a.kf(heads, [[0, 'transform:none'], [0.8, 'transform:none'], [1.9, 'transform:scale(1.06)'], [2, 'transform:scale(1.06)']], { origin: `${r1(x + 155)}px ${y0 + 34}px`, ease: ease('settle') })
       s += a.kf(C(x + 155, y0 + 56, 'FULL ROSTER', 13, '#F0D27A', 'text-anchor="middle" letter-spacing="3"'), [[0, 'opacity:0;transform:translateY(8px)'], [0.55, 'opacity:0;transform:translateY(8px)'], [0.75, 'opacity:1;transform:none'], [2, 'opacity:1;transform:none']], { ease: ease('settle'), still: 'opacity="1"' })
-      return `<defs>${bank.defs()}</defs>` + s + a.on(`<rect width="${g.W}" height="${g.H}" rx="10" fill="#FFFFFF" opacity=".6"/>`, 0.9, 0.98, { still: false }) + a.fx(fx.confetti(a.sg, 0.95, x + 60, y0 + 10, { n: 8, seed: 'frc', colors: ['#F0D27A', '#FFFFFF', PROPS.hero] }) + fx.confetti(a.sg, 1.0, x + 250, y0 + 10, { n: 8, seed: 'frd', colors: ['#F0D27A', '#FFFFFF', PROPS.hero] }))
+      return `<defs>${bank.defs()}</defs>` + s + a.on(`<rect width="${g.W}" height="${g.H}" rx="10" fill="#FFFFFF" opacity=".6"/>`, 0.9, 0.98, { still: false }) + a.fx(fx.confetti(a.sg, 0.95, x + 60, y0 + 10, { n: 8, seed: 'frc', colors: ['#F0D27A', '#FFFFFF', PROPS.hero as string] }) + fx.confetti(a.sg, 1.0, x + 250, y0 + 10, { n: 8, seed: 'frd', colors: ['#F0D27A', '#FFFFFF', PROPS.hero as string] }))
     },
     pane: ['table', (a, g) => {
       let s = ''

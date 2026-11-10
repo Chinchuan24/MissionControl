@@ -148,6 +148,9 @@ export const FIGHT_CSS = `${SHAKE_CSS.replace(/\n/g, '')}.dl-c{transform-box:fil
 
 // ---------------------------------------------------------------- the cut builder
 const STAR = { core: '#FFFFFF', star: '#FFE066', ring: '#9FE8FF' }
+/** The ink and the dark paper as plain strings (PROPS is a loose record: strict index access reads it as string | undefined). */
+const INK_C = PROPS.ink as string
+const PAPER_D = PROPS.paperDark as string
 const BLOCK = '#1B2236'
 const look = (sc: number): FightLook => ({ sc, ink: PROPS.ink, star: STAR, spark: '#FFE9A8', dust: '#FFFFFF', lines: '#FFFFFF', word: '#FFE066', font: COND, textClass: 'dl-t', impactBg: PROPS.ink, impactFg: '#FFFFFF' })
 /** Act time at which an eased move reaches progress `v` (0..1). */
@@ -462,7 +465,7 @@ const actCut = (c: Cut, act: ActIndex): void => {
     f.at(0).approach('m', mx, 0.26, { y: yc + 12, ease: EASE_IN, lines: false, ghosts: false })
     c.note('m', mx, yc + 12, 'T4')
     c.crater(f.t, 1.5, mx, gy - 30, 34)
-    c.set += fx.ring(c.act, f.t, mx, gy - 30, { rx: 26, color: '#FFFFFF' }) + fx.dust(c.act, f.t, mx + 20, gy - 30, { n: 5, seed: 'smash', color: PROPS.paperDark, dx: -10, s: 1.4 }) + fx.debris(c.act, f.t, mx, gy - 36, { n: 4, seed: 'smashd', colors: [PROPS.ink, '#2A3350', PROPS.paperDark], spread: 60 })
+    c.set += fx.ring(c.act, f.t, mx, gy - 30, { rx: 26, color: '#FFFFFF' }) + fx.dust(c.act, f.t, mx + 20, gy - 30, { n: 5, seed: 'smash', color: PROPS.paperDark, dx: -10, s: 1.4 }) + fx.debris(c.act, f.t, mx, gy - 36, { n: 4, seed: 'smashd', colors: [INK_C, '#2A3350', PAPER_D], spread: 60 })
     c.hit('m', { word: 'BOOM!', r: 22, stop: STOP.slam, shake: 4, flash: 0.3, x: mx, y: gy - 34, wx: mx + 40, wy: yc - 40 })
     f.wait(0.12).pose('m', 'M2')
     f.approach('m', mx, 0.25, { y: yc, ease: 'settle', lines: false, ghosts: false })
@@ -523,7 +526,7 @@ const actCut = (c: Cut, act: ActIndex): void => {
     f.throw('m', lx, gy - 8, { d: 0.32, arc: -20, turns: 1, pose: 'M9' })
     c.note('m', lx, gy - 8, 'M9')
     c.crater(f.t, f.t + 1.2, lx, gy + 4, 28)
-    c.set += fx.ring(c.act, f.t, lx, gy + 6, { rx: 22, color: '#FFFFFF' }) + fx.puff(c.act, f.t, lx, gy + 4, { s: 1.1, fill: PROPS.paperDark, ink: PROPS.ink }) + fx.debris(c.act, f.t, lx, gy - 2, { n: 6, seed: 'slam1', colors: [PROPS.ink, PROPS.paperDark], spread: 40 })
+    c.set += fx.ring(c.act, f.t, lx, gy + 6, { rx: 22, color: '#FFFFFF' }) + fx.puff(c.act, f.t, lx, gy + 4, { s: 1.1, fill: PROPS.paperDark, ink: PROPS.ink }) + fx.debris(c.act, f.t, lx, gy - 2, { n: 6, seed: 'slam1', colors: [INK_C, PAPER_D], spread: 40 })
     c.hit('m', { word: 'BOOM!', r: 18, stop: STOP.slam, shake: 4, flash: 0.35, impact: [90, 46], x: lx, y: gy - 6, wx: lx, wy: gy - 34 })
     c.set += fx.koStars(c.act, f.t + 0.1, f.t + 0.7, lx, gy - 30, { color: '#FFE066', ink: PROPS.ink })
     f.wait(0.15).pose('o', 'O1').wait(0.45)
@@ -619,7 +622,7 @@ const conquestBand = (c: Cut): void => {
   c.note('m', ex, ey, 'M13')
   const sx = Math.round(hx - 2 - 2 * r * Math.sin((22 * Math.PI) / 180))
   c.crater(f.t, f.t + 1.0, sx, gy, 30)
-  c.set += fx.ring(c.act, f.t, sx, gy, { rx: 24, color: '#FFFFFF' }) + fx.dust(c.act, f.t, sx + 14, gy - 2, { n: 4, seed: 'cqslam', color: PROPS.paperDark, dx: -10, s: 1.1 }) + fx.debris(c.act, f.t, sx, gy - 8, { n: 4, seed: 'cqslamd', colors: [PROPS.ink, BLOCK, PROPS.paperDark], spread: 40 })
+  c.set += fx.ring(c.act, f.t, sx, gy, { rx: 24, color: '#FFFFFF' }) + fx.dust(c.act, f.t, sx + 14, gy - 2, { n: 4, seed: 'cqslam', color: PROPS.paperDark, dx: -10, s: 1.1 }) + fx.debris(c.act, f.t, sx, gy - 8, { n: 4, seed: 'cqslamd', colors: [INK_C, BLOCK, PAPER_D], spread: 40 })
   c.hit('m', { word: 'WHAM!', r: 24, stop: STOP.slam, shake: 4, flash: 0.35, impact: [80, 34], push: 1.1, x: sx, y: gy - 12, wx: sx - 34, wy: gy - 52 })
   // Down he goes, toward the viewer: S -> M out of the band's bottom (COVER STORY catches him at full size).
   f.wait(0.16)
@@ -645,7 +648,7 @@ const conquestAct = (c: Cut, act: ActIndex): void => {
     f.at(0).approach('m', mx, 0.26, { y: yc + 12, ease: EASE_IN, lines: false, ghosts: false })
     c.note('m', mx, yc + 12, 'T4')
     c.crater(f.t, 1.6, mx, gy - 30, 34)
-    c.set += fx.ring(c.act, f.t, mx, gy - 30, { rx: 26, color: '#FFFFFF' }) + fx.dust(c.act, f.t, mx + 20, gy - 30, { n: 5, seed: 'cqsmash', color: PROPS.paperDark, dx: -10, s: 1.4 }) + fx.debris(c.act, f.t, mx, gy - 36, { n: 4, seed: 'cqsmashd', colors: [PROPS.ink, '#2A3350', PROPS.paperDark], spread: 60 })
+    c.set += fx.ring(c.act, f.t, mx, gy - 30, { rx: 26, color: '#FFFFFF' }) + fx.dust(c.act, f.t, mx + 20, gy - 30, { n: 5, seed: 'cqsmash', color: PROPS.paperDark, dx: -10, s: 1.4 }) + fx.debris(c.act, f.t, mx, gy - 36, { n: 4, seed: 'cqsmashd', colors: [INK_C, '#2A3350', PAPER_D], spread: 60 })
     c.hit('m', { word: 'BOOM!', r: 22, stop: STOP.slam, shake: 4, flash: 0.3, x: mx, y: gy - 34, wx: mx + 40, wy: yc - 40 })
     f.wait(0.12).pose('m', 'M2')
     f.approach('m', mx, 0.25, { y: yc, ease: 'settle', lines: false, ghosts: false })
@@ -733,7 +736,7 @@ const conquestAct = (c: Cut, act: ActIndex): void => {
     c.note('c', lx, ly, 'C7')
     c.note('m', hit, py, 'M3')
     c.crater(f.t, f.t + 1.6, lx, gy + 4, 36)
-    c.set += fx.ring(c.act, f.t, lx, gy + 6, { rx: 28, color: '#FFFFFF' }) + fx.puff(c.act, f.t, lx, gy + 2, { s: 1.2, fill: PROPS.paperDark, ink: PROPS.ink }) + fx.debris(c.act, f.t, lx, gy - 2, { n: 6, seed: 'cqdown', colors: [PROPS.ink, PROPS.paperDark, BLOCK], spread: 46 })
+    c.set += fx.ring(c.act, f.t, lx, gy + 6, { rx: 28, color: '#FFFFFF' }) + fx.puff(c.act, f.t, lx, gy + 2, { s: 1.2, fill: PROPS.paperDark, ink: PROPS.ink }) + fx.debris(c.act, f.t, lx, gy - 2, { n: 6, seed: 'cqdown', colors: [INK_C, PAPER_D, BLOCK], spread: 46 })
     c.hit('c', { word: 'BOOM!', r: 20, stop: STOP.slam, shake: 4, flash: 0.35, impact: [96, 46], x: lx, y: gy - 6, wx: lx + 30, wy: gy - 46 })
     c.set += fx.koStars(c.act, f.t + 0.15, f.t + 1.0, lx - 10, ly - 18, { color: '#FFE066', ink: PROPS.ink })
     // The quiet beat: Mark hovers, tired (a slow breath); from the crater, a grin: NOT DONE.

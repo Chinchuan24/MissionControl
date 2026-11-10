@@ -651,7 +651,7 @@ export const tableCard = (W: number, root: BoysOrg, m: Mode) => {
   const at = (j: number) => {
     const a = Math.PI + (j / N) * Math.PI * 2
     const d = (Math.sin(a) + 1) / 2
-    return { x: Math.round(cx + Math.cos(a) * R[0]), y: Math.round(cy + Math.sin(a) * R[1]), s: 0.8 + 0.3 * d, o: 0.62 + 0.38 * d, d }
+    return { x: Math.round(cx + Math.cos(a) * (R[0] as number)), y: Math.round(cy + Math.sin(a) * (R[1] as number)), s: 0.8 + 0.3 * d, o: 0.62 + 0.38 * d, d }
   }
   const lag = (j: number) => `animation-delay:-${r1((j / N) * ORBIT_S)}s`
   s.push('</g>')
@@ -670,7 +670,7 @@ export const tableCard = (W: number, root: BoysOrg, m: Mode) => {
     const lab = clip(p.node.label.replace(/^[^:]+:\s*/, ''), 9.5, 92)
     s.push(seat(j, `<title>${esc(`${p.node.label}${p.role ? ` · ${p.role}` : ''} · ${p.node.status ?? 'waiting'}`)}</title>${live ? '<circle class="tb-pulse" r="15" fill="#FFF4C2" opacity=".14"/>' : ''}<circle r="9" fill="${tone}" stroke="${P.tile}" stroke-width="1.5"/><circle cy="-1" r="3.4" fill="${PROPS.skin}"/>${label(j, lab, live, live ? P.text : P.sub)}`))
   }
-  s.push(`<style>${orbitCss(cx, cy, R[0], R[1])}</style>`)
+  s.push(`<style>${orbitCss(cx, cy, R[0] as number, R[1] as number)}</style>`)
   if (people.length > TABLE_SEATS) s.push(T(W / 2, H - 30, `+${people.length - TABLE_SEATS} more in the gallery`, 11, 400, P.muted, 'text-anchor="middle" font-style="italic"'))
   s.push(T(16, H - 10, people.length ? (m === 'book' ? 'Everyone in the room. Watch the exits.' : 'Live seats get the spotlight.') : 'AMERICAN HERO · OPEN SLOTS', 11, 400, P.muted, 'font-style="italic"'))
   if (m === 'book') s.push(leak(W, H, 'org'))

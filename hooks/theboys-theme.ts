@@ -102,9 +102,9 @@ export const boysExtras = (m: Mode) => (o: ExtraArgs): string => {
   noteLook(m, o.at)
   const out: string[] = []
   const swapping = swapLive(o.swapAt, o.at)
-  if (swapping) out.push(swapLayer(o.W, o.H, m, o.swapAt))
+  if (swapping) out.push(swapLayer(o.W, o.H, m, o.swapAt as number))
   // The bust turns with the swap: the old face away, the new one round (theboys.ts bustTurn), over the swap's veil.
-  if (swapping && o.surface === 'band' && (m === 'brand' || m === 'book')) out.push(bustTurn(m, o.swapAt))
+  if (swapping && o.surface === 'band' && (m === 'brand' || m === 'book')) out.push(bustTurn(m, o.swapAt as number))
   if (o.surface === 'band') {
     if (!swapping) autoLookAtMe(o.ctxPct, o.at)
     // The 7SPN bug sits just left of the CONTEXT readouts (or the band's right edge when they are folded away).

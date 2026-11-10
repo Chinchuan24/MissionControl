@@ -151,7 +151,7 @@ test('modes: the phrases are whole phrases; the banned bare words never fire any
 
 // --- contrast ----------------------------------------------------------------------------------------------------------------
 test('contrast: every text colour reads at 4.5:1 or better on tile, tile2 and the pane in all three looks', () => {
-  for (const P of [BRAND, BOOK, GOLD] as Record<string, string>[]) {
+  for (const P of [BRAND, BOOK, GOLD] as unknown as Record<string, string>[]) {
     for (const fg of [P.text, P.sub, P.muted, P.aT, P.done, P.alert, P.redT]) for (const bg of [P.tile, P.tile2, P.bg]) expect(contrast(fg as string, bg as string)).toBeGreaterThanOrEqual(4.5)
     for (const role of P.roles as unknown as string[]) expect(contrast(role, P.tile as string)).toBeGreaterThanOrEqual(4.5)
   }
@@ -281,7 +281,7 @@ test('PR spin: a failed tool becomes press-speak ON BRAND, the real line LEAKED 
   expect(spin('Grep', 'exit code 1: failed')).toBe('VOUGHT PR · Grep: being reimagined.')
   expect(spin('Edit', 'Error: old_string not unique')).toContain('a learning moment')
   expect(prToast('Read', 'ENOENT: no such file', 'book')).toBe('LEAKED · Read: ENOENT: no such file')
-  for (const [, v] of [['x', spin('A', 'y')]]) expect(v.length).toBeLessThanOrEqual(90)
+  for (const [, v] of [['x', spin('A', 'y')]] as [string, string][]) expect(v.length).toBeLessThanOrEqual(90)
   base(on)
   await start($, 'the-boys')
   await jobIn($)
