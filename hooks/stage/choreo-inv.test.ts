@@ -79,3 +79,23 @@ test('choreo x Invincible: clean, inside the fight-act budget, with the clash as
   expect((still.match(/<use /g) ?? []).length).toBe(2)
   expect(catchCut(T0).svg).toBe(svg)
 })
+
+test('choreo: `star: false` keeps the hit (hit-stop, shake, the hits list) without the star; `ghosts: false` draws no afterimage', () => {
+  const sp = { rows: ['aa', 'aa'], pal: { a: '#FF0000' } }
+  const make = (look: { ghosts?: boolean }, star: boolean) => {
+    const act = new Act({ id: 'chk', ms: 2000, at: 0, W: 200, H: 80 })
+    act.cast('p', sp)
+    const f = new Fight(act, { sc: 2, ...look })
+    f.fighter('a', 'p', 20, 40).fighter('b', 'p', 160, 40, -1)
+    f.at(0.2).approach('a', 120, 0.1).hit('b', { star, freeze: 0.1 }).knockback('b', 30)
+    return { f, s: f.body() }
+  }
+  const on = make({}, true)
+  const off = make({ ghosts: false }, false)
+  expect(on.s).toContain('<polygon')
+  expect(off.s).not.toContain('<polygon')
+  expect(off.f.hits.length).toBe(1)
+  expect(off.s.length).toBeLessThan(on.s.length)
+  expect((on.s.match(/opacity:0\.18/g) ?? []).length).toBeGreaterThan(0)
+  expect((off.s.match(/opacity:0\.18/g) ?? []).length).toBe(0)
+})
