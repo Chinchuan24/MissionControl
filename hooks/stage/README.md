@@ -33,6 +33,7 @@ So every piece follows one contract:
 | `parallax.ts` | 2-4 layer backdrop, each layer one `<pattern>` drifting in steps |
 | `turntable.ts` | "3D": `turntable` (8-view turnaround), `spin` (views as act windows), `voxel` (extruded sprite), `flip` / `tilt` (2D card) |
 | `director.ts` | ONE scheduler for rare events: lanes of seeded slots, priority, breath, held windows, working-only, daily, replays |
+| `replay.ts` | The shared `/missioncontrol play <name>` registry: every skin's fights (and acts worth replaying) by name |
 | `choreo.ts` | The fight choreographer: a beat language compiled to an `Act` + `fx` + `Camera`; `fightLane` for the director |
 
 ### timeline: `Act`
@@ -130,7 +131,7 @@ expect(a.dupes).toEqual([]); expect(a.chars).toBeLessThan(BUDGET.fightAct.card)
 ```ts
 import * as wipe from './stage/wipe'
 body += wipe.clip(act, 0, 0.5, veil, { dir: 'r', mode: 'out' })       // veil wipes away to the right ('in' wipes on)
-body += wipe.bar(act, 0, 0.5, { dir: 'r', color: ACCENT })             // a hot bar rides the edge (same times + ease)
+body += wipe.bar(act, 0, 0.5, { dir: 'r', color: ACCENT })             // a hot bar rides the edge (same times + `ease`, default 'whip')
 body += wipe.iris(act, 0.2, 0.7, { cx: 40, cy: H / 2, mode: 'in' })     // a round hole opens on the scene ('out' closes)
 body += wipe.titleCard(act, 0.3, 1.6, { text: 'ROUND 2', x: W / 2, y: H / 2, size: 28, fill: GOLD, ink: INK })  // escaped
 body += wipe.shards(act, 0.1, { n: 8, seed: 'cut', colors: [A, B], mode: 'in' })
@@ -138,8 +139,10 @@ body += wipe.shards(act, 0.1, { n: 8, seed: 'cut', colors: [A, B], mode: 'in' })
 All act-bound (pinned, part of the act's still pair). No blend modes (ER2's hue veil cannot live inside an act).
 
 **The skin switch** (`skinSwitch`) is already wired: `/skin <name>` and the skin picker play it on the band and the top
-4 pane cards (cascading 60 ms apart), 0.7 s, pinned to the switch. Default = the NEW skin's ground wipes off the new panel
+4 pane cards (cascading 60 ms apart), 0.7 s, pinned to the switch. Default = a see-through veil of the NEW skin's ground
+(`SWITCH_VEIL`, .55: the working numbers stay readable through it) wipes off the new panel ('settle': it moves at once),
 with a bar in its accent and a few shards; only the new skin's colours (GENE stays grey). Reduced motion: a 2 px accent rule.
+Keep a flavour's `veil` at .6 or under: a full cover reads as a blank panel and hides the numbers.
 It skips itself while a big act is drawn (`<!--dl-->` in the source), while a theme keeps a fight's pane reserve, and on a
 band above 60 k. Typed unlocks with their own transition (CAPRI, SOLID GOLD, NOIR, Heisenberg, the era swap) never set it.
 Your skin's flavour (to wire in `register.tsx` `switchBand`/`switchTree` when you need it):
@@ -184,24 +187,43 @@ const sway = tilt({ id: 'qt', x, y, w, h, svg: box, deg: 4, glare: '#FFF' })
 ### director (rare events)
 
 ```ts
-import { Director, cadence, perWindow } from './stage/director'
+import { Director, cadence, localOffsetMs, perWindow } from './stage/director'
 import { fightLane } from './stage/choreo'
-const dir = new Director('boys', { dayOffsetMs: tzOffsetMs })          // same seed = same schedule on every redraw
+const dir = new Director('boys', { dayOffsetMs: localOffsetMs(Date.now()) })   // same seed = same schedule on every redraw
 fightLane(dir, [{ id: 'offthebooks', ms: 9000 }, { id: 'reunion', ms: 11000, replay: 'reunion' }])  // 30-45 min, working only, in turns
 dir.lane('piece', { daily: [9, 18] }).add('piece', { id: 'billboard', ms: 7000, replay: 'billboard' })   // once a day, 9-18 h
 dir.lane('roam', { gap: 'sometimes', chance: 0.65 }).add('roam', { id: 'r-hughie', ms: 6000, weight: 30 }).add('roam', { id: 'r-noir', ms: 5000, weight: 7 })
 const now = dir.at(at, { working, held: typed ? [typed] : [] }, AHEAD_MS)   // { lane, id, startAt, endAt, src } | undefined
-const replay = dir.play('reunion', at)                                     // `/missioncontrol play reunion`: store as your typed act
+const replay = dir.play('reunion', at)                                     // a bit from now: store it as your typed act (see replay below)
 ```
 - **Lanes in priority order** (first added wins). A lower lane's slot near a higher lane's slot is DROPPED (never moved).
 - **Breath**: 10 s between two acts (fights: 20 s). **held** windows (a typed act, a mode swap) beat every lane.
 - **Rarity words** (`RARITY`, minutes between two hits): often 2-4, sometimes 6-10, uncommon 12-20, rare 30-45, fight 30-45, epic 60-120.
 - Pure: `plan(t0, t1, ctx)` lists every act; `next(t, ctx, lane)` finds the next one; tests can count a simulated day.
+- `dayOffsetMs` is east positive (`localOffsetMs(at)`). Never pass `getTimezoneOffset()` raw: it is minutes, west positive.
+- Higher lanes beat lower ones by their RAW slots (whatever the context): a roamer near a working-only fight slot is dropped
+  even at rest, so the schedule never reshuffles when a job starts or stops.
 - **Keeping your own scheduler?** Use the helpers: `perWindow(everyMin)` = a roamer's chance per 30 s window (Jesse, Mike, Capri
   use it now), `cadence('rare')` = slot + jitter for your own slots (The Boys' AMBUSH uses it now: 30-45 min).
 - **Migrating a skin** (not done yet for any skin's whole schedule): register each roamer / set piece / fight as a bit with
   its length, call `dir.at()` where your `stageAt`/`fightDue` was, keep your typed acts as `held`, keep the old function
   behind it for one release and test that the hit counts per simulated day match the audit's numbers.
+
+### replay (`/missioncontrol play <name>`)
+
+```ts
+import { playsFrom, registerPlay } from './stage/replay'
+// Every director bit with a replay name (fightLane names every fight), offered while any of these skins is worn:
+playsFrom(['the-boys', 'solidgold', 'noir'], dir, s => { MY_TYPED = s }, n => `fight: ${n}`)
+// Or one act by hand. `run` stores it as your typed act, pinned to `at`; return a string to answer with it instead.
+registerPlay('cyberpunk-2077', { name: 'maxtac', what: 'the MaxTac raid', run: at => { MY_TYPED = { kind: 'maxtac', at } } })
+```
+- Register at module load, keyed by the skin ids it plays on (`SKIN.id`). The command asks this registry first, then
+  redraws both panels (your act is drawn from the typed act you stored, as when it is typed: pinned, resumes on redraw).
+- The Boys (`theboys-eggs.ts` `REPLAYS`, 90+ names) and Invincible (`INV_REPLAYS`, 8) keep their own older lists; their
+  "Play which?" lists also name what is registered here. New fights go here, not into those lists.
+- Names: lower case letters, digits and dashes. Test your play with `runPlay(skin, name, at)` in a unit test: the plugin
+  runs in its own module graph, so a test cannot register into a mounted engine.
 
 ### choreo (fights)
 
@@ -223,7 +245,8 @@ const layer = act.done(f.body(), f.still())        // still = the last clash; pa
 - **Hit-stop** (`freeze`), **smear** and **impact frames** are first-class beats. A turning move lands upright on its own.
 - Proof: `choreo-inv.test.ts` writes Invincible's "The Catch" as 20 beats: same poses in the same order, the same hits at
   2.0 and 3.0 s, 35.1 k (budget 36 k). Previews: `scratchpad/motion/prev/engine2/demo-catch-*.png` (beats left, original right).
-- **Fights are rare**: put them in the director with `fightLane` (one per 30-45 min, working only) and give each a replay name.
+- **Fights are rare**: put them in the director with `fightLane` (one per 30-45 min, working only); it names each fight
+  (its `replay`, else its id). Offer them with `playsFrom` (see replay).
   PG-13: stars, flashes, dust; never blood.
 
 ## Budgets (chars, from `budget.ts`)
@@ -255,6 +278,7 @@ Hard limits: 131,072 chars per Svg (else blank), 262,144 per drawing (aim ≤ 22
 - Keep motion off the working numbers (%, cost, context, timers). Band acts sit on the scrim.
 - One id per act and surface: two acts in one Svg need two ids.
 - Schedule every rare thing through the director (or its `perWindow`/`cadence` helpers). Fights: one per 30-45 min.
+- Give every fight a replay name in `replay.ts` (`playsFrom` does it for a director).
 - Give every hidden skin its own secret id (`withFound(c, id)` in `extras.ts`; `credFor` lights only that skin's badge).
 
 ## Don't
