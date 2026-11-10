@@ -1,7 +1,6 @@
 // The proof that the beat language can write a real fight: Invincible's COVER STORY act, "The Catch" (combo A of THE
-// FIGHT, invincible-fight.ts `actCut` act 0), written as beats instead of hand keys. The look must match (same poses in
-// the same order, the same hits at the same times, the same clash still), not the bytes. It ships in no skin: the
-// Invincible team decides whether THE FIGHT v2 moves onto it (it gains the hit-stop, smears and impact frames).
+// FIGHT v1, then hand-keyed), written as beats. THE FIGHT v2 (invincible-fight.ts) is now written on choreo itself; this
+// demo stays as the small worked example of the beat language.
 import { expect, test } from 'claude-code/testing'
 import { PROPS } from '../invincible'
 import type { Era } from '../invincible'
@@ -48,16 +47,16 @@ export const catchCut = (at: number, era: Era = 1, W = 480, H = 434): { layer: s
 }
 
 const T0 = Date.parse('2026-11-10T10:00:00Z')
-test('choreo x Invincible: "The Catch" in beats plays the same poses in the same order as the hand-keyed act', () => {
-  const orig = fightAct({ W: 480, H: 434, era: 1, startAt: T0 }, 0)
+test('choreo x Invincible: "The Catch" in beats plays the catch, then the backhand, as THE FIGHT v2 (now on choreo) does', () => {
+  const shipped = fightAct({ W: 480, H: 434, era: 1, startAt: T0 }, 0)
   const { act } = catchCut(T0)
-  // Mark is one actor here (the original splits his ball into a second one), so compare the poses each side shows.
   const mark = (c: string[]): string[] => c.filter(k => k.startsWith('M')).filter((k, i, a) => a[i - 1] !== k)
-  const omni = (c: string[]): string[] => c.filter(k => k.startsWith('O')).filter((k, i, a) => a[i - 1] !== k)
+  const omni = (c: string[]): string[] => c.filter(k => /^O\d/.test(k)).filter((k, i, a) => a[i - 1] !== k)
   const ours = act.chain.sort((a, b) => a[0] - b[0]).map(c => c[1])
-  expect(omni(ours)).toEqual(omni(orig.chain))
-  expect(mark(ours)).toEqual(mark(orig.chain))
   expect(mark(ours)).toEqual(['M9', 'M1', 'M2', 'M3', 'M8', 'M9', 'M10', 'M9'])
+  // Both catch the punch (O4) before the backhand (O7), and the shipped act is an engine Act (its reduced-motion pair).
+  for (const c of [ours, shipped.chain]) expect(omni(c).indexOf('O4')).toBeLessThan(omni(c).lastIndexOf('O7'))
+  expect(shipped.svg).toMatch(/prefers-reduced-motion: reduce\)\{\.\w+-a\{display:none\}/)
 })
 test('choreo x Invincible: the two hits land when the original lands them, and the v2 extras are there', () => {
   const { f, layer } = catchCut(T0)

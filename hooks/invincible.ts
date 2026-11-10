@@ -130,6 +130,8 @@ export const CSS = `
 .inv-wide{animation:inv-wide .8s steps(1) infinite}
 @keyframes inv-wide{50%{transform:translateY(-1px)}}
 .inv-bob{animation:inv-bob 1.6s steps(1) infinite}
+.inv-breath{animation:inv-breath 2.6s steps(1) infinite}
+@keyframes inv-breath{50%{transform:translateY(1px)}}
 @keyframes inv-bob{50%{transform:translateY(-1px)}}
 .inv-run{animation:inv-run 1.2s steps(1) infinite}
 @keyframes inv-run{50%{opacity:.35}}
@@ -170,7 +172,7 @@ export const CSS = `
 
 .inv-cheer,.inv-flashf,.inv-slam,.inv-sub,.inv-cshake,.inv-crack{animation-delay:var(--cd,0s)}
 @media (prefers-reduced-motion: reduce){
- .inv-blink,.inv-wide,.inv-bob,.inv-run,.inv-chip,.inv-steam,.inv-rec,.inv-scan,.inv-twirl,.inv-fresh,.inv-stitch,.inv-stamp,.inv-cheer,.inv-flashf,.inv-slam,.inv-sub,.inv-cshake,.inv-crack,.inv-think,.inv-tbub,.inv-tdrop{animation:none}
+ .inv-blink,.inv-breath,.inv-wide,.inv-bob,.inv-run,.inv-chip,.inv-steam,.inv-rec,.inv-scan,.inv-twirl,.inv-fresh,.inv-stitch,.inv-stamp,.inv-cheer,.inv-flashf,.inv-slam,.inv-sub,.inv-cshake,.inv-crack,.inv-think,.inv-tbub,.inv-tdrop{animation:none}
  .inv-run{opacity:.6}.inv-flashf{opacity:0}.inv-slam,.inv-sub,.inv-cheer,.inv-crack,.inv-think,.inv-tbub{opacity:1;transform:none}.inv-tdrop{transform:none}
 }`
 
@@ -350,7 +352,8 @@ export const gauge = (xr: any, y: any, isWorking: any, done: any, total: any, er
   return { svg: s, w }
 }
 /** The avatar: the Mark bust of the era at 0.9 (34 x 36). */
-export const figure = (era: any) => (era === 2 ? px(SP.INV_MARK_S3_BUST, 19, 38, 0.9) : px(SP.INV_MARK_BUST, 18, 38, 0.9))
+/** Mark's bust in the band's slot, breathing: 1 px every 2.6 s (steps, so it costs nothing at rest; still under reduced motion). */
+export const figure = (era: any) => `<g class="inv-breath">${era === 2 ? px(SP.INV_MARK_S3_BUST, 19, 38, 0.9) : px(SP.INV_MARK_BUST, 18, 38, 0.9)}</g>`
 /** The avatar slot while Mark is out: the cracked frame, the hole and a dust trail (THE FIGHT draws it in its timeline). */
 export const crew = (x: any, y: any, color: any, era: any, i: any = 0) => {
   const sp = [SP.INV_AGENT, SP.INV_AGENT2, SP.INV_AGENT3][i % 3]

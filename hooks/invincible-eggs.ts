@@ -4,8 +4,11 @@
 // anywhere in the act resumes it, and a draw up to AHEAD_MS before it schedules it (the delay is then positive). Cartoon, never
 // gory: impact stars, flashes, KO swirl stars.
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { ACT_LEN, ACT_OFF, BAND_CUT, FIGHT_MS, HOLE_END, fightAct, fightBand, fightHole, fightShake } from './invincible-fight'
-import type { ActIndex } from './invincible-fight'
+import { ACT_LEN, ACT_OFF, BAND_CUT, FIGHT_MS, HOLE_END, VERSIONS, fightAct, fightBand, fightHole, fightShake } from './invincible-fight'
+import type { ActIndex, Version } from './invincible-fight'
+import { fightLane } from './stage/choreo'
+import { Director, cadence } from './stage/director'
+import type { Slot } from './stage/director'
 import { thinkMark } from './invincible'
 import type { Era } from './invincible'
 import type { ExtraArgs, PaneCard } from './themes'
@@ -25,8 +28,31 @@ export const SHOWDOWN_MS = 7_400
 export const SWAP_MS = 2_200
 export const THINK_MS = 3_200
 export const VARIANTS_MS = 8_000
-/** THE FIGHT: at most once per 6 minutes, 80 % of slots, so about one per 12-15 min; only drawn while a job is working. */
-export const duelPlan = (at: any, era: any) => slotPlan(era === 2 ? 'inv-duel-2' : 'inv-duel', at, 6, 0.8, DUEL_MS)
+/**
+ * THE FIGHT on the shared director: one fight lane, 30-45 min between two fights (the crew's rule), only while a job works,
+ * the three versions in turns (slot n plays version n mod 3), each with a `/missioncontrol play <name>` replay. One director
+ * per era (each suit has its own seed, as before).
+ */
+export const fightDirector = (era: Era): Director => FIGHT_DIRS[era]
+const mkDir = (era: Era): Director => fightLane(new Director(era === 2 ? 'inv-fight-2' : 'inv-fight'), VERSIONS.map((name, i) => ({ id: `inv-fight-${i}`, ms: DUEL_MS, replay: name })))
+const FIGHT_DIRS: Record<Era, Director> = { 1: mkDir(1), 2: mkDir(2) }
+const FIGHT_SLOT = cadence('fight').slotMs
+const DUELS = new Map<string, { on: boolean; startAt: number; endAt: number; bucket: number; v: Version }>()
+/** The version a director bit (or a replay name) plays. */
+export const versionOf = (id: string): Version => { const i = VERSIONS.indexOf(id as (typeof VERSIONS)[number]); return (i >= 0 ? i : Math.max(0, Math.min(2, Number(id.slice(-1)) || 0))) as Version }
+/** THE FIGHT's slot holding `at` (one per 30-45 min, working only): its start, end and version. Pure: same at, same plan. */
+export const duelPlan = (at: any, era: any) => {
+  const e: Era = era === 2 ? 2 : 1
+  const n = Math.floor(at / FIGHT_SLOT)
+  const key = `${e}|${n}`
+  const hit = DUELS.get(key)
+  if (hit) return hit
+  const s: Slot | undefined = FIGHT_DIRS[e].plan(n * FIGHT_SLOT, (n + 1) * FIGHT_SLOT, { working: true })[0]
+  const p = s ? { on: true, startAt: s.startAt, endAt: s.startAt + DUEL_MS, bucket: n, v: versionOf(s.id) } : { on: false, startAt: n * FIGHT_SLOT, endAt: n * FIGHT_SLOT, bucket: n, v: 0 as Version }
+  if (DUELS.size > 400) DUELS.clear()
+  DUELS.set(key, p)
+  return p
+}
 /** The LOCAL date's day number, the seed for a once-a-day act: a UTC day number flips mid-evening west of UTC (morning east
  *  of +10), re-rolling the day's time halfway through it, so the act played twice or not at all. Same number as a UTC day
  *  number wherever that never happened. */
@@ -210,9 +236,14 @@ export const showdownDue = (at: number, era: Era, fx?: { kind: string; at: numbe
   return due(p, at) ? p.startAt : undefined
 }
 /** The fight's plan for a draw, or undefined: only while a job works, never with the swap, THINK, MARK, the showdown or THE MULTIVERSE. */
-export const fightDue = (at: number, era: Era, working: boolean | undefined, fx?: { kind: string; at: number }, swapAt?: number): number | undefined => {
-  // A replay (`fx` kind 'fight') plays now, job or no job.
-  if (fx?.kind === 'fight' && liveAt(fx.at, at, FIGHT_MS + 600)) return fx.at
+export const fightDue = (at: number, era: Era, working: boolean | undefined, fx?: { kind: string; at: number }, swapAt?: number): number | undefined => fightOf(at, era, working, fx, swapAt)?.startAt
+/** A replay's version: `fight` plays the classic cut, `fight:1` / `fight:2` the others (what `/missioncontrol play` stores). */
+export const FIGHT_FX = /^fight(?::([012]))?$/
+/** The fight for a draw (its start and version), or undefined. Same rules as `fightDue`. */
+export const fightOf = (at: number, era: Era, working: boolean | undefined, fx?: { kind: string; at: number }, swapAt?: number): { startAt: number; v: Version } | undefined => {
+  // A replay (`fx` kind 'fight' or 'fight:<version>') plays now, job or no job.
+  const rp = fx ? FIGHT_FX.exec(fx.kind) : null
+  if (fx && rp && liveAt(fx.at, at, FIGHT_MS + 600)) return { startAt: fx.at, v: Number(rp[1] ?? 0) as Version }
   if (!working) return undefined
   if (liveAt(swapAt, at, SWAP_MS + 500) || (fx && liveAt(fx.at, at, fx.kind === 'think' ? THINK_MS : fx.kind === 'showdown' ? SHOWDOWN_MS : fx.kind === 'variants' ? VARIANTS_MS : 0))) return undefined
   const p = duelPlan(at, era)
@@ -220,7 +251,7 @@ export const fightDue = (at: number, era: Era, working: boolean | undefined, fx?
   if (showdownPlan(at, era).startAt < p.endAt + 5000 && showdownPlan(at, era).endAt > p.startAt - 5000) return undefined
   const v = variantsPlan(p.startAt)
   if (v.on && v.startAt < p.endAt + 5000 && v.endAt > p.startAt - 5000) return undefined
-  return p.startAt
+  return { startAt: p.startAt, v: p.v }
 }
 /**
  * THE MULTIVERSE's start for a draw, or undefined: typed (`fx`; a draw up to 3 s before it already holds it, as when it waits for
@@ -243,22 +274,22 @@ export const invExtras = (era: Era, tile: string) => (o: ExtraArgs): string => {
   if (liveAt(o.swapAt, o.at, SWAP_MS)) out.push(swap(o.W, o.H, o.surface, era, { delay: dly((o.swapAt as number) + (o.surface === 'pane' ? 60 * idx : 0)) }))
   if (o.surface === 'band') {
     if (o.fx?.kind === 'think' && liveAt(o.fx.at, o.at, THINK_MS)) out.push(thinkMark(o.W, o.H, era, dly(o.fx.at)))
-    const f = fightDue(o.at, era, o.working, o.fx, o.swapAt)
+    const f = fightOf(o.at, era, o.working, o.fx, o.swapAt)
     if (f !== undefined) {
-      out.push(fightHole(era, f, tile))
-      if (o.at < f + BAND_CUT * 1000 + 600) out.push(fightBand({ W: o.W, H: o.H, era, startAt: f }).svg)
+      out.push(fightHole(era, f.startAt, tile))
+      if (o.at < f.startAt + BAND_CUT * 1000 + 600) out.push(fightBand({ W: o.W, H: o.H, era, startAt: f.startAt, v: f.v }).svg)
     }
   } else {
     const sd = showdownDue(o.at, era, o.fx)
     if (o.card === 'task' && sd !== undefined && !(o.working && fightDue(o.at, era, true, o.fx, o.swapAt) !== undefined)) out.push(`<!--dl-->${showdown(o.W, o.H, era, { delay: dly(sd) })}<!--/dl-->`)
-    const f = fightDue(o.at, era, o.working, o.fx, o.swapAt)
-    if (f !== undefined && o.card && o.at < f + (ACT_OFF[idx] + ACT_LEN[idx]) * 1000 + 600) out.push(fightAct({ W: o.W, H: o.H, era, startAt: f }, idx).svg)
+    const f = fightOf(o.at, era, o.working, o.fx, o.swapAt)
+    if (f !== undefined && o.card && o.at < f.startAt + (ACT_OFF[idx] + ACT_LEN[idx]) * 1000 + 600) out.push(fightAct({ W: o.W, H: o.H, era, startAt: f.startAt, v: f.v }, idx).svg)
   }
   return out.join('')
 }
-/** The panel's camera shake (CSS animation list for a wrapper), or '' when no fight is due. */
+/** The panel's camera shake (animation longhands for a wrapper: every shake of the cut plays), or '' when no fight is due. */
 export const invShake = (era: Era) => (o: { W: number; H: number; surface: 'band' | 'pane'; at: number; card?: PaneCard; working?: boolean; fx?: { kind: string; at: number }; swapAt?: number }): string => {
-  const f = fightDue(o.at, era, o.working, o.fx, o.swapAt)
+  const f = fightOf(o.at, era, o.working, o.fx, o.swapAt)
   if (f === undefined) return ''
-  return fightShake(o.surface, f, o.W, o.H, era, o.surface === 'pane' ? ACT_OF[o.card ?? 'cred'] : undefined)
+  return fightShake(o.surface, f.startAt, o.W, o.H, era, o.surface === 'pane' ? ACT_OF[o.card ?? 'cred'] : undefined, f.v)
 }
