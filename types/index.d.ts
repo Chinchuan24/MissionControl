@@ -67,6 +67,12 @@ export type AgentRun = {
   isBackground?: boolean
   /** Its tool calls still in flight: a long build or a permission prompt is no silence. */
   toolsInFlight?: number
+  /**
+   * When its last turn answered while the engine still kept its loop (waiting on work
+   * of its own, or settling the turn): it runs on, at the share it had, until the engine
+   * lists it ended or it starts another turn.
+   */
+  heldAt?: number
   /** Runs at max effort with a deep-check brief: an Ultra rule matched, or the person pressed ⚡. */
   isUltra?: boolean
   /** The Staffing brain's one-line why for this worker's model and effort. */
