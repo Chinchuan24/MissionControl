@@ -3,7 +3,8 @@
 One toolkit for every skin's acts, fights and idle motion. **Tools, not looks**: no colour, pose or effect here belongs
 to a skin. Your skin keeps its own signature; you build it from these parts.
 
-👉 Start from the worked example: `demo.test.ts` (`demoAct`). It uses every piece below in one 4 s act, 15 k chars.
+👉 Start from the worked examples: `demo.test.ts` (`demoAct`, every part-1 piece in one 4 s act, 15 k chars) and
+`choreo-inv.test.ts` (a real fight written as beats). Tests for each piece: `pieces.test.ts`, `kit.test.ts`.
 
 ## How it all stays smooth (read this first)
 
@@ -28,6 +29,11 @@ So every piece follows one contract:
 | `light.ts` | `sweep` (glint), `rim` (lit edge), `flicker`, `godRay`, `clipTo` (a silhouette clip) |
 | `motion.ts` | Reduced motion: `pair` (anim/still), `stop`, `hide`, `reduced` |
 | `budget.ts` | Limits, per-effect `BUDGET`, `chars`, `audit` (`dupes`, `badText`, `dupeIds`), `esc`, `doc` |
+| `wipe.ts` | Transitions: `clip` wipe, slit `bar`, `iris`, `titleCard` slam, `shards`; the generic **`skinSwitch`** (+ `into`, `sizeOf`) |
+| `parallax.ts` | 2-4 layer backdrop, each layer one `<pattern>` drifting in steps |
+| `turntable.ts` | "3D": `turntable` (8-view turnaround), `spin` (views as act windows), `voxel` (extruded sprite), `flip` / `tilt` (2D card) |
+| `director.ts` | ONE scheduler for rare events: lanes of seeded slots, priority, breath, held windows, working-only, daily, replays |
+| `choreo.ts` | The fight choreographer: a beat language compiled to an `Act` + `fx` + `Camera`; `fightLane` for the director |
 
 ### timeline: `Act`
 
@@ -119,6 +125,107 @@ expect(a.dupes).toEqual([]); expect(a.chars).toBeLessThan(BUDGET.fightAct.card)
 ```
 `chars` counts what the desktop receives (after `compact`).
 
+### wipe (transitions) and the skin switch
+
+```ts
+import * as wipe from './stage/wipe'
+body += wipe.clip(act, 0, 0.5, veil, { dir: 'r', mode: 'out' })       // veil wipes away to the right ('in' wipes on)
+body += wipe.bar(act, 0, 0.5, { dir: 'r', color: ACCENT })             // a hot bar rides the edge (same times + ease)
+body += wipe.iris(act, 0.2, 0.7, { cx: 40, cy: H / 2, mode: 'in' })     // a round hole opens on the scene ('out' closes)
+body += wipe.titleCard(act, 0.3, 1.6, { text: 'ROUND 2', x: W / 2, y: H / 2, size: 28, fill: GOLD, ink: INK })  // escaped
+body += wipe.shards(act, 0.1, { n: 8, seed: 'cut', colors: [A, B], mode: 'in' })
+```
+All act-bound (pinned, part of the act's still pair). No blend modes (ER2's hue veil cannot live inside an act).
+
+**The skin switch** (`skinSwitch`) is already wired: `/skin <name>` and the skin picker play it on the band and the top
+4 pane cards (cascading 60 ms apart), 0.7 s, pinned to the switch. Default = the NEW skin's ground wipes off the new panel
+with a bar in its accent and a few shards; only the new skin's colours (GENE stays grey). Reduced motion: a 2 px accent rule.
+It skips itself while a big act is drawn (`<!--dl-->` in the source), while a theme keeps a fight's pane reserve, and on a
+band above 60 k. Typed unlocks with their own transition (CAPRI, SOLID GOLD, NOIR, Heisenberg, the era swap) never set it.
+Your skin's flavour (to wire in `register.tsx` `switchBand`/`switchTree` when you need it):
+```ts
+skinSwitch({ W, H, at, surface: 'band', from, to, flavour: { dir: 'd', ms: 600, bar: false, shards: 0, extra: (act, s) => wipe.titleCard(act, .1, .5, { text: 'NEW', x, y }) } })
+```
+
+### parallax
+
+```ts
+import { parallax } from './stage/parallax'
+const sky = parallax({ id: 'cpsky', W, H, fps: 8, layers: [
+  { tile: farTowers, w: 160, speed: 2, op: 0.5 },     // px per second, drifts left (negative: right)
+  { tile: nearTowers, w: 220, speed: 6, y: 10 },
+  { tile: rain, w: 64, speed: 0, dy: 40, h: 64 },      // vertical drift (rain, snow, bubbles)
+] })
+svg = `<style>${sky.css}</style>${sky.svg}`            // a 3-layer skyline + rain: ~1.4 k
+```
+Each layer = one `<pattern>` + one rect sliding one repeat per loop, `steps()` at <= `fps` (max 12): idle-safe, phased,
+still under reduced motion. Tiles repeat: make them seamless. Max 4 layers.
+
+### turntable, voxel, flip, tilt ("3D" without 3D)
+
+```ts
+import { turntable, turnViews, spin, voxel, flip, tilt } from './stage/turntable'
+const bank = new FrameBank('shd', 5); SHIELD.forEach((sp, i) => bank.add(`v${i}`, sp))
+// A prop turning in place: 2.4 s a turn, clockwise, view 0 under reduced motion, a shadow that narrows edge-on.
+const t = turntable(bank, { id: 'shT', views: ['v0','v1','v2','v3','v4'], mirror: true, x, y, sc: 2, period: 2.4, dir: 1, still: 0,
+  shadow: { rx: 30, dy: 44, widths: [1, .75, .3, .75, 1, .75, .3, .75] } })
+svg = `<style>${t.css}</style><defs>${bank.defs()}</defs>${t.svg}`
+// The same views thrown end over end in an act:
+body += act.actor('shield', spin(turnViews(['v0','v1','v2','v3','v4'], true), 1.2, 2.0, 0.4), [[1.2, x0, y], [2.0, x1, y]])
+svg += voxel(bank, 'crate', x, y, { side: '#6A4A2A', depth: 4, sc: 4 })      // 3-4 darker silhouettes behind, 1 px apart
+const card = flip({ id: 'qf', x, y, w, h, front, back, period: 8 })          // or { act, t } to flip once in an act
+const sway = tilt({ id: 'qt', x, y, w, h, svg: box, deg: 4, glare: '#FFF' })
+```
+- **8 views from 5**: a symmetric object needs only 0-180 degrees; `mirror: true` flips 3-1 for the far side (-31% chars).
+  The Boys' shield: 10.7 k for 8 views, **7.4 k** for 5 + mirror (K=5, sc 2).
+- Views are rect-path frames (`FrameBank`), toggled by one `steps(1)` loop: as cheap at rest as a blink.
+- `dir: -1` turns the other way; `period: 0` draws the still view only.
+
+### director (rare events)
+
+```ts
+import { Director, cadence, perWindow } from './stage/director'
+import { fightLane } from './stage/choreo'
+const dir = new Director('boys', { dayOffsetMs: tzOffsetMs })          // same seed = same schedule on every redraw
+fightLane(dir, [{ id: 'offthebooks', ms: 9000 }, { id: 'reunion', ms: 11000, replay: 'reunion' }])  // 30-45 min, working only, in turns
+dir.lane('piece', { daily: [9, 18] }).add('piece', { id: 'billboard', ms: 7000, replay: 'billboard' })   // once a day, 9-18 h
+dir.lane('roam', { gap: 'sometimes', chance: 0.65 }).add('roam', { id: 'r-hughie', ms: 6000, weight: 30 }).add('roam', { id: 'r-noir', ms: 5000, weight: 7 })
+const now = dir.at(at, { working, held: typed ? [typed] : [] }, AHEAD_MS)   // { lane, id, startAt, endAt, src } | undefined
+const replay = dir.play('reunion', at)                                     // `/missioncontrol play reunion`: store as your typed act
+```
+- **Lanes in priority order** (first added wins). A lower lane's slot near a higher lane's slot is DROPPED (never moved).
+- **Breath**: 10 s between two acts (fights: 20 s). **held** windows (a typed act, a mode swap) beat every lane.
+- **Rarity words** (`RARITY`, minutes between two hits): often 2-4, sometimes 6-10, uncommon 12-20, rare 30-45, fight 30-45, epic 60-120.
+- Pure: `plan(t0, t1, ctx)` lists every act; `next(t, ctx, lane)` finds the next one; tests can count a simulated day.
+- **Keeping your own scheduler?** Use the helpers: `perWindow(everyMin)` = a roamer's chance per 30 s window (Jesse, Mike, Capri
+  use it now), `cadence('rare')` = slot + jitter for your own slots (The Boys' AMBUSH uses it now: 30-45 min).
+- **Migrating a skin** (not done yet for any skin's whole schedule): register each roamer / set piece / fight as a bit with
+  its length, call `dir.at()` where your `stageAt`/`fightDue` was, keep your typed acts as `held`, keep the old function
+  behind it for one release and test that the hit counts per simulated day match the audit's numbers.
+
+### choreo (fights)
+
+```ts
+import { Fight } from './stage/choreo'
+const act = new Act({ id: 'boys-f2-band', ms: 6000, at, W, H }); act.cast('bIdle', SP.B1).cast('bPunch', SP.B2) /* ... */
+const cam = new Camera(act)
+const f = new Fight(act, { sc: 2, ink: INK, star: { core: '#FFF', star: GOLD, ring: CYAN }, word: GOLD }, cam)
+f.fighter('b', 'bIdle', 60, gy).fighter('h', 'hIdle', 300, gy, -1)
+f.stare('b', 'h', 0.8).say('h', 'WELL WELL', 0.6)                      // stand-off: stare, step, flinch, backdown, say
+ .approach('b', 220, 0.4, { pose: 'bRun' }).strike('b', 'h', { pose: 'bPunch' })   // strike adds a SMEAR frame
+ .hit('h', { pose: 'hHit', word: 'POW', flash: .35, shake: 3, freeze: .08, impact: true })  // star, sparks, HIT-STOP, IMPACT FRAME
+ .knockback('h', 90, { pose: 'hFly', rot: 360, land: 'crash', landPose: 'hDown' }).exit('b', { d: .5 })
+const layer = act.done(f.body(), f.still())        // still = the last clash; panel = cam.wrap(content)
+```
+- Beats run on a cursor in time order: moves advance it (`approach`, `strike`, `knockback`, `throw`, `exit`, `step`,
+  `backdown`, `stare`), instants happen at it (`hit`, `freeze`, `impact`, `smear`, `sfx`, `say`, `pose`). `at(t)`, `wait(s)`,
+  `with()` (the next move alongside the last).
+- **Hit-stop** (`freeze`), **smear** and **impact frames** are first-class beats. A turning move lands upright on its own.
+- Proof: `choreo-inv.test.ts` writes Invincible's "The Catch" as 20 beats: same poses in the same order, the same hits at
+  2.0 and 3.0 s, 35.1 k (budget 36 k). Previews: `scratchpad/motion/prev/engine2/demo-catch-*.png` (beats left, original right).
+- **Fights are rare**: put them in the director with `fightLane` (one per 30-45 min, working only) and give each a replay name.
+  PG-13: stars, flashes, dust; never blood.
+
 ## Budgets (chars, from `budget.ts`)
 
 | Effect | Band | Per pane card |
@@ -126,10 +233,10 @@ expect(a.dupes).toEqual([]); expect(a.chars).toBeLessThan(BUDGET.fightAct.card)
 | Idle loop per sprite | 1.5 k | 1.5 k |
 | Card entrance / state change | 1 k | 1 k |
 | Light pass | 1.5 k | 1.5 k |
-| Parallax backdrop | 8 k | 6 k |
+| Parallax backdrop (3 layers: ~1.4 k) | 8 k | 6 k |
 | Voxel extrusion (per sprite) | 1 k | 1 k |
-| Turnaround strip | 12 k (6 views) | 20 k (8 views) |
-| Transition / wipe | 8 k | 5 k (30 k all cards) |
+| Turnaround strip (shield 5+mirror: 7.4 k) | 12 k (6 views) | 20 k (8 views) |
+| Transition / wipe (skin switch: 3.7 k band, ~1.5-2.5 k a card) | 8 k | 5 k (30 k all cards) |
 | Fight band cut | 32 k, ≤ 8–10 poses | — |
 | Fight act | — | 36 k, ≤ 10 poses (100 k all acts) |
 | **All motion at once** | 70 k (lite at 120 k) | the theme's reserve |
@@ -147,6 +254,8 @@ Hard limits: 131,072 chars per Svg (else blank), 262,144 per drawing (aim ≤ 22
 - Idle loops: `steps()` at low rates. Probe: a 60 fps sweep costs ~4–8× a 12 fps stepped one (`probe.md`).
 - Keep motion off the working numbers (%, cost, context, timers). Band acts sit on the scrim.
 - One id per act and surface: two acts in one Svg need two ids.
+- Schedule every rare thing through the director (or its `perWindow`/`cadence` helpers). Fights: one per 30-45 min.
+- Give every hidden skin its own secret id (`withFound(c, id)` in `extras.ts`; `credFor` lights only that skin's badge).
 
 ## Don't
 

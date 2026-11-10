@@ -9,6 +9,8 @@ import { TYGER_RE } from './mentalist'
 import { BB_REVEAL_MS, BB_RIGHT, BB_SKIN_WORDS, BB_TOOLS, SAY_MY_NAME_RE } from './breakingbad'
 import { bbRightLine } from './breakingbad-cards'
 import { THEMES, themeKeyOf } from './themes'
+import { SWITCH_CARDS, SWITCH_MS, into as switchInto, sizeOf as svgSizeOf, skinSwitch } from './stage/wipe'
+import type { SwitchLook } from './stage/wipe'
 import { ramStatus, settingsTagline, settingsTones } from './settingslook'
 import type { SettingsSection } from './settingslook'
 import { GROUP_TAGLINE, GROUP_TITLE, SKIN_GROUPS, groupOf, skinTagline, skinsSummary } from './skinslook'
@@ -2140,6 +2142,51 @@ const activeFx = (): { kind: string; at: number } | undefined => (isInv() ? INV_
 // When the phrase turned Breaking Bad into Heisenberg (0: it did not): the band's "You're goddamn right!" is drawn from it for
 // BB_REVEAL_MS, pinned to this time, so a redraw keeps it and it ends on its own. Also kept in the store as bbRevealAt.
 let BB_REVEAL_AT = 0
+// The generic skin switch (stage/wipe.ts): set when the person wears a skin from the picker or `/skin`, pinned to that moment. The
+// band and the top pane cards play a short wipe from the old skin's ground to the new one (well under a second; a 2 px rule under
+// reduced motion). Typed unlocks with a transition of their own (CAPRI, SOLID GOLD, NOIR, the Heisenberg reveal, the era swap) never
+// set it.
+let SKIN_SWAP: { at: number; from: SwitchLook; to: SwitchLook } | undefined
+const switchLookOf = (k: Skin): SwitchLook => ({ bg: k.backdrop.fill || k.colors.tile, accent: k.colors.accent, ink: k.colors.text })
+/** The band takes the switch only with room for it (the band's 70 k motion budget, less the wipe's 8 k) and never over another act. */
+const SWITCH_BAND_ROOM = 60_000
+const switchLive = (at: number): { at: number; from: SwitchLook; to: SwitchLook } | undefined => (SKIN_SWAP && at >= SKIN_SWAP.at - 1000 && at < SKIN_SWAP.at + SWITCH_MS + 600 ? SKIN_SWAP : undefined)
+/** The switch over a drawn band source (its viewBox gives the size). */
+const switchBand = (src: string, at: number): string => {
+  const sw = switchLive(at)
+  const box = sw && src.length <= SWITCH_BAND_ROOM && !src.includes('<!--dl-->') ? svgSizeOf(src) : undefined
+  return sw && box ? switchInto(src, skinSwitch({ W: box.W, H: box.H, at: sw.at, surface: 'band', from: sw.from, to: sw.to })) : src
+}
+/** The switch over the pane's first cards (chips with a fixed width are left alone), cascading down. `room`: false while the theme keeps
+ *  a fight's reserve (a job works), so the reserve stays free. */
+const switchTree = <T,>(tree: T, at: number, room: boolean): T => {
+  const sw = switchLive(at)
+  // Never over a fight's reserved room or an act already drawn (one big act at a time).
+  if (!sw || !room || JSON.stringify(tree).includes('<!--dl-->')) return tree
+  let i = 0
+  const walk = (x: unknown): unknown => {
+    if (Array.isArray(x)) return x.map(walk)
+    if (!x || typeof x !== 'object') return x
+    const n = x as { type?: unknown; props?: Record<string, unknown>; children?: unknown }
+    if (n.type === 'Svg' && typeof n.props?.source === 'string') {
+      if (n.props.width !== undefined || i >= SWITCH_CARDS) return n
+      const box = svgSizeOf(n.props.source)
+      if (!box) return n
+      const idx = i++
+      return { ...n, props: { ...n.props, source: switchInto(n.props.source, skinSwitch({ W: box.W, H: box.H, at: sw.at, surface: 'pane', from: sw.from, to: sw.to, i: idx })) } }
+    }
+    return Array.isArray(n.children) ? { ...n, children: n.children.map(walk) } : n
+  }
+  return walk(tree) as T
+}
+/** Starts the switch from `from` (the skin worn a moment ago) to the one worn now, and redraws both panels. */
+async function noteSwitch($: EngineInterface, from: Skin): Promise<void> {
+  if (from.id === SKIN.id && from.cast === SKIN.cast) return
+  const at = await $.clock.now().catch(() => Date.now())
+  SKIN_SWAP = { at, from: switchLookOf(from), to: switchLookOf(SKIN) }
+  await update($, bandTick, () => at)
+  await update($, paneTick, () => at)
+}
 // Better Call Saul / GENE: the last trigger word typed (a drawing for a few seconds), when Chuck last "unplugged" (the dim), the
 // toasts' last times and the run of failed commands behind them. All in memory; the drawings are pinned to these times.
 let BCS_FX: Fx | undefined
@@ -8315,7 +8362,7 @@ export const register: Register = (on, options) => {
     if (isPicture && 'Svg' in ui) {
       const { Svg } = ui
       // Each card keeps its source while it reads the same: no new image, no restart.
-      const keep = <T,>(tree: T): T => steadyTree(modeTree(tree, themeOf(), clockNow, info.contextPct, (boss.celebrateUntil ?? 0) > clockNow), `pane:${e.surface}`, clockNow)
+      const keep = <T,>(tree: T): T => steadyTree(switchTree(modeTree(tree, themeOf(), clockNow, info.contextPct, (boss.celebrateUntil ?? 0) > clockNow), clockNow, !(themeOf()?.paneReserve && (isWorking || boss.isWorking))), `pane:${e.surface}`, clockNow)
       // Drawn wider than the pane's columns suggest, then shrunk to the pane by the app:
       // the cards fill it edge to edge instead of leaving a dark strip at the right.
       const W = Math.max(240, Math.min(1100, Math.round((e.props.bodyColumns || 40) * 10) - 8))
@@ -9012,11 +9059,13 @@ export const register: Register = (on, options) => {
     const ui = $.ui.resolve(e)
     const { Box, Text, Button } = ui
     const wear = async (k: Skin) => {
+      const from = SKIN
       applySkin(k)
       await $.store.set('skin', k.id).catch(() => undefined)
       await update($, skin, () => k.id)
       await retitle($)
       await er2ContextRule($, er2Ctx).catch(() => undefined)
+      await noteSwitch($, from).catch(() => undefined)
     }
     const c = SKIN.colors
     const isDark = SKIN.dark
@@ -9642,11 +9691,14 @@ export const register: Register = (on, options) => {
       APP_LIGHT = await readAppLight($)
       await update($, calMode, () => calPack(CAL_MODE, APP_LIGHT))
     }
+    const from = SKIN
     applySkin(worn)
     await $.store.set('skin', worn.id)
     await update($, skin, () => worn.id)
     await retitle($)
     await er2ContextRule($, er2Ctx).catch(() => undefined)
+    // CAPRI's takeover has its own transition; every other `/skin` gets the generic switch.
+    if (!isCapricorn) await noteSwitch($, from).catch(() => undefined)
     if (isCapricorn) {
       if (!(await setEr2Mode($, 'capri', false))) await foundSecret($, CAPRICORN_SKIN).catch(() => undefined)
       return { text: `Skin: ${worn.name} (CAPRI mode).` }
@@ -10100,7 +10152,7 @@ export const register: Register = (on, options) => {
           <Box flexDirection={isRtl() ? 'row-reverse' : 'row'} alignItems="center" gap={1}>
             <Svg source={steady(`band:${e.surface}`, (() => {
               const full = hudBandSvg(Math.round(width / bandScale), hud)
-              return full.length < 120_000 ? full : hudBandSvg(Math.round(width / bandScale), { ...hud, lite: true })
+              return switchBand(full.length < 120_000 ? full : hudBandSvg(Math.round(width / bandScale), { ...hud, lite: true }), bandAt)
             })().replace(/^<svg([^>]*?) width="[^"]*" height="[^"]*"/, `<svg$1 width="${width}" height="${bandH}"`), bandAt)} alt={`${hud.title}: ${hud.status}${hud.activity ? `, ${hud.activity}` : ''}${hud.progress === null ? '' : `, ${Math.round(hud.progress * 100)}%`}, context ${info.contextPct}%${bgCount ? `, ${bgCount} ${tr().bgBand}` : ''}`} />
             <Box flexDirection="column" gap={1} alignItems="center">
               {/* The app draws a Button's children as-is: keep them to a glyph and the count. */}
