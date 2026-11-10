@@ -6587,7 +6587,8 @@ const slimBandSvg = (OW: number, d: HudData): string => {
   // Where a band act may play (stage/keep.ts): the clear span on the left, up to the first readout on the right in the task row,
   // the step row and the info line, and the readouts inside that span (the Tasks chip, the step count) for its keep-out holes.
   const pctX = segs > 0 ? tx + segs * 6 + 4 : W
-  const stepEnd = nSteps ? x0 + pipsN * 13 + 10 + cntW + 6 : x0
+  // The step count's hole is as wide as keep.ts's generous text estimate (0.66 em a glyph), so a narrow theme sans keeps its margin.
+  const stepEnd = nSteps ? x0 + pipsN * 13 + 10 + Math.max(cntW, cnt.length * 13 * 0.66) + 6 : x0
   const stage: BandStage = {
     x1: Math.round(Math.min(crewLeft - 6, pctX - 6, rx - 2, hasReadouts ? r0 - 24 : W)),
     keep: [[px - 3, 39, pillW + 6, 22], [x0 - 8, 88, stepEnd - x0 + 8, 21]],
@@ -6736,6 +6737,13 @@ ${egg ? EGG_CSS : th ? th.css : ''}
   const shine = d.isWorking && pct !== null && pct > 0
     ? `<rect class="shine" x="${left}" y="${gaugeY - 1}" width="26" height="9" rx="1" fill="#ffffff" fill-opacity=".55"/>`
     : ''
+  // Where a Cyberpunk fight may play (stage/keep.ts), in the band's own coordinates: the clear span left of the gauge's percent
+  // and the readout column, and the status pill inside it as a keep-out hole. The fight keeps under the header's line.
+  const rowY = HUD_PAD + HUD_HEAD - 2
+  const stage: BandStage = {
+    x1: Math.round(Math.min(HUD_PAD + left + barW + 8 - 6, hasReadouts ? HUD_PAD + W - right - 6 : OW - 14)),
+    keep: [[HUD_PAD + left + titleW + 8 - 3, rowY + 9 - 3, pillW + 6, 21]],
+  }
   return svg(
     OW,
     OH,
@@ -6777,7 +6785,7 @@ ${hudLines(W, d)}
 ${hudSpare(W)}
 </g>
 ${egg && !d.lite ? cyberCheer(egg, OW, OH, d) : egg && d.isParty ? celebration(OW, OH, egg, FONT, d.partyAt) : ''}
-${egg && !d.lite && !d.isParty ? cyberFightBand(egg, OW, d.at, d.isWorking, d.ctxPct) : ''}
+${egg && !d.lite && !d.isParty ? cyberFightBand(egg, OW, d.at, d.isWorking, stage) : ''}
 ${th && d.isParty ? th.cheer(OW, OH, FONT, c, d.partyAt) : ''}
 ${th?.corner ? th.corner(OW, OH, { ctxPct: d.ctxPct, overBudget: Boolean(d.budget && d.budget.usedMs > d.budget.min * 60_000) }) : ''}`,
   )

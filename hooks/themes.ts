@@ -370,7 +370,7 @@ const er2Theme = (sec: boolean): ThemeEggs => ({
     if (o.party) return ''
     const working = o.working ?? false
     if (o.surface === 'pane') return o.card === 'log' || o.card === 'cred' ? er2FightPane(o.card, o.W, o.H, o.at, working, sec) : ''
-    const fight = er2FightBand(o.W, o.H, o.at, working, sec)
+    const fight = er2FightBand(o.W, o.H, o.at, working, sec, o.stage)
     if (fight || sec) return fight
     const slateAt = er2Playing('slate', o.at) ?? (o.job && working && o.at < o.job.at + 900 ? o.job.at : undefined)
     return slateAt === undefined ? '' : slateAct({ at: slateAt, take: Math.max(1, o.job?.n ?? 1), scene: new Date(slateAt).getHours() + 1, x: 60, y: 30 })

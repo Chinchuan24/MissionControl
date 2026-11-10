@@ -23,6 +23,8 @@ import { Fight, fightLane } from './stage/choreo'
 import { Director, localOffsetMs } from './stage/director'
 import { quantise } from './stage/frames'
 import * as fx from './stage/fx'
+import { keepClip } from './stage/keep'
+import type { BandStage, Rect } from './stage/keep'
 import { registerPlay } from './stage/replay'
 import { Act, r1, r3 } from './stage/timeline'
 import type { SwitchFlavour } from './stage/wipe'
@@ -103,17 +105,17 @@ const fold2 = (sp: Sprite, grey: string, red: string): Sprite => {
   return { ...sp, pal, rim: false }
 }
 /**
- * The band's act region: the header's left (the name and the skin chip) and the title rows, left of the gauge's percent, the
- * breach ticker and the readouts. From 85% context the header carries the CYBERPSYCHOSIS / MAXTAC chip: the region then keeps
- * below the header line (shorter, the fight drawn smaller) so the chip is never covered.
+ * The band's act region: the title row and the gauge row under the header's line (the header, with its chips, the model and the
+ * CYBERPSYCHOSIS / MAXTAC chip from 85%, is never covered), up to the band's clear span (stage/keep.ts): left of the gauge's
+ * percent and the readout column. With no stage (a unit test) the span is the band's old rule, 352 px at most.
  */
-export const fightRegion = (OW: number, ctxPct = 0): { x: number; y: number; w: number; h: number } => {
-  const w = Math.round(Math.max(220, Math.min(OW - 352, 352)))
-  return ctxPct >= 85 ? { x: 8, y: 38, w, h: 42 } : { x: 8, y: 13, w, h: 67 }
+export const fightRegion = (OW: number, stage?: BandStage): { x: number; y: number; w: number; h: number } => {
+  const w = Math.round(stage ? Math.min(352, stage.x1 - 8) : Math.max(220, Math.min(OW - 352, 352)))
+  return { x: 8, y: 34, w, h: 46 }
 }
-/** The act placed at the region and clipped to it. */
-const placed = (layer: string, r: { x: number; y: number; w: number; h: number }, id: string): string =>
-  `<g transform="translate(${r1(r.x)} ${r1(r.y)})"><defs><clipPath id="${id}"><rect width="${r1(r.w)}" height="${r1(r.h)}" rx="3"/></clipPath></defs><g clip-path="url(#${id})">${layer}</g></g>`
+/** The act placed at the region, clipped to it minus the band's readouts inside it (keep-out holes, in the band's coordinates). */
+const placed = (layer: string, r: { x: number; y: number; w: number; h: number }, id: string, keep: Rect[] = []): string =>
+  `<defs>${keepClip(id, [r.x, r.y, r.w, r.h], keep)}</defs><g clip-path="url(#${id})"><g transform="translate(${r1(r.x)} ${r1(r.y)})">${layer}</g></g>`
 /** A letterbox with a cut-in strip (80 x 20) centred in it: the beat before the big hit. */
 const cutStrip = (act: Act, key: string, w: number, h: number, frac = 0.76): { lb: string; y: number; hh: number; sc: number; x: number } => {
   const hh = r1(h * frac)
@@ -431,13 +433,13 @@ export const iceAct = (o: { at: number; w: number; h: number; id: string }): { l
 
 const ACTS: Record<FightKind, (o: { at: number; w: number; h: number; id: string }) => { layer: string; act: Act; fight: Fight }> = { maxtac: maxtacAct, boardroom: boardroomAct, 'ice-duel': iceAct }
 
-/** The fight on the classic Cyberpunk band (OW wide): placed in its region, '' when none is due. */
-export const cyberFightBand = (egg: CyberEgg, OW: number, at: number, working: boolean, ctxPct = 0): string => {
+/** The fight on the classic Cyberpunk band (OW wide): placed in its region, kept clear of the band's readouts, '' when none is due. */
+export const cyberFightBand = (egg: CyberEgg, OW: number, at: number, working: boolean, stage?: BandStage): string => {
   const ft = fightAt(egg, at, working)
   if (!ft || at >= ft.startAt + FIGHT_MS[ft.kind]) return ''
-  const r = fightRegion(OW, ctxPct)
-  const a = ACTS[ft.kind]({ at: ft.startAt, w: r.w, h: r.h, id: `cyf-${ft.kind}-band-${OW}-${r.h}` })
-  return placed(a.layer, r, `${a.act.p}rg`)
+  const r = fightRegion(OW, stage)
+  const a = ACTS[ft.kind]({ at: ft.startAt, w: r.w, h: r.h, id: `cyf-${ft.kind}-band-${OW}-${r.w}` })
+  return placed(a.layer, r, `${a.act.p}rg`, stage?.keep)
 }
 
 // ---------------------------------------------------------------- the pane's light echo (in BREACH PROTOCOL's matrix)

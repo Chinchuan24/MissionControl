@@ -12,12 +12,12 @@ import { actOn } from './theboys-acts'
 import { FIGHT_KINDS } from './theboys-fights'
 
 const NOW = Date.parse('2026-10-20T10:00:00Z')
-const COLS: Record<number, number> = { 750: 106, 900: 126, 1250: 173 }
-const base = (on: On) => {
+const COLS: Record<number, number> = { 450: 66, 600: 86, 750: 106, 900: 126, 1250: 173 }
+const base = (on: On, cyber = false) => {
   const clock = mock.clock(on, { now: NOW })
   mock.env(on, { LANG: 'en_US.UTF-8' })
   mock.store(on)
-  on('fs.exists', async () => ({ value: false }) as never)
+  on('fs.exists', async (_$, e) => ({ value: cyber && /addons[\\/]cyberpunk[\\/]addon\.json$/.test(String((e as { path: string }).path)) }) as never)
   on('settings.read', async () => ({ value: {} }) as never)
   on('tool.register', async () => ({ value: undefined }) as never)
   on('command.register', async () => ({ value: undefined }) as never)
@@ -88,6 +88,52 @@ for (const [skin, pre, play] of FIGHTS) {
       expect(boxes.length, `${W}: readouts found`).toBeGreaterThanOrEqual(10)
       expect(overlaps(boxes, (clip as RegExpExecArray)[1] as string), `${play} ${W}`).toEqual([])
       // The header row is never in the window: the window starts under its rule.
+      expect(Number(/^M[-\d.]+ ([-\d.]+)/.exec((clip as RegExpExecArray)[1] as string)?.[1])).toBeGreaterThanOrEqual(33)
+    }
+  })
+}
+
+// The five Cyberpunk fights (the classic band's MaxTac raid, boardroom and ICE duel; Edgerunners 2's two on its slim band), at
+// the band-fit test's five widths. The classic band draws its rows in translated groups: the readouts are read with them.
+const flat = (svg: string): string => {
+  const at: [number, number][] = [[0, 0]]
+  let out = ''
+  for (const m of svg.matchAll(/<g\b([^>]*?)(\/?)>|<\/g>|<text\b([^>]*)>([\s\S]*?)<\/text>/g)) {
+    const top = at[at.length - 1] as [number, number]
+    if (m[0] === '</g>') { if (at.length > 1) at.pop(); continue }
+    if (m[0].startsWith('<g')) {
+      if (m[2]) continue
+      const t = /transform="translate\(([-\d.]+)[ ,]+([-\d.]+)\)"/.exec(m[1] as string)
+      at.push(t ? [top[0] + Number(t[1]), top[1] + Number(t[2])] : top)
+      continue
+    }
+    const a = (m[3] as string).replace(/ x="([-\d.]+)"/, (_, v) => ` x="${Number(v) + top[0]}"`).replace(/ y="([-\d.]+)"/, (_, v) => ` y="${Number(v) + top[1]}"`)
+    out += `<text${a}>${m[4]}</text>`
+  }
+  return out
+}
+const CYBER: [string, string][] = [['cyberpunk-2077', 'maxtac'], ['arasaka', 'boardroom'], ['lucy-edgerunners', 'ice-duel'], ['edgerunners-2', 'cyberpsycho'], ['capricorn', 'capri-vs-d']]
+const WIDE = [450, 600, 750, 900, 1250]
+for (const [skin, play] of CYBER) {
+  test(`keep-out: ${play} (${skin}) on the real band at ${WIDE.join(', ')} covers no readout`, { timeoutMs: 90_000 }, async ($, on) => {
+    const clock = base(on, true)
+    await $.session.start({ source: 'startup', cwd: '/repo', surface: 'desktop', isInteractive: true } as never)
+    await $.command.run({ command: 'skin', args: skin } as never)
+    await clock.advance(5_000)
+    await work($)
+    await clock.advance(4_000)
+    const calm: Record<number, string> = {}
+    for (const W of WIDE) calm[W] = await band($, W)
+    expect(String(((await $.command.run({ command: 'missioncontrol', args: `play ${play}` } as never)) as { text?: string }).text)).toBe(`▶ ${play}`)
+    await clock.advance(400)
+    for (const W of WIDE) {
+      const b = await band($, W)
+      const clip = /<clipPath id="[\w-]+"><path clip-rule="evenodd" d="([^"]+)"/.exec(b)
+      expect(clip, `${play} ${W}: the fight is drawn through a keep-out clip`).not.toBeNull()
+      const boxes = readouts(flat((calm[W] as string).replace(/<!--dl-->[\s\S]*?<!--\/dl-->/g, '')))
+      expect((calm[W] as string).includes('40%'), `${W}: the percent is on the band`).toBe(true)
+      expect(boxes.length, `${W}: readouts found`).toBeGreaterThanOrEqual(6)
+      expect(overlaps(boxes, (clip as RegExpExecArray)[1] as string), `${play} ${W}`).toEqual([])
       expect(Number(/^M[-\d.]+ ([-\d.]+)/.exec((clip as RegExpExecArray)[1] as string)?.[1])).toBeGreaterThanOrEqual(33)
     }
   })

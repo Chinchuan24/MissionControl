@@ -23,6 +23,8 @@ import type { Slot } from './stage/director'
 import { FrameBank, silhouette } from './stage/frames'
 import { turntable } from './stage/turntable'
 import * as fx from './stage/fx'
+import { keepClip } from './stage/keep'
+import type { BandStage } from './stage/keep'
 import { registerPlay } from './stage/replay'
 import { Act, r1, r3 } from './stage/timeline'
 import type { SwitchFlavour } from './stage/wipe'
@@ -149,8 +151,9 @@ const capriEye = (x: number, y: number): string => `<rect x="${x - 7}" y="${y - 
 /** The region an act owns, placed and clipped: the band's title rows, never the readouts on the right or the rows below. */
 const placed = (layer: string, x: number, y: number, w: number, h: number, id: string): string =>
   `<g transform="translate(${r1(x)} ${r1(y)})"><defs><clipPath id="${id}"><rect width="${r1(w)}" height="${r1(h)}"/></clipPath></defs><g clip-path="url(#${id})">${layer}</g></g>`
-/** The band's act region: from the figure box to just left of the percent and the readouts (64% of the width), the title rows. */
-export const bandRegion = (W: number, H: number): { x: number; y: number; w: number; h: number } => ({ x: 8, y: 34, w: Math.round(Math.min(W * 0.64, W - 300)), h: Math.max(60, Math.min(74, H - 95)) })
+/** The band's act region: from the figure box to just left of the percent and the readouts (64% of the width, never past the
+ *  band's clear span, stage/keep.ts), the title rows. */
+export const bandRegion = (W: number, H: number, stage?: BandStage): { x: number; y: number; w: number; h: number } => ({ x: 8, y: 34, w: Math.round(Math.min(W * 0.64, W - 300, stage ? stage.x1 - 8 : W)), h: Math.max(60, Math.min(74, H - 95)) })
 
 // ---------------------------------------------------------------- FIGHT 1: D vs a cyberpsycho, cut like a film (D mode)
 /**
@@ -347,12 +350,15 @@ export const hudAct = (o: { at: number; w: number; h: number; id: string; sc?: n
 }
 
 /** The fight for the band (W by H): placed in the title rows, left of the readouts. '' when none is due. */
-export const er2FightBand = (W: number, H: number, at: number, working: boolean, sec: boolean): string => {
+export const er2FightBand = (W: number, H: number, at: number, working: boolean, sec: boolean, stage?: BandStage): string => {
   const ft = er2Fight(at, working, sec)
   if (!ft || at >= ft.startAt + ACT_MS[ft.kind]) return ''
-  const r = bandRegion(W, H)
-  const a = ft.kind === 'cyberpsycho' ? psychoAct({ at: ft.startAt, w: r.w, h: r.h, id: `er2-psy-band-${W}` }) : hudAct({ at: ft.startAt, w: r.w, h: r.h, id: `er2-hud-band-${W}` })
-  return placed(a.layer, r.x, r.y, r.w, r.h, `${a.act.p}rg`)
+  const r = bandRegion(W, H, stage)
+  const a = ft.kind === 'cyberpsycho' ? psychoAct({ at: ft.startAt, w: r.w, h: r.h, id: `er2-psy-band-${W}-${r.w}` }) : hudAct({ at: ft.startAt, w: r.w, h: r.h, id: `er2-hud-band-${W}-${r.w}` })
+  if (!stage) return placed(a.layer, r.x, r.y, r.w, r.h, `${a.act.p}rg`)
+  // On the real band: clipped to the region minus the readouts inside it (stage/keep.ts), in the band's coordinates.
+  const id = `${a.act.p}rg`
+  return `<defs>${keepClip(id, [r.x, r.y, r.w, r.h], stage.keep)}</defs><g clip-path="url(#${id})"><g transform="translate(${r1(r.x)} ${r1(r.y)})">${a.layer}</g></g>`
 }
 
 // ---------------------------------------------------------------- the pane echoes

@@ -113,20 +113,24 @@ test('cyber fights: Arasaka never glitches (no RGB split, no tear, no jitter in 
   for (const bad of ['#00F0FF', 'feColorMatrix', 'skewX']) expect(sw).not.toContain(bad)
 })
 
-test('cyber fights: the band region stays left of the gauge percent, the breach ticker and the readouts, above the crew row', () => {
+test('cyber fights: the band region keeps under the header line, left of the gauge percent and the readouts, above the crew row', () => {
   for (const w of [500, 640, 859, 1100]) {
     const r = fightRegion(w)
     expect(r.x + r.w).toBeLessThanOrEqual(Math.max(228, w - 344)) // the gauge's percent sits at w - 334
     expect(r.x + r.w).toBeLessThanOrEqual(360) // the breach ticker never starts before ~369
+    // the header (its chips, the model, the CYBERPSYCHOSIS / MAXTAC chip from 85%) ends at ~31: never covered, at any context
+    expect(r.y).toBeGreaterThanOrEqual(33)
     expect(r.y + r.h).toBeLessThanOrEqual(81) // the line over CREW is at 82.5
-    // from 85% the header's CYBERPSYCHOSIS / MAXTAC chip is never covered: the region keeps below the header line (36.5)
-    const hot = fightRegion(w, 96)
-    expect(hot.y).toBeGreaterThanOrEqual(37)
-    expect(hot.y + hot.h).toBeLessThanOrEqual(81)
+    // the real band's stage (stage/keep.ts) narrows it to the clear span, and its readouts become holes in the clip
+    expect(fightRegion(w, { x1: 200, keep: [] }).w).toBe(192)
   }
-  // the smaller cut still fits its budget
-  const hot = fightRegion(OW, 96)
-  for (const [name, f] of ACTS) expect(audit(`<svg xmlns="http://www.w3.org/2000/svg">${f({ at: BASE, w: hot.w, h: hot.h, id: `t-hot-${name}` }).layer}</svg>`).chars).toBeLessThan(BUDGET.fightBand.band)
+  setFightPlay({ kind: 'maxtac', at: BASE })
+  const cut = cyberFightBand('runners', OW, BASE + 100, false, { x1: 300, keep: [[200, 40, 80, 21]] })
+  expect(cut).toContain('clip-rule="evenodd" d="M8 34h292v46h-292zM200 40h80v21h-80z"')
+  setFightPlay(undefined)
+  // the cut fits its budget in the region
+  const r = fightRegion(OW)
+  for (const [name, f] of ACTS) expect(audit(`<svg xmlns="http://www.w3.org/2000/svg">${f({ at: BASE, w: r.w, h: r.h, id: `t-r-${name}` }).layer}</svg>`).chars).toBeLessThan(BUDGET.fightBand.band)
 })
 
 test('cyber fights: the pane echo is light, sits in the breach matrix only, and ends with its fight', () => {
