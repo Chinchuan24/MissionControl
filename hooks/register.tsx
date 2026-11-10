@@ -6614,12 +6614,13 @@ const cyberGround = (egg: CyberEgg, OW: number, OH: number, d: HudData): string 
   if (egg === 'runners') add(city({ id: 'cpsk', W: OW, y: y + 4, h: CB_STRIP - 4 }))
   else out.push(skyline(OW, OH - 16, 14, egg, true))
   if (egg === 'corpo') {
-    add(tower({ id: 'artw', x: Math.round(OW * 0.72), y: OH - 2, sc: 0.75 }))
+    // Under 760 px the tower and Lucy's moon would sit under the readouts' labels (CACHE, $ TOTAL): the skyline carries them.
+    if (OW >= 760) add(tower({ id: 'artw', x: Math.round(OW * 0.72), y: OH - 2, sc: 0.75 }))
     add(idScan({ W: OW, H: OH, tick: { x: OW - 18, y: OH - 7 }, font: FONT }))
   }
   if (egg === 'netrun') {
     if (d.isWorking) out.push(netGrid({ W: OW, y: OH * 0.42, h: OH * 0.58, color: '#FF5CF0', op: 0.08 }))
-    add(moon({ id: 'lumn', x: Math.round(OW * 0.55), y: OH - 14, sc: 0.5, glow: true }))
+    if (OW >= 760) add(moon({ id: 'lumn', x: Math.round(OW * 0.55), y: OH - 14, sc: 0.5, glow: true }))
   }
   if (egg === 'samurai') {
     add(stage({ id: 'smst', W: OW, y: y - 4, h: CB_STRIP + 2, working: d.isWorking, lamps: [Math.round(OW * 0.6), Math.round(OW * 0.76)] }))
