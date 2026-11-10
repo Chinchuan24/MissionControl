@@ -27,7 +27,7 @@ import { ERA1, ERA2, TITLE_WORDS as INV_WORDS } from './invincible'
 import { BOOK as TB_BOOK, BRAND as TB_BRAND, GOLD as TB_GOLD, NOIR as TB_NOIR } from './theboys'
 import type { Mode as BoysMode } from './theboys'
 import { GREETINGS as TB_GREETINGS, noteTurn as tbNoteTurn } from './theboys-theme'
-import { COST_STEPS as TB_COST_STEPS, CURTAIN_RE as TB_CURTAIN_RE, IDLE_NAP_MS as TB_IDLE_MS, idleFor as tbIdleFor, isCompaction as tbIsCompaction, isNight as tbIsNight, localDay as tbDay, noteBusy as tbNoteBusy, quiet as tbQuiet, resetEvents as tbResetEvents, resetShow as tbResetShow, toolEnd as tbToolEnd, toolStart as tbToolStart } from './theboys-show'
+import { COST_STEPS as TB_COST_STEPS, CURTAIN_RE as TB_CURTAIN_RE, CURTAIN_UP_RE as TB_CURTAIN_UP_RE, IDLE_NAP_MS as TB_IDLE_MS, idleFor as tbIdleFor, isCompaction as tbIsCompaction, isNight as tbIsNight, localDay as tbDay, noteBusy as tbNoteBusy, quiet as tbQuiet, resetEvents as tbResetEvents, resetShow as tbResetShow, toolEnd as tbToolEnd, toolStart as tbToolStart } from './theboys-show'
 import { REPLAYS as TB_REPLAYS, SPIN_BOOK, SPIN_BRAND, SPIN_GOLD, SPIN_NOIR, TOOLS_BRAND as TB_TOOLS, TOOLS_GOLD as TB_TOOLS_GOLD, boysEvent, errRun as tbErrRun, inFlight as tbInFlight, toolOk as tbToolOk, fireTyped as tbFire, parseCounts, prToast, resetBoys, scoreEnd, scoreStop as tbScoreStop, boysState, setBoysFx, setInFlight, toastOk as tbToastOk, typed as tbTyped } from './theboys-eggs'
 import { VERBS as INV_VERBS } from './invincible-cards'
 import { BYE_CAPRI_RE, CAPRICORN_RE, CAPRI_WORD_RE, ER2_FONT, ER2_TOOLS, ER2_WORDS } from './edgerunners2'
@@ -2611,6 +2611,8 @@ async function wearBoys($: EngineInterface, id: 'the-boys' | 'solidgold' | 'noir
   await $.store.set('skin', k.id).catch(() => undefined)
   await update($, skin, () => k.id)
   await retitle($).catch(() => undefined)
+  // F1 FAMILY REUNION is the FIRST unlock of SOLID GOLD (theboys-fights.ts); later it plays in the fight slot or by its play name.
+  if (id === 'solidgold' && from !== 'solidgold' && !foundOf(await read($, cred).catch(() => BLANK_CRED), 'solidgold')) setBoysFx('reunion', switchAt + 300)
   if (id === 'solidgold' || id === 'noir') await foundSecret($, k).catch(() => undefined)
   else if (from === 'noir') {
     setBoysFx('curtain', BOYS_GOLD_SINCE + 2_300)
@@ -8966,6 +8968,12 @@ export const register: Register = (on, options) => {
       }
       const t = SKIN.id === 'noir' && TB_CURTAIN_RE.test(asked) ? undefined : tbTyped(asked, boysWorn(), { spoilers: BOYS_SPOILERS })
       if (SKIN.id === 'noir' && TB_CURTAIN_RE.test(asked)) await wearBoys($, 'the-boys').catch(() => undefined)
+      else if (SKIN.id === 'noir' && TB_CURTAIN_UP_RE.test(asked)) {
+        // F3 CURTAIN UP: the silent picture, now (theboys-fights.ts).
+        setBoysFx('curtainup', at)
+        await update($, bandTick, () => at)
+        await update($, paneTick, () => at)
+      }
       else if (t?.kind === 'noirmode' && SKIN.id === 'the-boys') {
         // THIS MEANS NOIR: the teaser act (Noir, `…`, the 1979 tape) is the transition, then the silent skin is on.
         tbFire(t, at, boysWorn())

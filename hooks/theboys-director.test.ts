@@ -29,7 +29,8 @@ test('director: a working day, THE AMBUSH every 30-45 min (never at rest); roame
   fresh()
   const work = acts(t => stageAt(t, { mode: 'brand', working: true }), T0, T0 + DAY)
   const rest = acts(t => stageAt(t, { mode: 'brand', working: false }), T0, T0 + DAY)
-  const amb = of(work, 'ambush')
+  // THE AMBUSH shares its slot with the look's FIGHT (one slot in four): together they keep the AMBUSH's old rate.
+  const amb = work.filter(s => s.src === 'ambush' || s.src === 'fight')
   expect(amb.length).toBeGreaterThanOrEqual(30)
   expect(amb.length).toBeLessThanOrEqual(48)
   for (let i = 1; i < amb.length; i++) {
@@ -38,11 +39,11 @@ test('director: a working day, THE AMBUSH every 30-45 min (never at rest); roame
     expect(gap).toBeLessThanOrEqual(90 * MIN) // 45 min, or two slots when a set piece took one
     expect((amb[i] as Slot).kind).not.toBe((amb[i - 1] as Slot).kind)
   }
-  expect(of(rest, 'ambush').length).toBe(0)
+  expect(of(rest, 'ambush').length + of(rest, 'fight').length).toBe(0)
   // Hit counts per day against the scheduler it replaced: within 25%.
   const old = acts(t => V1.stageAt(t, { mode: 'brand', working: true }), T0, T0 + DAY)
   for (const src of ['ambush', 'roamer', 'piece'] as const) {
-    const a = of(work, src).length
+    const a = src === 'ambush' ? amb.length : of(work, src).length
     const b = of(old, src).length
     expect(Math.abs(a - b), `${src}: ${a} vs ${b}`).toBeLessThanOrEqual(Math.ceil(b * 0.25))
   }

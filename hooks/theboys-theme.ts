@@ -7,11 +7,11 @@ import { BAND_H, BOOTS, CSS, GOLD, PROPS, SCORE_W, WARNINGS, bootLine, chip, che
 import type { Mode } from './theboys'
 import { BADGES, TITLES, credCard, credToast, deskAlt, deskCard, dialAlt, dialCard, rankOf, tableCard } from './theboys-cards'
 import type { BoysOrg } from './theboys-cards'
-import { SPIN_BOOK, SPIN_BRAND, SPIN_GOLD, SPIN_NOIR, fxFromEvent, TOOLS_BOOK, TOOLS_BRAND, TOOLS_GOLD, actMs, autoLookAtMe, boysFx, drawAt, inFlight, noteDraw, spinDue } from './theboys-eggs'
-import { actOn, actShake, speedSmear, titleSpin } from './theboys-acts'
+import { SPIN_BOOK, SPIN_BRAND, SPIN_GOLD, SPIN_NOIR, fightDrawn, fxFromEvent, TOOLS_BOOK, TOOLS_BRAND, TOOLS_GOLD, actMs, autoLookAtMe, boysFx, drawAt, inFlight, noteDraw, spinDue } from './theboys-eggs'
+import { actOn, actShake, intertitle, speedSmear, titleSpin } from './theboys-acts'
 import { Act as StageAct } from './stage/timeline'
 import * as wipe from './stage/wipe'
-import { AMBUSH_KINDS, IDLE_NAP_MS, PREMIERE_FACE_MS, ahead, idleFor, isNight, lastWorking, longestCall, moon, noirCheer, noteAmbush, noteBusy, noteWorking, premiereFace, stageAt, terrorNap } from './theboys-show'
+import { AMBUSH_KINDS, FIGHT_KINDS, IDLE_NAP_MS, PREMIERE_FACE_MS, ahead, idleFor, isNight, lastWorking, longestCall, moon, noirCheer, noteAmbush, noteBusy, noteWorking, premiereFace, stageAt, terrorNap } from './theboys-show'
 import type { ExtraArgs, PaneCard, ThemeEggs } from './themes'
 import { pin } from './smooth'
 
@@ -56,12 +56,6 @@ export const noteTurn = (from: Mode, to: Mode, at: number): void => {
 }
 export const turnAt = (at: number): { from: Mode; to: Mode; at: number } | undefined => (TURN && at >= TURN.at - 1000 && at < TURN.at + TURN_MS ? TURN : undefined)
 export const resetLooks = (): void => { LOOK = undefined; TURN = undefined }
-/** A silent-film intertitle: black card, a double cream rule, the words in a serif. */
-const intertitle = (cx: number, cy: number, text: string, z = 18) => {
-  const w = Math.max(120, text.length * z * 0.62 + 44)
-  const h = z + 22
-  return `<g><rect x="${r1(cx - w / 2)}" y="${r1(cy - h / 2)}" width="${r1(w)}" height="${h}" fill="#0B0C0E"/><rect x="${r1(cx - w / 2 + 4)}" y="${r1(cy - h / 2 + 4)}" width="${r1(w - 8)}" height="${h - 8}" fill="none" stroke="#F4F1E8" stroke-width=".8"/><rect x="${r1(cx - w / 2 + 7)}" y="${r1(cy - h / 2 + 7)}" width="${r1(w - 14)}" height="${h - 14}" fill="none" stroke="#F4F1E8" stroke-width=".4" opacity=".6"/><text x="${r1(cx)}" y="${r1(cy + z * 0.36)}" text-anchor="middle" font-family="Georgia,'Times New Roman',serif" font-size="${z}" font-style="italic" fill="#F4F1E8" letter-spacing="2">${text}</text></g>`
-}
 /**
  * The turn's layer on one surface. Into NOIR: an iris opens from black on the bust (cards: the middle). Out of NOIR: the iris closes,
  * THE END on an intertitle, the black lifts off ON BRAND. Out of SOLID GOLD (`back on ice`): frost creeps in from the corners over a
@@ -143,7 +137,7 @@ export const boysExtras = (m: Mode) => (o: ExtraArgs): string => {
     if (s) out.push(on === 'band' ? s : `<!--dl-->${s}<!--/dl-->`)
   }
   // The look's own film over everything on the band: SOLID GOLD's tracking roll (about every 2 min), NOIR's grain and letterbox.
-  if (o.surface === 'band' && m === 'gold' && !swapping) out.push(vhsRoll(o.W, o.H, o.at))
+  if (o.surface === 'band' && m === 'gold' && !swapping && !(st && FIGHT_KINDS.includes(st.kind))) out.push(vhsRoll(o.W, o.H, o.at))
   if (o.surface === 'band' && m === 'noir') out.push(filmLook(o.W, o.H))
   const turn = turnAt(o.at)
   if (turn) out.push(turnLayer(o.W, o.H, turn, o.surface === 'band' ? 'band' : 'pane', o.card ?? ''))
@@ -186,7 +180,8 @@ export const boysTheme = (m: Mode): ThemeEggs => {
       name: (x, y, W, _t, _f, ctx) => name(x, y, W, m, ctx?.totalUsd ?? 0, ctx?.at ?? 0),
       ownsTotal: true,
       ep: { w: epW, draw: (xr, y, code, title, full) => ep(xr, y, code, title, full, m) },
-      tear: (x, y, w, pct, _t, ctx) => syringe(x, y, w, pct, m, { near: (ctx?.ctxPct ?? 0) >= 95, working: ctx?.isWorking }),
+      // While a fight is drawn, SOLID GOLD's shield steps off the meter (its turn is the fight's budget).
+      tear: (x, y, w, pct, _t, ctx) => syringe(x, y, w, pct, m, { near: (ctx?.ctxPct ?? 0) >= 95, working: ctx?.isWorking, bare: m === 'gold' && fightDrawn(ctx?.at) }),
       ownEdge: true,
       cache: { fill: m === 'gold' ? P.a : m === 'book' ? P.manila : m === 'noir' ? P.sub : PROPS.vblue, core: m === 'brand' ? '#BFE9FF' : undefined },
       figure: ctx => figure(m, ctx?.at ?? 0),

@@ -4,7 +4,7 @@
 // Reduced motion: the movers stop at their still pose, flashes are hidden, and the act still ends on time. PG-13: no hit lands,
 // the only "impacts" are scorch dots, a grey-pink splat and stamps. All words are ours, or a short attributed quote.
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { BUST, C, CRAWL_Y, M, PROPS, SP, T, clip, condW, crew, faceIcon, pal, pin, px, r1, sansW, spH, spW, stamp, star, tape, unit } from './theboys'
+import { BUST, C, CRAWL_Y, M, PROPS, SP, T, clip, condW, crew, esc, faceIcon, pal, pin, px, r1, sansW, spH, spW, stamp, star, tape, unit } from './theboys'
 import type { Mode } from './theboys'
 import type { PaneCard } from './themes'
 import { VNN_BRAND, actMs, scoreAt } from './theboys-eggs'
@@ -27,6 +27,8 @@ export class Act {
   /** The surface this act draws on (actOn sets it): the stage act below takes its size and its id from it. */
   geo?: { W: number; H: number; on: string }
   private stage?: StageAct
+  /** Colours per pose on the stage act (rect-path quantise): the fights take 7 to fit the band budget. Set before `sg` is used. */
+  sgK = 8
   constructor(readonly kind: string, readonly ms: number, readonly at: number) {}
   /**
    * The shared stage engine's act on this act's clock (same length, same pinned start): its `fx` cues (dust, sparks, speed
@@ -34,7 +36,7 @@ export class Act {
    * this act's body. Wrap them in `a.fx()` so reduced motion hides them (the act's own movers keep their still pose).
    */
   get sg(): StageAct {
-    this.stage ??= new StageAct({ id: `tb-${this.kind}-${this.geo?.on ?? 'x'}`, ms: this.ms, at: this.at, W: this.geo?.W ?? 600, H: this.geo?.H ?? 148, K: 8 })
+    this.stage ??= new StageAct({ id: `tb-${this.kind}-${this.geo?.on ?? 'x'}`, ms: this.ms, at: this.at, W: this.geo?.W ?? 600, H: this.geo?.H ?? 148, K: this.sgK })
     return this.stage
   }
   /** A stage piece (fx, a stage actor, a wipe): drawn as is, hidden under reduced motion. */
@@ -164,6 +166,12 @@ const tv = (x: number, y: number, title: string, s = 2.4) => `<g transform="tran
 const palm = (x: number, y: number) => `<g transform="translate(${r1(x)} ${r1(y)}) scale(1.6)"><path d="M5 22C6 15 5 8 6 3" fill="none" stroke="#8A6A42" stroke-width="2"/><path d="M6 3C2 1 -1 3 -1 6C2 3 4 3 6 3ZM6 3C10 0 13 2 13 5C10 2 8 3 6 3ZM6 3C4 -1 7 -3 9 -2C7 -1 6 1 6 3ZM6 3C3 5 2 8 3 10C4 7 5 5 6 3Z" fill="#3FA35B"/></g>`
 const crate = (x: number, y: number, m: Mode) => `<g transform="translate(${r1(x)} ${r1(y)})"><rect width="60" height="40" fill="#7A5A3E" stroke="#4A3524" stroke-width="1.4"/><path d="M0 0L60 40M60 0L0 40" stroke="#4A3524" stroke-width="1.4"/><rect x="6" y="13" width="48" height="14" fill="#DDF3FF"/>${C(30, 21, 'STORAGE', 7.5, '#1A2340', 'text-anchor="middle" letter-spacing=".8"')}${C(30, 26, 'DO NOT THAW', 4.8, '#1A2340', 'text-anchor="middle" letter-spacing=".5"')}<rect x="26" y="31" width="10" height="8" rx="1" fill="${m === 'gold' ? '#D4A637' : '#C9A13B'}"/><path d="M28 31v-3a3 3 0 0 1 6 0v3" fill="none" stroke="#9A9AA0" stroke-width="1.4"/><path d="M0 0h60v5h-60z" fill="#E8F6FF" opacity=".8"/></g>`
 const frostEdge = (W: number, H: number, d = 10) => `<g opacity=".8"><rect width="${W}" height="${d}" fill="#DDF3FF" opacity=".45"/><rect y="${H - d}" width="${W}" height="${d}" fill="#DDF3FF" opacity=".45"/><rect width="${d}" height="${H}" fill="#DDF3FF" opacity=".45"/><rect x="${W - d}" width="${d}" height="${H}" fill="#DDF3FF" opacity=".45"/>${Array.from({ length: Math.min(40, Math.floor(W / 24)) }, (_, i) => `<path transform="translate(${r1(unit(`fr${i}`) * W)} ${r1(i % 2 ? H - 4 - unit(`fy${i}`) * 6 : 4 + unit(`fy${i}`) * 6)})" d="M-3 0h6M0 -3v6M-2 -2l4 4M2 -2l-4 4" stroke="#FFFFFF" stroke-width=".8"/>`).join('')}</g>`
+/** A silent-film intertitle: black card, a double cream rule, the words in a serif (escaped). */
+export const intertitle = (cx: number, cy: number, text: string, z = 18) => {
+  const w = Math.max(120, text.length * z * 0.62 + 44)
+  const h = z + 22
+  return `<g><rect x="${r1(cx - w / 2)}" y="${r1(cy - h / 2)}" width="${r1(w)}" height="${h}" fill="#0B0C0E"/><rect x="${r1(cx - w / 2 + 4)}" y="${r1(cy - h / 2 + 4)}" width="${r1(w - 8)}" height="${h - 8}" fill="none" stroke="#F4F1E8" stroke-width=".8"/><rect x="${r1(cx - w / 2 + 7)}" y="${r1(cy - h / 2 + 7)}" width="${r1(w - 14)}" height="${h - 14}" fill="none" stroke="#F4F1E8" stroke-width=".4" opacity=".6"/><text x="${r1(cx)}" y="${r1(cy + z * 0.36)}" text-anchor="middle" font-family="Georgia,'Times New Roman',serif" font-size="${z}" font-style="italic" fill="#F4F1E8" letter-spacing="2">${esc(text)}</text></g>`
+}
 const pillar = (W: number, H: number, frac = 0.16) => `<rect width="${r1(W * frac)}" height="${H}" fill="#050505"/><rect x="${r1(W * (1 - frac))}" width="${r1(W * frac)}" height="${H}" fill="#050505"/>`
 const grainDefs = (id: string) => `<filter id="${id}" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="1" seed="7"/><feColorMatrix values="0 0 0 0 .5 0 0 0 0 .5 0 0 0 0 .5 0 0 0 .9 0"/></filter>`
 const gid = (g: Geo, s: string) => `tq${s}${g.on === 'band' ? 'b' : g.on[0]}`
@@ -807,12 +815,16 @@ const ROWS: Record<string, Row> = {
       const sb = actor(a, 'sb', [[0, 0.42, 'sb'], [0.42, 3, 'sbs']], [[0, x, GROUND], [0.2, x, GROUND], [0.32, x, GROUND, 0.93], [0.44, x, GROUND, 1.04], [0.56, x, GROUND, 1], [3, x, GROUND]], 0.96, { h: 48 })
       const palm2 = a.kf(palm(x - 40, GROUND - 36), [[0, 'transform:rotate(-2deg)'], [0.75, 'transform:rotate(3deg)'], [1.5, 'transform:rotate(-2deg)'], [2.25, 'transform:rotate(3deg)'], [3, 'transform:rotate(-2deg)']], { origin: `${r1(x - 32)}px ${GROUND}px`, ease: 'ease-in-out' })
       const weed = `<g><circle r="7" fill="none" stroke="#B08A5A" stroke-width="1.4"/><path d="M-6 -2q6 4 12 0M-4 4q4 -6 8 -1M-2 -6q2 8 3 12" fill="none" stroke="#B08A5A" stroke-width="1"/></g>`
-      const fr: [number, number, number, number?, string?][] = [[0, g.W + 20, GROUND - 7, 1, 'rotate(0deg)']]
+      // It rolls only over the stage strip: in from the cost line's left edge, out before the step count (never over a number).
+      const w0 = g.W * 0.6 - 14
+      const w1 = 128
+      const at = (i: number) => w0 - ((w0 - w1) * (i + 1)) / bounces.length
+      const fr: [number, number, number, number?, string?][] = [[0, w0, GROUND - 7, 0, 'rotate(0deg)'], [0.2, w0, GROUND - 7, 1, 'rotate(0deg)']]
       const bounces = [0.5, 0.95, 1.4, 1.85, 2.3, 2.75]
-      bounces.forEach((t, i) => { const xx = g.W + 20 - (g.W * 0.9 * (i + 1)) / bounces.length; fr.push([t - 0.22, xx + 40, GROUND - 22, 1, `rotate(${-(i * 2 + 1) * 90}deg)`], [t, xx, GROUND - 7, 1, `rotate(${-(i * 2 + 2) * 90}deg)`]) })
-      fr.push([3, -20, GROUND - 14, 1, 'rotate(-1260deg)'])
+      bounces.forEach((t, i) => { fr.push([t - 0.22, at(i) + (w0 - w1) / 12, GROUND - 22, 1, `rotate(${-(i * 2 + 1) * 90}deg)`], [t, at(i), GROUND - 7, i === bounces.length - 1 ? 0 : 1, `rotate(${-(i * 2 + 2) * 90}deg)`]) })
+      fr.push([3, w1, GROUND - 7, 0, 'rotate(-1080deg)'])
       let dust = ''
-      bounces.forEach((t, i) => { dust += fx.dust(a.sg, t, g.W + 20 - (g.W * 0.9 * (i + 1)) / bounces.length, GROUND - 2, { n: 2, seed: `tw${i}`, color: '#C9B08A', dx: 6, s: 0.8 }) })
+      bounces.forEach((t, i) => { dust += fx.dust(a.sg, t, at(i), GROUND - 2, { n: 2, seed: `tw${i}`, color: '#C9B08A', dx: 6, s: 0.8 }) })
       return palm2 + sb + stillPose(a, 'sbs', x, GROUND, 0.96) + a.mv(weed, fr, { still: 0, c: true }) + a.fx(dust) + a.on(bub(x + 10, GROUND - 50, 'Did I ever tell you about Nicaragua?', g.m), 0.6, 2.9)
     },
     pane: ['task', (a, g) => a.kf(`<g transform="translate(${g.W - 200} 16) rotate(-3)"><rect width="180" height="64" fill="${PROPS.manila}" stroke="#8A7A5A"/><rect x="0" y="-6" width="60" height="8" fill="${PROPS.manila}"/>${C(10, 18, 'CLASSIFIED · PAYBACK', 9, '#7A3B2A', 'letter-spacing="1.2"')}${C(10, 38, 'NICARAGUA · 1984', 13, PROPS.paperInk, 'letter-spacing="1"')}<rect x="10" y="46" width="120" height="8" fill="#111"/></g>`, [[0, 'opacity:0;transform:translate(30px,-10px) rotate(8deg)'], [0.2, 'opacity:1;transform:translate(30px,-10px) rotate(8deg)'], [0.6, 'opacity:1;transform:none'], [2.8, 'opacity:1;transform:none'], [3, 'opacity:0']], { ease: ease('settle'), still: 'opacity="1"' })],
@@ -983,5 +995,5 @@ export const paneOf = (kind: string): ActSurface | 'all' | undefined => rowOf(ki
 /** Every kind phase 3 added (events, set pieces, roamers, THE AMBUSH). */
 export const xKinds = (): string[] => Object.keys(XROWS)
 // The props and the band geometry, for theboys-show.ts.
-export const KIT = { poses, actor, stillPose, arc, PH, runFrame, feet, GROUND, gaugeOf, bustAt, coverBust, dim, poof, censor, knight, octo, tentacle, dolphin, beaver, critter, dog, pig, can, flashbulb, cone, glass, vial, crowd, ribbon, vhs, tv, palm, frostEdge, runner, streak, heart, note }
+export const KIT = { poses, padPose, intertitle, actor, stillPose, arc, PH, runFrame, feet, GROUND, gaugeOf, bustAt, coverBust, dim, poof, censor, knight, octo, tentacle, dolphin, beaver, critter, dog, pig, can, flashbulb, cone, glass, vial, crowd, ribbon, vhs, tv, palm, frostEdge, runner, streak, heart, note }
 void M

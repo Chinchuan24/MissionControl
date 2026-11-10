@@ -13,7 +13,8 @@ import { Act, KIT, bub, cap, defineActs, slate } from './theboys-acts'
 import type { Geo, Row } from './theboys-acts'
 import { BUST, C, CRAWL_Y, PROPS, SP, T, condW, pal, pin, px, r1, sansW, spH, spW, stamp, tape, unit } from './theboys'
 import type { Mode } from './theboys'
-import { REPLAYS, actMs, autoLookAtMe, boysFx, fixedAt, onBoysEvent, registerReplay, setActMs, setBoysFx, setApprovalMod, setStageBusy, testFails, toastOk, vnnBreak } from './theboys-eggs'
+import { REPLAYS, actMs, autoLookAtMe, boysFx, fixedAt, onBoysEvent, registerReplay, setActMs, setBoysFx, setApprovalMod, setFightDrawn, setStageBusy, testFails, toastOk, vnnBreak } from './theboys-eggs'
+import { FIGHT_KINDS } from './theboys-fights'
 import type { BoysEventArgs, BoysMode } from './theboys-eggs'
 import * as fx from './stage/fx'
 import { ease } from './stage/ease'
@@ -71,9 +72,10 @@ export const IDLE_NAP_MS = 600_000
 export const noteWorking = (w: boolean | undefined, m?: Mode): void => { LAST_WORKING = Boolean(w); if (m) LAST_MODE = m }
 export const lastWorking = (): boolean => LAST_WORKING
 
+setFightDrawn(at => FIGHT_KINDS.includes(stageAt(at, { working: LAST_WORKING, mode: LAST_MODE })?.kind ?? ''))
 setStageBusy(at => {
   const s = stageAt(at, { working: LAST_WORKING, mode: LAST_MODE })
-  return Boolean(s && (s.src === 'ambush' || s.src === 'piece') && at >= s.startAt - 1000 && at < s.endAt)
+  return Boolean(s && (s.src === 'ambush' || s.src === 'fight' || s.src === 'piece') && at >= s.startAt - 1000 && at < s.endAt)
 })
 
 // ---------------------------------------------------------------- 3. the acts
@@ -393,8 +395,9 @@ const AS = 0.96
 const homelander = (a: Act, x: number, t: number, up: number) =>
   a.mv(feet(SP.TB_HOMELANDER_HOVER, AS), [[0, x, -50], [t - 0.45, x, -50], [t, x, GROUND], [up, x, GROUND], [up + 0.01, x, GROUND, 0], [12, x, GROUND, 0]], { still: 3 }) +
   a.mv(feet(SP.TB_HOMELANDER_FLY, AS), [[0, x, GROUND - 10, 0], [up, x, GROUND - 10, 0], [up + 0.01, x, GROUND - 10, 1], [up + 0.9, x + 200, -60, 1], [12, x + 200, -60, 1]], { still: 0 })
+// He walks in from (and back out to) the stage strip's left edge, fading there: never across the step count at the far left.
 const butcher = (a: Act, x: number, out: number) =>
-  a.mv(`<g class="tqb">${feet(SP.TB_BUTCHER_WALK, AS)}</g>`, [[0, -40, GROUND], [1.2, x, GROUND], [out, x, GROUND], [out + 0.7, -50, GROUND], [12, -50, GROUND]], { still: 1 }) + a.on(dust(-30 + 40, GROUND - 2), out, out + 0.5, { still: false })
+  a.mv(`<g class="tqb">${feet(SP.TB_BUTCHER_WALK, AS)}</g>`, [[0, 132, GROUND, 0], [0.3, 132, GROUND, 1], [1.2, x, GROUND, 1], [out, x, GROUND, 1], [out + 0.6, 134, GROUND, 0], [12, 134, GROUND, 0]], { still: 3 }) + a.on(dust(140, GROUND - 2), out + 0.4, out + 0.9, { still: false })
 const starlight = (a: Act, g: Geo, x: number, t: number) => a.on(`<g transform="translate(${r1(x)} ${GROUND})">${feet(SP.TB_STARLIGHT_BLAST, AS)}</g>`, t - 0.3, t + 2.6) + flash(a, g, t, '#FFF4C2', 0.85)
 const kimiko = (a: Act, g: Geo, t: number, x: number) => a.mv(feet(SP.TB_KIMIKO_LEAP, AS), [[0, -30, GROUND, 0], [t - 0.2, g.W * 0.12, GROUND, 1], [t + 0.3, x - 40, GROUND - 32, 1], [t + 0.7, x - 20, GROUND, 1], [t + 1.6, x - 20, GROUND, 1], [t + 2.2, -40, GROUND, 1], [12, -40, GROUND, 0]], { still: 3 }) + a.on(sign(x - 20, GROUND - 56, 'now'), t, t + 1.4)
 // The closing caption sits on the title row (the stage strip), never over the top row's numbers.
@@ -571,7 +574,12 @@ const PLAY: [string, string, string][] = [
   ['swimby', 'r-timothy', 'roamer: Timothy swims by'], ['tentacle', 'r-ambrosius', 'roamer: Ambrosius'], ['bounce', 'r-beaver', 'roamer: Buster Beaver'], ['blimp', 'r-blimp', 'roamer: the VNN blimp'], ['oi', 'r-oi', 'roamer: Butcher, Oi.'],
 ]
 for (const [name, fx, what] of PLAY) registerReplay({ name, what, run: () => ({ fx }) })
-registerReplay({ name: 'ambush', what: 'THE AMBUSH (the next of the three)', run: at => ({ fx: ambushOfSlot(Math.floor(at / AMB_SLOT_MS) + 1).kind }) })
+registerReplay({ name: 'ambush', what: 'THE AMBUSH (the next of the three)', run: at => {
+  // The next slot that is an AMBUSH (one slot in four is the look's fight: that one has its own play name).
+  let slot = Math.floor(at / AMB_SLOT_MS) + 1
+  while (ambushOfSlot(slot).src !== 'ambush') slot++
+  return { fx: ambushOfSlot(slot).kind }
+} })
 registerReplay({ name: 'night', what: 'E14 VNN OVERNIGHT on the crawl', run: (at, m) => { vnnBreak(t(m, 'VNN OVERNIGHT: midnight to 5 AM, the night desk is on', 'THE WIRE: past midnight. Kettle’s on.', 'Late show: midnight to 5 AM'), at, 'midnight'); return {} } })
 // The shared `/missioncontrol play` registry (stage/replay.ts), which the command asks before the Boys' own list: every director
 // bit by its play name (`playsFrom`: the AMBUSH, the roamers, the set pieces), then every other act in REPLAYS whose replay only
@@ -589,5 +597,6 @@ export const PIECE_KINDS = [...new Set(PIECES.map(p => p.kind))]
 export type { BoysEventArgs }
 /** THIS MEANS NOIR's way back (the theatre kid's bow); typed while wearing it. */
 export const CURTAIN_RE = /\bcurtain\s+call\b/i
+export { CURTAIN_UP_RE, FIGHT_KINDS } from './theboys-fights'
 /** NOIR is a real quiet mode: every toast of the skin's own is `…` and a thumbs-up. */
 export const quiet = (text: string, noir: boolean): string => (noir ? '… 👍' : text)

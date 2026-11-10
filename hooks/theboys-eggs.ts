@@ -44,8 +44,10 @@ type State = {
   errRun: number
   /** When a failing test run last turned green (E3's regen plays for that run). */
   fixedAt: number
+  /** A-Train has raced the bar this session (F4 plays once a session on TURBO RUSH). */
+  raced: boolean
 }
-const blank = (): State => ({ approval: 50, approvalSince: 0, score: null, breaking: null, inFlight: 0, turboSince: 0, failedAt: [], fx: undefined, fxEvent: false, testFails: 0, lastToast: {}, lastAct: {}, boost: null, turboUntil: 0, spinAt: 0, lookedAt: false, drawAt: 0, errRun: 0, fixedAt: 0 })
+const blank = (): State => ({ approval: 50, approvalSince: 0, score: null, breaking: null, inFlight: 0, turboSince: 0, failedAt: [], fx: undefined, fxEvent: false, testFails: 0, lastToast: {}, lastAct: {}, boost: null, turboUntil: 0, spinAt: 0, lookedAt: false, drawAt: 0, errRun: 0, fixedAt: 0, raced: false })
 let S: State = blank()
 /** A fresh session (and every test) starts at 50/50 with nothing on the wire. */
 export const resetBoys = (): void => { S = blank() }
@@ -59,6 +61,11 @@ export const APPROVAL = { pass: 3, fail: -4, clean: 5, error: -2, job: 5, decayP
 let BUSY: (at: number) => boolean = () => false
 export const setStageBusy = (fn: (at: number) => boolean): void => { BUSY = fn }
 const stageBusy = (at: number): boolean => { try { return BUSY(at) } catch { return false } }
+/** Is a FIGHT drawn on the band at `at` (ahead of its start too)? SOLID GOLD then holds its shield still and skips the tape roll,
+ *  so the band keeps its budget (theboys-show.ts sets it). */
+let FIGHT_ON: (at: number) => boolean = () => false
+export const setFightDrawn = (fn: (at: number) => boolean): void => { FIGHT_ON = fn }
+export const fightDrawn = (at: number | undefined): boolean => { if (at === undefined) return false; try { return FIGHT_ON(at) } catch { return false } }
 /** A clock-driven nudge on top (THE AMBUSH: -8 while Homelander is on screen, +8 when he flies off); theboys-show.ts sets it. */
 let MOD: (at: number) => number = () => 0
 export const setApprovalMod = (fn: (at: number) => number): void => { MOD = fn }
@@ -217,6 +224,8 @@ const core = (ev: BoysEvent, a: BoysEventArgs): BoysAct[] => {
     case 'job-done':
       return [{ approval: APPROVAL.job }]
     case 'turbo':
+      // The first TURBO RUSH of a session is A-Train's RACE (F4, theboys-fights.ts); later ones the turbo act.
+      if (!S.raced) { S.raced = true; return [{ fx: 'race' }] }
       return [{ fx: 'turbo' }]
     default:
       return []

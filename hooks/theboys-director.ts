@@ -4,6 +4,8 @@
 //     p-<piece>  the daily SET PIECES, each once a day at a seeded time in its local-hour window (the 2nd WALK is OFF BOOK's,
 //                BRAVE MAEVE only in June, none drawn in NOIR; the SOLID GOLD teaser keeps 2 min off THE PREMIERE)
 //     ambush     THE AMBUSH, 12 s, `rare` (30-45 min apart) and only while a job works; the three choreographies take turns
+//                with the look's FIGHT (theboys-fights.ts): one slot in four is a fight, so the two never stack and a fight
+//                comes at most once per 30-45 min (in practice every 2-3 h of work)
 //     roam       the 12 cameo roamers: 6-min slots, a seeded moment in the first 2 min, 65% of slots, by weight
 //     oi         Butcher's `Oi.` takeover: its own very rare lane, never within 4 min of another act
 //   A lower lane's slot near a higher one is dropped (never moved). Typed acts and event eggs are `held` windows: nothing
@@ -15,13 +17,14 @@ import type { Slot as DSlot } from './stage/director'
 import { unit } from './theboys'
 import type { Mode } from './theboys'
 import { actMs, boysFx } from './theboys-eggs'
+import { fightFor } from './theboys-fights'
 
 /** The LOCAL date's day number (a UTC day would flip mid-evening west of UTC and re-roll the day's times halfway through). */
 export const localDay = (at: number): number => {
   const d = new Date(at)
   return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86_400_000)
 }
-export type Slot = { kind: string; startAt: number; endAt: number; src: 'fx' | 'ambush' | 'piece' | 'roamer'; book?: boolean }
+export type Slot = { kind: string; startAt: number; endAt: number; src: 'fx' | 'ambush' | 'fight' | 'piece' | 'roamer'; book?: boolean }
 /** The daily set pieces (bible §5.1): local hours [from, to); THE WALK twice in OFF BOOK; BRAVE MAEVE only in June. */
 export const PIECES: { kind: string; from: number; to: number; june?: boolean; book?: boolean }[] = [
   { kind: 'redscare', from: 8, to: 12 },
@@ -41,6 +44,9 @@ export const AMBUSH_MS = 12_000
 export const AMB_SLOT_MS = cadence('rare').slotMs
 export const AMB_JITTER_MS = cadence('rare').jitterMs
 export const CHOREOS = ['a', 'b', 'c'] as const
+/** The AMBUSH lane's turns: the three choreographies, then the look's fight (`fight` stands for it until a look draws it). */
+export const TAKEOVERS = ['ambush-a', 'ambush-b', 'ambush-c', 'fight'] as const
+export const FIGHT_ID = 'fight'
 /** Roamers: [4, 8] min gives 6-min slots with the hit in each slot's first 2 min (cadence: slot = mean, jitter = half the spread). */
 export const ROAM_GAP: [number, number] = [4, 8]
 export const ROAM_SLOT_MS = cadence(ROAM_GAP).slotMs
@@ -77,7 +83,7 @@ export const buildDirector = (o: { june?: boolean; dayOffsetMs?: number } = {}):
     dir.add(`p-${id}`, { id, ms: actMs(p.kind), ...(p.book ? {} : { replay: p.kind }) })
   })
   dir.lane('ambush', { gap: 'rare', when: 'working', pick: 'turns' })
-  for (const c of CHOREOS) dir.add('ambush', { id: `ambush-${c}`, ms: AMBUSH_MS, replay: `ambush-${c}` })
+  for (const id of TAKEOVERS) dir.add('ambush', { id, ms: AMBUSH_MS, ...(id === FIGHT_ID ? {} : { replay: id }) })
   dir.lane('roam', { gap: ROAM_GAP, chance: ROAM_CHANCE })
   for (const [id, weight] of ROAMERS) if (id !== 'r-oi') dir.add('roam', { id, ms: actMs(id), weight, replay: ROAM_PLAY[id] as string })
   dir.lane('oi', { gap: OI_GAP, breathMs: OI_BREATH_MS })
@@ -107,13 +113,23 @@ export const directorAt = (at: number): Director => {
 /** THE AMBUSH lane alone (same seed, same lane): its raw slots, whatever beats them. */
 let AMB_ONLY: Director | undefined
 const ambOnly = (): Director => {
-  AMB_ONLY ??= new Director(SEED, { breathMs: PIECE_GAP_MS }).lane('ambush', { gap: 'rare', when: 'working', pick: 'turns' })
-    .add('ambush', { id: 'ambush-a', ms: AMBUSH_MS }).add('ambush', { id: 'ambush-b', ms: AMBUSH_MS }).add('ambush', { id: 'ambush-c', ms: AMBUSH_MS })
+  if (!AMB_ONLY) {
+    AMB_ONLY = new Director(SEED, { breathMs: PIECE_GAP_MS }).lane('ambush', { gap: 'rare', when: 'working', pick: 'turns' })
+    for (const id of TAKEOVERS) AMB_ONLY.add('ambush', { id, ms: AMBUSH_MS })
+  }
   return AMB_ONLY
 }
-const srcOf = (lane: string): Slot['src'] => (lane === 'ambush' ? 'ambush' : lane.startsWith('p-') ? 'piece' : 'roamer')
+const srcOf = (lane: string, id = ''): Slot['src'] => (lane === 'ambush' ? (id === FIGHT_ID ? 'fight' : 'ambush') : lane.startsWith('p-') ? 'piece' : 'roamer')
 /** A director slot as the Boys' `Slot`. */
-export const toSlot = (s: DSlot): Slot => ({ kind: kindOf(s.id), startAt: s.startAt, endAt: s.endAt, src: srcOf(s.lane), ...(s.id === 'walk2' ? { book: true } : {}) })
+export const toSlot = (s: DSlot): Slot => ({ kind: kindOf(s.id), startAt: s.startAt, endAt: s.endAt, src: srcOf(s.lane, s.id), ...(s.id === 'walk2' ? { book: true } : {}) })
+/** The fight a shared slot plays in a look (theboys-fights `fightFor`; ON BRAND alternates by the fight's number). */
+export const fightOf = (startAt: number, mode: Mode): string => fightFor(mode, Math.floor(Math.floor(startAt / AMB_SLOT_MS) / TAKEOVERS.length))
+/** A director slot as drawn in a look: a fight slot becomes that look's fight, with its own length. */
+const inLook = (s: Slot, mode: Mode): Slot => {
+  if (s.src !== 'fight') return s
+  const kind = fightOf(s.startAt, mode)
+  return { ...s, kind, endAt: s.startAt + actMs(kind) }
+}
 /** What a look shows of a slot: NOIR draws no set pieces, and only OFF BOOK draws the 2nd WALK. */
 const shows = (s: DSlot, mode: Mode): boolean => !s.lane.startsWith('p-') || (mode !== 'noir' && (s.id !== 'walk2' || mode === 'book'))
 const LONG = (): number => Math.max(AMBUSH_MS, ...PIECES.map(p => actMs(p.kind)), ...ROAMERS.map(([k]) => actMs(k)))
@@ -140,7 +156,7 @@ export const ambushOfSlot = (slot: number): Slot => {
 }
 /** The AMBUSH due at `at` (a job must be working; a set piece near it wins). */
 export const ambushAt = (at: number): Slot | undefined => {
-  const s = directorAt(at).plan(at - AMBUSH_MS - 1000, at + 1001, { working: true }).find(x => x.lane === 'ambush' && at >= x.startAt - 1000 && at < x.endAt)
+  const s = directorAt(at).plan(at - AMBUSH_MS - 1000, at + 1001, { working: true }).find(x => x.lane === 'ambush' && x.id !== FIGHT_ID && at >= x.startAt - 1000 && at < x.endAt)
   return s ? toSlot(s) : undefined
 }
 /** The roamer (or Butcher's Oi.) in 6-min slot `slot`, if one plays there. */
@@ -160,7 +176,7 @@ export const stageAt = (at: number, o: StageArgs): Slot | undefined => {
   if (o.swapAt !== undefined && o.swapAt > 0 && at >= o.swapAt - 1000 && at < o.swapAt + 2_700) return undefined
   const held = fx ? [{ startAt: fx.at, endAt: fx.at + actMs(fx.kind), id: fx.kind }] : []
   const s = directorAt(at).plan(at - LONG(), at + AHEAD_MS + 1, { working: o.working === true, held }).find(x => shows(x, o.mode) && at < x.endAt && x.startAt <= at + AHEAD_MS)
-  return s ? toSlot(s) : undefined
+  return s ? inLook(toSlot(s), o.mode) : undefined
 }
 
 // ---------------------------------------------------------------- V1: the previous scheduler, kept one release for the tests

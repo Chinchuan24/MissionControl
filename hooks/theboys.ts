@@ -286,12 +286,13 @@ export const shieldHero = (cx: number, cy: number, working: boolean) => {
 /** The Compound V syringe (the task row's gauge): a needle at the left, the glass barrel, the blue dose filling to the progress
  *  point with the plunger head riding it, the rod and its flange at the right. At 95%+ context it flickers gold (unstable).
  *  OFF BOOK: scratched glass and a strip of tape. SOLID GOLD: a brass VU meter in its place. */
-export const syringe = (x: number, y: number, w: number, pct: number, m: Mode, o: { near?: boolean; working?: boolean; stolen?: boolean } = {}) => {
+export const syringe = (x: number, y: number, w: number, pct: number, m: Mode, o: { near?: boolean; working?: boolean; stolen?: boolean; bare?: boolean } = {}) => {
   const P = pal(m)
   const p = clamp(pct, 0, 100) / 100
   if (m === 'gold') {
     // The VU meter, with Soldier Boy's shield at its right end as the gauge's hero (it turns while a job works).
-    const hero = w >= 120
+    // `bare`: a fight is on the band, so the shield steps off the meter (its 2-7 k is the fight's budget).
+    const hero = w >= 120 && !o.bare
     const vw = hero ? w - 26 : w
     const n = Math.max(4, Math.floor((vw - 4) / 4))
     const lit = Math.round(p * n)
