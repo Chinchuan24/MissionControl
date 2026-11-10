@@ -8,12 +8,14 @@ import { BB_JESSE, BB_JESSE_BUST, hashOf } from './cast'
 import { bustPx, sansClip, sansW } from './breakingbad-cards'
 import type { RoamPlan, RoamTiming } from './roamer'
 import type { ThemeRoamer } from './themes'
+import { perWindow } from './stage/director'
 
 export const JESSE_LINES: string[] = ['Yeah, science!', 'Yo, Mr. White!', "We're cooking now.", 'Science, yo!', "Mr. White, it's me."]
 /** The hoodie's red and the crystal's blue: the ghost copies of his glitch-in. */
 export const JESSE_COLORS = { accent: '#E0463E', accent2: '#5EC8F0', text: '#F4F4F4' }
-/** Appearances per 30 s window: lower than Capri's, a little more when the context runs high. */
-export const jesseChance = (ctxPct: number): number => (ctxPct >= 95 ? 0.35 : 0.25)
+/** Appearances per 30 s window, through the director's rarity: about one every 8 minutes, every 5 when the context runs high.
+ *  (Was 25-35%, one every 1.5-2 min: far too often for a roamer.) */
+export const jesseChance = (ctxPct: number): number => (ctxPct >= 95 ? perWindow(5) : perWindow(8))
 /** How long the cameo is on screen, start to gone. */
 export const CAMEO_MS = 3_000
 

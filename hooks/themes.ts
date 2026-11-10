@@ -46,6 +46,7 @@ import type { Sprite } from './cast'
 import type { RoamColors, RoamPlan, RoamTiming } from './roamer'
 import type { Badge, Beat, Cred, CredWords, Frame } from './extras'
 import type { Legend } from './eggs'
+import { perWindow } from './stage/director'
 
 /** What the band's figure slot knows: the clock, the context, and whether the job-done celebration is drawing. */
 export type FigureCtx = { at: number; ctxPct: number; party?: boolean; fx?: { kind: string; at: number }; /** A job is running. */ working?: boolean; /** The job's progress, 0 to 100 (absent before a plan). */ progress?: number }
@@ -288,9 +289,10 @@ const bbTheme = (heis: boolean): ThemeEggs => ({
 // Edgerunners 2 v2 "D's optics" (and its secret CAPRICORN skin): a glass HUD in cobalt and ice, Capri's pink and green
 // only when she is near. The band is the slim band in the theme's own hand; NEURAL SYNC is the level card, NETRUN TRACE
 // the log, CLOSED GIGS the closed jobs.
-// The roamer's chances, shared by the roamer and by the duets (which never double her): fewer appearances at 95%+ than before,
-// so that the pair has the free windows the duets need (a duet every ~1.5 min there).
-const er2Chance = (sec: boolean) => (ctxPct: number): number => (sec ? 0.6 : ctxPct >= 95 ? 0.55 : ctxPct >= 85 ? 0.45 : 0.3)
+// The roamer's chances, shared by the roamer and by the duets (which never double her). D mode is calm: with her hack lines and
+// the duets, about one Capri event in five 30 s windows under 85% (roam ~1 in 10), escalating at 85% and again at 95%. CAPRI
+// mode (she is in control) keeps its own pace.
+const er2Chance = (sec: boolean) => (ctxPct: number): number => (sec ? 0.6 : ctxPct >= 95 ? perWindow(1.6) : ctxPct >= 85 ? perWindow(2.5) : perWindow(5))
 const ER2_LINES = ['hi, choom.', 'hi.', 'just me, choom.', 'bye-bye, choomba!']
 const er2RoamFor = (ctxPct: number) => (windowStart: number) => roamPlan('er2', windowStart, { chance: er2Chance(false)(ctxPct), takeoverEveryMin: 30, lines: ER2_LINES })
 const er2Theme = (sec: boolean): ThemeEggs => ({

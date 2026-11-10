@@ -4,7 +4,7 @@ import type { Engine } from 'claude-code/testing'
 import { ER_CAPRI } from './cast'
 import { contrast } from './skinkit'
 import { CAPRI_MODE, DUET_CSS, DUET_SEED, GLITCH_CSS, GLITCH_SEED, TR_CSS, TRANSITION_MS, duetPlan, glitchEvents, glitchPlan } from './edgerunners2-duet'
-import { er2Hack } from './edgerunners2-hack'
+import { er2Hack, hackPlan } from './edgerunners2-hack'
 import { roamOptsOf } from './overlay'
 import { roamPlan } from './roamer'
 import { THEMES } from './themes'
@@ -176,8 +176,9 @@ test('duets: only in D mode, only where the roamer is not out; the rates; POSSES
   }
   const low = rate(30)
   const high = rate(96)
-  expect(low.minutesPer).toBeGreaterThan(2.5)
-  expect(low.minutesPer).toBeLessThan(6)
+  // Rare at a normal context: about one duet every 10 min (was every 2.5-6 min).
+  expect(low.minutesPer).toBeGreaterThan(6)
+  expect(low.minutesPer).toBeLessThan(16)
   expect(high.minutesPer).toBeGreaterThan(1)
   expect(high.minutesPer).toBeLessThan(2.6)
   expect(high.kinds.possess ?? 0).toBeGreaterThan(high.kinds.link ?? 0)
@@ -284,4 +285,26 @@ test(`sizes and layout (${mode} mode): 4 agents, both modes, the transition and 
     expect(maxTotal).toBeLessThan(260_000)
     expect(sigs.size).toBe(1)
   }
+})
+
+test('calm D mode: about one Capri event (roam, hack or duet) in five 30 s windows under 85%, escalating at 85% and 95%', () => {
+  const share = (ctx: number) => {
+    let any = 0
+    const N = 2 * 24 * 120
+    for (let i = 0; i < N; i++) {
+      const t = BASE + i * 30_000
+      const roam = roamFor(ctx)(t)
+      const hack = hackPlan(`${er2.seed}|hack`, t, ctx, false, roam)
+      const duet = duetPlan(DUET_SEED, t, ctx, roamFor(ctx))
+      if (roam?.on || hack.on || duet.on) any++
+    }
+    return any / N
+  }
+  const low = share(30)
+  const mid = share(88)
+  const high = share(96)
+  expect(low).toBeGreaterThan(0.14) // was about 0.6: she was out in most windows
+  expect(low).toBeLessThan(0.27)
+  expect(mid).toBeGreaterThan(low + 0.15)
+  expect(high).toBeGreaterThan(mid + 0.1)
 })

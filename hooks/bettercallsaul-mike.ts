@@ -8,12 +8,14 @@ import { BCS_HECTOR, BCS_MIKE, BCS_MIKE_CHAIR } from './cast'
 import { FONT, bell, clamp, grey, pal, px, r1, sansClip, sansW, sid, spW, BCS_CSS } from './bettercallsaul'
 import type { RoamPlan, RoamTiming } from './roamer'
 import type { ThemeRoamer } from './themes'
+import { perWindow } from './stage/director'
 
 /** The words: next to nothing. The silence is the joke; no unverified quotes. */
 export const MIKE_LINES = ['…', 'Mm-hm.', 'Yeah.', 'No.']
 export const MIKE_COLORS = { accent: '#9FC2F0', accent2: '#E6C35C', text: '#F5EEE2' }
-/** Appearances per 30 s window: more when the context runs high. */
-export const mikeChance = (ctxPct: number): number => (ctxPct >= 95 ? 0.35 : 0.25)
+/** Appearances per 30 s window, through the director's rarity: about one every 8 minutes, every 5 when the context runs high.
+ *  (Was 25-35%, one every 1.5-2 min.) */
+export const mikeChance = (ctxPct: number): number => (ctxPct >= 95 ? perWindow(5) : perWindow(8))
 export const CAMEO_MS = 3_000
 
 const delayer = (startAt: number | undefined, tm: RoamTiming): ((x: number) => string) => {

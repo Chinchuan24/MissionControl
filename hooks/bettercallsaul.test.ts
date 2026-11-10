@@ -140,8 +140,13 @@ test('episodes: 63 titles, one per hour; Season 1 ends in O except Alpine Shephe
 test('mike: deterministic plans; walks, peeks, sits; the cameo at most once per 30 minutes on any clock', () => {
   for (const k of ['bettercallsaul', 'gene'] as const) {
     const r = roamerOf(k)
-    expect(r.chance(10)).toBe(0.25)
-    expect(r.chance(96)).toBe(0.35)
+    // Rare: about one visit every 8 minutes (every 5 at 95%), not every 1.5-2 min as before.
+    expect(r.chance(10)).toBe(0.0625)
+    expect(r.chance(96)).toBe(0.1)
+    let visits = 0
+    for (let t = NOW; t < NOW + 24 * HOUR; t += 30_000) { const p = roamPlan(r.seed, t, roamOptsOf(r, 10)); if (p.on && p.kind !== 'takeover') visits++ }
+    expect(visits).toBeGreaterThan(24 * 60 / 12) // more often than one every 12 min...
+    expect(visits).toBeLessThan(24 * 60 / 5) // ...and rarer than one every 5 min
     expect(roamPlan(r.seed, NOW, roamOptsOf(r, 10))).toEqual(roamPlan(r.seed, NOW, roamOptsOf(r, 10)))
     expect(r.lines).toEqual(MIKE_LINES)
     const kinds = new Set<string>()
@@ -160,7 +165,8 @@ test('mike: deterministic plans; walks, peeks, sits; the cameo at most once per 
     expect(seen).toBeGreaterThan(10)
     expect([...kinds].sort()).toEqual(['peek', 'sit', 'takeover', 'walk'])
   }
-  expect(mikeChance(10)).toBe(0.25)
+  expect(mikeChance(10)).toBe(0.0625)
+  expect(mikeChance(96)).toBe(0.1)
 })
 for (const kind of ['walk', 'sit', 'peek', 'takeover'] as const) {
   test(`mike: a ${kind} shows in the band and the pane`, async ($, on) => {

@@ -454,9 +454,10 @@ test('jesse: the five lines are clean and the cameo shows at most once per 30 mi
   }
 })
 
-test('jesse: rarer than Capri, still walks, peeks and sits; walks do not run on a slim chance', () => {
+test('jesse: rare (about one visit every 8 min), rarer than Capri, still walks, peeks and sits', () => {
   const capri = THEMES.edgerunners2.roamer as NonNullable<(typeof THEMES.edgerunners2)['roamer']>
-  expect(roamerOf('breakingbad').chance(10)).toBe(0.25)
+  expect(roamerOf('breakingbad').chance(10)).toBe(0.0625)
+  expect(roamerOf('breakingbad').chance(96)).toBe(0.1)
   expect(roamerOf('breakingbad').chance(10)).toBeLessThan(capri.chance(10) + 1e-9)
   const kinds = new Set<string>()
   let on = 0
@@ -465,8 +466,9 @@ test('jesse: rarer than Capri, still walks, peeks and sits; walks do not run on 
     if (p.on) { on++; kinds.add(p.kind as string) }
   }
   expect([...kinds].sort()).toEqual(['peek', 'sit', 'takeover', 'walk'])
-  expect(on).toBeGreaterThan(300)
-  expect(on).toBeLessThan(1100)
+  // A day of 30 s windows: between one visit every 12 min and one every 5 (takeovers included), was 300-1100.
+  expect(on).toBeGreaterThan(120)
+  expect(on).toBeLessThan(288)
 })
 
 test('jesse: reduced motion has no walking, only a still faint peek or the bubble', () => {
