@@ -27,6 +27,18 @@ import { pair } from './motion'
 export const r1 = (n: number): number => Math.round(n * 10) / 10
 export const r3 = (n: number): number => Math.round(n * 1000) / 1000
 
+/**
+ * Keyframe rows without the redundant ones: a row whose value equals both neighbours' sits inside a hold (whatever the
+ * timing function, the value between equal rows is constant), and a repeat of the same percent and value says nothing.
+ */
+export const slim = (rows: [number, string][]): [number, string][] =>
+  rows.filter((r, i) => {
+    const a = rows[i - 1]
+    const b = rows[i + 1]
+    if (a && a[0] === r[0] && a[1] === r[1]) return false
+    return !(a && b && a[1] === r[1] && b[1] === r[1])
+  })
+
 export type ActOpts = {
   /** Unique per act AND per surface (two acts in one Svg need two ids): it becomes every class and id prefix. */
   id: string
@@ -112,7 +124,7 @@ export class Act {
   /** A fresh keyframes name under this act's prefix. */
   k(): string { return `${this.p}_${(this.n++).toString(36)}` }
   /** Register a keyframes block. */
-  rows(name: string, rows: [number, string][]): void { this.css += `@keyframes ${name}{${rows.map(([p, v]) => `${p}%{${v}}`).join('')}}` }
+  rows(name: string, rows: [number, string][]): void { this.css += `@keyframes ${name}{${slim(rows).map(([p, v]) => `${p}%{${v}}`).join('')}}` }
   /**
    * Numeric keys (index 0 = act time) in timeline order with every freeze turned into a hold: the value at the freeze
    * time is repeated at its end, so the piece stands still through it. Times come back warped (use `pcw` on them).
