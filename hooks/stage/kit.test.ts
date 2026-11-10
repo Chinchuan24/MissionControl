@@ -287,7 +287,7 @@ test('choreo: orbit swings a fighter round a pivot, its top toward the pivot; a 
   const f = new Fight(act, { sc: 2 }).fighter('a', 'A', 100, 100).fighter('b', 'B', 150, 100, -1)
   f.at(0.2).orbit('a', 150, 80, 30, 90, 270, 0.6, { upright: true, n: 4 })
   expect(f.script.map(s => s[0])).toEqual(['orbit'])
-  expect(f.t).toBeCloseTo(0.8, 6)
+  expect(Math.abs(f.t - 0.8)).toBeLessThan(1e-9)
   const layer = act.done(f.body(), f.still())
   clean(layer)
   // 90 deg: held out to the pivot's left; 180: straight above it; 270: to its right; then squared up.
