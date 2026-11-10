@@ -512,8 +512,11 @@ const CP77_SWITCH: SwitchFlavour = {
   shards: 3,
   veil: 0.5,
   extra: (act, surface) => {
-    let s = ''
-    for (let i = 0; i < 3; i++) s += act.mv(`<rect y="${r1((act.H * (i + 0.5)) / 3)}" width="${r1(act.W * 0.4)}" height="1.4" fill="${i % 2 ? CP.cyan : CP.red}" opacity=".75"/>`, [[0.02 * i, -act.W * 0.4, 0, 1], [0.5 + 0.02 * i, act.W, 0, 1], [0.52 + 0.02 * i, act.W, 0, 0]], { ease: 'cubic-bezier(.2,.8,.3,1)' })
+    // The three lines ride one track (the engine holds a track's last key to the end: one track, not three); each starts a
+    // little further left, so they still arrive one after another.
+    let lines = ''
+    for (let i = 0; i < 3; i++) lines += `<rect x="${-14 * i}" y="${r1((act.H * (i + 0.5)) / 3)}" width="${r1(act.W * 0.4)}" height="1.4" fill="${i % 2 ? CP.cyan : CP.red}"/>`
+    let s = act.mv(`<g opacity=".75">${lines}</g>`, [[0, -act.W * 0.4, 0, 1], [0.5, act.W + 28, 0, 1], [0.54, act.W + 28, 0, 0]], { ease: 'cubic-bezier(.2,.8,.3,1)' })
     s += act.on(`<text x="10" y="${r1(Math.min(act.H - 4, 14))}" font-family="${MONO}" font-size="8" font-weight="700" letter-spacing="1" fill="${CP.yellow}">JACKING IN…</text>`, 0, 0.5)
     return s + (surface === 'band' ? emblem(act, 'CP77_EMBLEM', act.W * 0.5, act.H / 2, true) : '')
   },
