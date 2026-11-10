@@ -464,7 +464,7 @@ export const er2Name = (x: number, y: number, W: number, sec: boolean, near: boo
   const px = x + lw + 10
   if (sec) s += `<g id="er2bust"><path d="${cham(px, y - 12, 17, 17, 3, 1)}" fill="${K.black}" stroke="${K.green}" stroke-width="1"/>${pixels(ER_CAPRI_BUST, px + 2, y - 11, 0.31)}</g>`
   else s += `<path d="${cham(px, y - 12, 16, 16, 3, 1)}" fill="${P.a}"/>${T(px + 4.3, y + 0.6, 'D', 12, 800, '#FFFFFF')}`
-  const id = sec ? 'PROJECT CAPRICORN · HOST D' : W >= 1100 ? 'SNAKE NATION · NETRUNNER' : W >= 900 ? 'SNAKE NATION' : ''
+  const id = sec ? (W >= 600 ? 'PROJECT CAPRICORN · HOST D' : 'CAPRICORN') : W >= 1100 ? 'SNAKE NATION · NETRUNNER' : W >= 900 ? 'SNAKE NATION' : ''
   if (id) s += T(px + 23, y + 0.5, id, 9.5, 800, P.aT, 'letter-spacing="1.3"')
   let w = lw + 10 + 17 + (id ? 7 + er2W(id, 9.5, 1.3, 800) : 0)
   // CAPRI mode: his dimmed D patch after the id, the second D trace.

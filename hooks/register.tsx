@@ -3196,10 +3196,10 @@ const textWidth = (s: string, size: number): number => [...s].reduce((w, ch) => 
 
 // Cuts `s` to fit `maxW` pixels, with an ellipsis when it had to cut.
 /** `fitText` with a theme's own widths (its sans is wider than the shared guess). */
-const sansClipTo = (w: (s: string, size: number, ls?: number, bold?: boolean) => number, s: string, size: number, max: number): string => {
-  if (w(s, size) <= max) return s
+const sansClipTo = (w: (s: string, size: number, ls?: number, bold?: boolean) => number, s: string, size: number, max: number, bold = false): string => {
+  if (w(s, size, 0, bold) <= max) return s
   const a = [...s]
-  while (a.length && w(`${a.join('')}…`, size) > max) a.pop()
+  while (a.length && w(`${a.join('')}…`, size, 0, bold) > max) a.pop()
   return a.length ? `${a.join('').trimEnd()}…` : ''
 }
 const fitText = (s: string, size: number, maxW: number): string => {
@@ -3994,10 +3994,11 @@ const estimateOf = (a: AgentRun, at: number): number =>
   Math.min(0.95, 1 - Math.exp((-1.2 * Math.max(0, (a.endedAt ?? Math.max(at, a.startedAt)) - a.startedAt)) / typicalRunMs))
 
 // The task's own progress when the worker reports steps; a finished run is full;
-// a running one without steps is estimated when the time is known.
+// a running one without steps is estimated when the time is known. Only the end
+// makes it whole: a worker that reported every step is still writing its report.
 const progressOf = (a: AgentRun, at?: number): number | null => {
   if (a.status === 'done') return 1
-  if (a.stepTotal) return Math.min(1, (a.stepDone ?? 0) / a.stepTotal)
+  if (a.stepTotal) return Math.min(a.status === 'running' ? 0.95 : 1, (a.stepDone ?? 0) / a.stepTotal)
   if (a.status === 'running' && at) return estimateOf(a, at)
   return null
 }
@@ -5101,7 +5102,8 @@ const isHolding = (a: AgentRun): boolean => a.status === 'running'
 // When it was last heard from: a tool call still in flight (a long build, a
 // permission prompt) is a sign of life now, and so is a busy sub-agent it waits on.
 const heardAt = (a: AgentRun, list: readonly AgentRun[], at: number, depth = 0): number => {
-  if (a.toolsInFlight) return at
+  // A held agent (its loop waits on work of its own) is checked with the engine each second.
+  if (a.toolsInFlight || a.heldAt) return at
   const kids = a.agentId && depth < 5 ? list.filter(k => k.parentAgentId === a.agentId && k.status === 'running') : []
   return Math.max(lastSeen(a), ...kids.map(k => heardAt(k, list, at, depth + 1)))
 }
@@ -6293,7 +6295,7 @@ const slimBandSvg = (OW: number, d: HudData): string => {
   const sw = sl?.sw ?? serifW
   // A theme with its own sans measures it itself, in bold where the design says so; the Mentalist's call is unchanged.
   const bold = Boolean(sl)
-  const fitW = (text: string, size: number, max: number): string => (sl ? sansClipTo(sw, text, size, max) : fitText(text, size, max))
+  const fitW = (text: string, size: number, max: number, isBold = false): string => (sl ? sansClipTo(sw, text, size, max, isBold) : fitText(text, size, max))
   const RJ = '#E0261F'
   const edge = d.isParty ? c.done : d.isWorking ? c.accent : c.line
   // Text in a skin colour (the title, the role pills) is lifted toward white until it reads at 4.5:1 on the tile.
@@ -6318,43 +6320,60 @@ const slimBandSvg = (OW: number, d: HudData): string => {
   const lead = sl ? sl.head(x0, y, c, FONT) : { svg: '', w: 0 }
   if (lead.svg) s.push(lead.svg)
   const nx = lead.w ? x0 + lead.w + 10 : x0
-  // A theme may draw the name in its own hand (a paper label, a patch, a line of identity).
-  const own = sl?.name?.(x0, y, W, c, FONT, tctx)
-  s.push(own ? own.svg : Lb(nx, y, 'MISSION CONTROL', 'start', c.accent2).replace('letter-spacing=".8"', 'letter-spacing="1.6"'))
-  let hx = own ? x0 + own.w + 14 : nx + sw('MISSION CONTROL', 9.5, 1.6, true) + 16
-  const chip = th.chip(hx, y, d.ctxPct, c, FONT, W)
-  s.push(chip.svg)
-  const chipX = hx
-  if (chip.w) hx += chip.w + 16
-  const smallChip = (x: number, label: string, tip: string, live: boolean) => {
-    const w = Math.round(sw(label, 9.5, 0.8, true) + 14)
-    s.push(`<rect${live ? ' class="live"' : ''} x="${x}" y="${y - 10.5}" width="${w}" height="14" rx="3" fill="none" stroke="${c.subtext}" stroke-opacity=".4"/><text x="${x + w / 2}" y="${y}" text-anchor="middle" font-family="${FONT}" font-size="9.5" font-weight="700" letter-spacing=".8" fill="${c.subtext}"><title>${xml(tip)}</title>${xml(label)}</text>`)
-    return w + 10
-  }
-  if (d.crewMode) hx += smallChip(hx, 'CREW MODE', d.crewMode, true)
-  if (d.bg) hx += smallChip(hx, `${d.bg} BACKGROUND`, `${d.bg} ${tr().bgBand}`, false)
+  // The header row's rule: the name, the theme's chip, CREW MODE, the background count and the model run left to right; the
+  // clock is pinned right, the episode and the theme's gauge beside it. Each is measured before any is drawn, and while the row
+  // is short (under 24 px between the two sides) they give way in a set order, a shorter form first (HEADER_ORDER). The clock,
+  // a working number, stays: nothing overlaps it or runs past the edge.
+  // A theme may draw the name in its own hand (a paper label, a patch, a line of identity); a narrower W gives its shorter form.
+  const nameAt = (w: number) => sl?.name?.(x0, y, w, c, FONT, tctx)
+  let own = nameAt(W)
+  const nameEnd = (): number => (own ? x0 + own.w + 14 : nx + sw('MISSION CONTROL', 9.5, 1.6, true) + 16)
+  const chipW = th.chip(0, y, d.ctxPct, c, FONT, W).w
+  const tagW = (label: string) => Math.round(sw(label, 9.5, 0.8, true) + 14)
+  const crewTags = d.crewMode ? ['CREW MODE', 'CREW'] : []
+  const bgTags = d.bg ? [`${d.bg} BACKGROUND`, `${d.bg} BG`] : []
+  let showChip = chipW > 0
+  let crewForm = 0
+  let bgForm = 0
+  const tagsW = (): number => (showChip ? chipW + 16 : 0) + (crewTags[crewForm] ? tagW(crewTags[crewForm] as string) + 10 : 0) + (bgTags[bgForm] ? tagW(bgTags[bgForm] as string) + 10 : 0)
   const model = [PROVIDER, d.model, d.effort].filter(Boolean).join(' · ')
   const modelW = sw(model, 11.5)
   const clockTxt = d.budget ? `${fmtTime(d.budget.usedMs)} / ${d.budget.min}m` : d.taskMs > 0 ? fmtTime(d.taskMs) : ''
   const clockW = clockTxt ? sw(clockTxt, 11.5) + 4 : 0
   const epm = /^(?:\S+\s+)?(S\d+E\d+|EP \d+)\s+(.*)$/.exec(th.ticker(d.at))
   const ep: [string, string] = epm ? [epm[1] as string, epm[2] as string] : ['', '']
-  // The episode shrinks to its code (S1E4) before it goes, and goes last of the header's extras.
+  // The episode shrinks to its code (S1E4) before it goes.
   const epWFull = ep[0] ? (sl?.ep ? sl.ep.w(ep[0], ep[1], true) : sw(ep[0], 9.5, 0.8, true) + sw(ep[1], 11.5) + 12) : 0
   const epWCode = ep[0] ? (sl?.ep ? sl.ep.w(ep[0], ep[1], false) : sw(ep[0], 9.5, 0.8, true) + 2) : 0
   let epMode: 0 | 1 | 2 = epWFull > 0 ? 0 : 2
   const epWof = (): number => (epMode === 0 ? epWFull : epMode === 1 ? epWCode : 0)
   const rightEdge = (withEp: boolean) => xr - clockW - (withEp && epWof() ? epWof() + (clockW ? 28 : 0) : 0)
   let showModel = Boolean(model)
-  // A theme's own gauge goes first when the room runs out, then the model, then the episode.
   const pg0 = sl?.gauge(0, y, d.isWorking, d.steps.filter(st => st === 'done').length, d.steps.length, c, FONT, tctx)
   const gW = pg0 ? pg0.w + 26 : 0
   let showGauge = Boolean(pg0)
-  if (showGauge && rightEdge(true) - gW - (hx + (showModel ? modelW + 24 : 0)) < 24) showGauge = false
-  if (showModel && rightEdge(true) - (showGauge ? gW : 0) - (hx + modelW + 24) < 24) showModel = false
-  if (epMode === 0 && rightEdge(true) - (showGauge ? gW : 0) - hx < 24) epMode = 1
-  if (epMode === 1 && rightEdge(true) - (showGauge ? gW : 0) - hx < 24) epMode = 2
+  const shorterName = (w: number) => () => { if (own) own = nameAt(Math.min(W, w)) }
+  // HEADER_ORDER: the gauge, the model, the episode (its code, then gone), "2 BG" and CREW for the two state chips, the name's
+  // shorter forms, the theme's chip, then the background count and crew mode themselves.
+  const order: (() => void)[] = [() => { showGauge = false }, () => { showModel = false }, () => { if (epMode === 0) epMode = 1 }, () => { epMode = 2 }, () => { bgForm = Math.min(bgForm + 1, 1) }, () => { crewForm = Math.min(crewForm + 1, 1) }, shorterName(1099), shorterName(899), shorterName(699), shorterName(499), () => { showChip = false }, () => { bgForm = 2 }, () => { crewForm = 2 }]
+  for (const give of order) {
+    if (rightEdge(true) - (showGauge ? gW : 0) - (nameEnd() + tagsW() + (showModel ? modelW + 24 : 0)) >= 24) break
+    give()
+  }
   const showEp = epMode < 2
+  s.push(own ? own.svg : Lb(nx, y, 'MISSION CONTROL', 'start', c.accent2).replace('letter-spacing=".8"', 'letter-spacing="1.6"'))
+  let hx = nameEnd()
+  const chipX = hx
+  const chip = showChip ? th.chip(hx, y, d.ctxPct, c, FONT, W) : { svg: '', w: 0 }
+  s.push(chip.svg)
+  if (chip.w) hx += chip.w + 16
+  const smallChip = (x: number, label: string, tip: string, live: boolean) => {
+    const w = tagW(label)
+    s.push(`<rect${live ? ' class="live"' : ''} x="${x}" y="${y - 10.5}" width="${w}" height="14" rx="3" fill="none" stroke="${c.subtext}" stroke-opacity=".4"/><text x="${x + w / 2}" y="${y}" text-anchor="middle" font-family="${FONT}" font-size="9.5" font-weight="700" letter-spacing=".8" fill="${c.subtext}"><title>${xml(tip)}</title>${xml(label)}</text>`)
+    return w + 10
+  }
+  if (crewTags[crewForm]) hx += smallChip(hx, crewTags[crewForm] as string, d.crewMode, true)
+  if (bgTags[bgForm]) hx += smallChip(hx, bgTags[bgForm] as string, `${d.bg} ${tr().bgBand}`, false)
   const baseEnd = showModel ? hx + modelW + 24 : hx
   if (showModel) s.push(Bd(hx, y, model, c.muted))
   const tone = d.budget ? budgetTone(d.budget.usedMs, d.budget.min, c.subtext) : c.subtext
@@ -6391,7 +6410,7 @@ const slimBandSvg = (OW: number, d: HudData): string => {
   const leftRoom = (hasReadouts ? r0 - 18 : W - 14) - 20 - tx
   const titleW = Math.min(300, natTitle, Math.max(90, Math.floor((leftRoom - pillW - 24) * (compact ? 0.55 : 1))))
   // The plain title, always: a glitch on the band once hid it (a ☺ stayed, the title never came back).
-  s.push(`<text x="${tx}" y="54" font-family="${FONT}" font-size="15" font-weight="700" fill="${th.face ? c.text : lift(c.accent)}">${xml(fitW(d.title, 15, titleW))}</text>`)
+  s.push(`<text x="${tx}" y="54" font-family="${FONT}" font-size="15" font-weight="700" fill="${th.face ? c.text : lift(c.accent)}">${xml(fitW(d.title, 15, titleW, bold))}</text>`)
   const px = tx + titleW + 12
   const statusOn = d.isWorking || d.isParty
   const pillFill = d.isParty ? c.done : d.isWorking ? c.accent : c.muted
@@ -6695,22 +6714,35 @@ const hudHead = (W: number, d: HudData): string => {
   const tiles = themeOf()?.tiles?.(24 + nameW + 8, y, c, FONT)
   const hasTiles = Boolean(tiles) && W >= 24 + nameW + 8 + (tiles?.w ?? 0) + skinW + 220
   const sx = 24 + nameW + 8 + (hasTiles && tiles ? tiles.w + 8 : 0)
-  const crewLabel = d.crewMode ? '⚑ CREW MODE' : ''
-  const crewW = crewLabel ? Math.round(textWidth(crewLabel, 9.5) + 16) : 0
+  // The header row's rule: the chips (the skin, crew mode, the background count, the theme's) run left to right and the clock is
+  // pinned right. All are measured first; while the chips would reach within 16 px of the clock they give way in a set order:
+  // the skin's chip, the theme's chip, CREW MODE to CREW, the background count, then crew mode. The clock stays.
+  const crewTags = d.crewMode ? ['⚑ CREW MODE', '⚑ CREW'] : []
+  let crewForm = 0
+  const crewLabel = (): string => crewTags[crewForm] ?? ''
+  const crewW = (): number => (crewLabel() ? Math.round(textWidth(crewLabel(), 9.5) + 16) : 0)
   // The skin's chip only when it fits the band.
-  const hasSkinChip = sx + skinW <= W - 14
-  const cx = hasSkinChip ? sx + skinW + 8 : sx
+  let hasSkinChip = sx + skinW <= W - 14
+  const cx = (): number => (hasSkinChip ? sx + skinW + 8 : sx)
   // The background count sits in the band's own drawing, so it never moves the buttons beside it.
   const bgLabel = d.bg ? `⧗\uFE0E ${d.bg}` : ''
-  const bgW = bgLabel ? Math.round(textWidth(bgLabel, 9.5) + 14) : 0
-  const bx = cx + (crewW ? crewW + 8 : 0)
-  const mx = bgW ? bx + bgW + 12 : cx + (crewW ? crewW + 12 : 4)
+  let bgW = bgLabel ? Math.round(textWidth(bgLabel, 9.5) + 14) : 0
+  const bx = (): number => cx() + (crewW() ? crewW() + 8 : 0)
+  const mxOf = (): number => (bgW ? bx() + bgW + 12 : cx() + (crewW() ? crewW() + 12 : 4))
   const egg = cyberOf()
   const th = themeOf()
-  const psy = egg ? psychoChip(mx, y, d.ctxPct, FONT) : th ? th.chip(mx, y, d.ctxPct, c, FONT) : { svg: '', w: 0 }
-  const mx2 = mx + (psy.w ? psy.w + 10 : 0)
+  const chipOf = (x: number) => (egg ? psychoChip(x, y, d.ctxPct, FONT) : th ? th.chip(x, y, d.ctxPct, c, FONT) : { svg: '', w: 0 })
+  let psyW = chipOf(0).w
   const model = [PROVIDER, d.model, d.effort].filter(Boolean).join(' · ')
   const clock = d.budget ? `⏱\uFE0E ${budgetLabel(d.budget.usedMs, d.budget.min)}` : d.taskMs > 0 ? `⏱\uFE0E ${fmtTime(d.taskMs)}` : ''
+  const clockW = clock ? textWidth(clock, 11) + 8 : 0
+  for (const give of [() => { hasSkinChip = false }, () => { psyW = 0 }, () => { crewForm = 1 }, () => { bgW = 0 }, () => { crewForm = 2 }]) {
+    if (mxOf() + (psyW ? psyW + 10 : 0) + 16 <= W - 14 - clockW) break
+    give()
+  }
+  const mx = mxOf()
+  const psy = psyW ? chipOf(mx) : { svg: '', w: 0 }
+  const mx2 = mx + (psy.w ? psy.w + 10 : 0)
   const parts = [egg ? `♪ ${radio(d.at)}` : th ? th.ticker(d.at) : '', d.folder ? `▤ ${d.folder}` : '', clock].filter(Boolean)
   const widthOf = (xs: string[]) => (xs.length ? textWidth(xs.join('   '), 11) + 8 : 0)
   while (parts.length > (clock ? 1 : 0) && W - 14 - widthOf(parts) < mx2 + 60) parts.shift()
@@ -6731,8 +6763,8 @@ ${hasCold && th ? th.readout.draw(coldX, y, d.isWorking, done, d.steps.length, c
 ${psy.svg}
 ${hasSkinChip ? `<rect x="${sx}" y="${y - 10}" width="${skinW}" height="13" rx="2" fill="none" stroke="${c.accent2}" stroke-opacity=".55"/>
 <text x="${sx + skinW / 2}" y="${y - 0.5}" text-anchor="middle" font-family="${FONT}" font-size="9.5" font-weight="700" letter-spacing=".4" fill="${c.accent2}">${xml(skin)}</text>` : ''}
-${crewW ? `<rect class="live" x="${cx}" y="${y - 10}" width="${crewW}" height="13" rx="2" fill="${c.accent}"/><text x="${cx + crewW / 2}" y="${y - 0.5}" text-anchor="middle" font-family="${FONT}" font-size="9.5" font-weight="800" letter-spacing=".4" fill="${inkOn(c.accent)}"><title>${xml(d.crewMode)}</title>${crewLabel}</text>` : ''}
-${bgW ? `<rect x="${bx}" y="${y - 10}" width="${bgW}" height="13" rx="2" fill="none" stroke="${c.accent}" stroke-opacity=".8"/><text x="${bx + bgW / 2}" y="${y - 0.5}" text-anchor="middle" font-family="${FONT}" font-size="9.5" font-weight="800" letter-spacing=".4" fill="${c.accent}"><title>${d.bg} ${xml(tr().bgBand)}</title>${bgLabel}</text>` : ''}
+${crewW() ? `<rect class="live" x="${cx()}" y="${y - 10}" width="${crewW()}" height="13" rx="2" fill="${c.accent}"/><text x="${cx() + crewW() / 2}" y="${y - 0.5}" text-anchor="middle" font-family="${FONT}" font-size="9.5" font-weight="800" letter-spacing=".4" fill="${inkOn(c.accent)}"><title>${xml(d.crewMode)}</title>${crewLabel()}</text>` : ''}
+${bgW ? `<rect x="${bx()}" y="${y - 10}" width="${bgW}" height="13" rx="2" fill="none" stroke="${c.accent}" stroke-opacity=".8"/><text x="${bx() + bgW / 2}" y="${y - 0.5}" text-anchor="middle" font-family="${FONT}" font-size="9.5" font-weight="800" letter-spacing=".4" fill="${c.accent}"><title>${d.bg} ${xml(tr().bgBand)}</title>${bgLabel}</text>` : ''}
 <text class="s" x="${mx2}" y="${y}" font-family="${FONT}" font-size="11">${xml(fitText(model, 11, Math.max(0, (hasBreach ? breachX : hasCold ? coldX : W - rightW - 14) - mx2 - 16)))}</text>
 ${!d.budget && clock && d.taskFrom
   ? // The seconds tick inside the image: the band is not drawn again for them.
@@ -6938,6 +6970,44 @@ const hasOpenPlan = (plan: PlanStep[] | undefined): boolean => Boolean(plan?.len
 // An agent that failed and was not tried again with success in the same job.
 const isUnresolved = (a: AgentRun, crew: AgentRun[]): boolean =>
   a.status === 'failed' && !crew.some(b => b !== a && b.status === 'done' && b.startedAt >= a.startedAt && norm(b.description) === norm(a.description))
+
+// Where the engine says each agent's loop stands, by id; null when the list cannot be
+// read. Live (isLiveAgent): running a turn, settling one, or waiting on work of its own.
+async function agentLoops($: EngineInterface): Promise<Map<string, string> | null> {
+  try {
+    const listed = await $.agent.list()
+    return new Map((Array.isArray(listed) ? listed : []).map(a => [a.id, String(a.status)]))
+  } catch {
+    return null
+  }
+}
+const isLoopLive = (loops: Map<string, string> | null, id: string): boolean => isLiveAgent(loops?.get(id) ?? '')
+
+// What an agent's real end does besides its row: The Boys' cheer, its staffing savings saved.
+async function agentEnded($: EngineInterface, agentId: string, at: number, isAnswer: boolean): Promise<void> {
+  if (isBoys() && isAnswer) for (const t of boysEvent('agent-done', { at, mode: boysWorn() })) tbToast($, t)
+  if (staffBaseline.delete(agentId)) await $.store.set(STAFF_SAVED_KEY, staffSaved.total).catch(() => undefined)
+}
+
+// Held agents the engine no longer keeps end now, done as of their last answer; the
+// tick asks while any is held. A list that cannot be read lets them all end, as before.
+async function settleHeld($: EngineInterface, at: number): Promise<void> {
+  const loops = await agentLoops($)
+  const ended = (await read($, agents)).filter(a => a.status === 'running' && a.heldAt && !isLoopLive(loops, a.agentId ?? a.id))
+  if (!ended.length) return
+  // Killed while it waited: stopped (neutral); failed: failed; else its answer stands.
+  const endOf = (a: AgentRun): AgentRun['status'] => {
+    const st = loops?.get(a.agentId ?? a.id)
+    return st === 'failed' ? 'failed' : st === 'killed' ? 'stopped' : 'done'
+  }
+  const ids = new Set(ended.map(a => a.id))
+  await update($, agents, list => list.map(a => (ids.has(a.id) && a.status === 'running' && a.heldAt ? { ...a, status: endOf(a), endedAt: a.heldAt, heldAt: undefined, isStuck: false, toolsInFlight: 0 } : a)))
+  for (const a of ended) if (a.agentId) await agentEnded($, a.agentId, at, endOf(a) === 'done')
+  // A background agent's report now waits on the main loop: not done until answered.
+  if (ended.some(a => a.isBackground) && (await read($, manager)).task) await update($, manager, prev => (prev.doneAt ? prev : { ...prev, reportDue: at }))
+  await update($, now, () => at)
+  await finishIfIdle($).catch(() => undefined)
+}
 
 async function finishIfIdle($: EngineInterface): Promise<void> {
   const boss = await read($, manager)
@@ -7465,6 +7535,7 @@ export const register: Register = (on, options) => {
         if (isLive || at - last >= 60_000) await update($, now, () => at)
         if (isEnvStale) await refreshEnv($)
         await keepTime($, at)
+        if (list.some(a => a.status === 'running' && a.heldAt)) await settleHeld($, at).catch(() => undefined)
         if (isBoys()) await boysTick($, at, boss.isWorking || st.isBusy || isRunning).catch(() => undefined)
         await watchStop($, at, list, boss).catch(() => undefined)
         // Free RAM is looked at only while work runs.
@@ -7980,7 +8051,7 @@ export const register: Register = (on, options) => {
       const was = resumed ? list.find(a => a.agentId === resumed || a.id === resumed) : undefined
       if (was) {
         isNew = false
-        return list.map(a => (a === was ? { ...a, status: 'running' as const, endedAt: undefined, isStuck: false, toolsInFlight: 0, lastProgressAt: at } : a))
+        return list.map(a => (a === was ? { ...a, status: 'running' as const, endedAt: undefined, heldAt: undefined, isStuck: false, toolsInFlight: 0, lastProgressAt: at } : a))
       }
       // A retry is the same task tried again in this job after an earlier try ended:
       // a workflow's parallel workers and repeats from other prompts are none.
@@ -8156,6 +8227,7 @@ export const register: Register = (on, options) => {
               effort: typeof wanted === 'string' ? wanted : a.effort,
               status: 'running',
               endedAt: undefined,
+              heldAt: undefined,
               contextTokens:
                 (usage.input_tokens || 0) +
                 (usage.cache_read_input_tokens || 0) +
@@ -8188,18 +8260,24 @@ export const register: Register = (on, options) => {
     }
     if (agentId) {
       const at = await $.clock.now()
+      // A turn's answer is not the agent's end while the engine keeps its loop: it waits on
+      // work of its own (a background shell, an agent it started) and wakes for another
+      // turn, or it is still settling this one. It runs on at its share; the tick ends it
+      // once the engine lets it go. Not listed (a workflow's agent), or no list: it ends here.
+      const isHeld = e.reason === 'answer' && isLoopLive(await agentLoops($), agentId)
       let reported = false
       await update($, agents, list =>
         list.map((a): AgentRun => {
           if (a.agentId !== agentId) return a
           // A run whose steps went unseen still gets the turn's own sum.
           const fallback = a.steps === 0 && e.usage
-          if (a.isBackground && a.status === 'running') reported = true
-          return {
+          if (!isHeld && a.isBackground && a.status === 'running') reported = true
+          const ended: AgentRun = {
             ...a,
             // Esc ends it stopped (neutral); an API error or a refusal, failed.
             status: e.reason === 'answer' ? 'done' : e.reason === 'aborted' ? 'stopped' : 'failed',
             endedAt: at,
+            heldAt: undefined,
             isStuck: false,
             toolsInFlight: 0,
             ...(fallback && e.usage
@@ -8214,10 +8292,10 @@ export const register: Register = (on, options) => {
                 }
               : {}),
           }
+          return isHeld ? { ...ended, status: 'running', endedAt: undefined, heldAt: at, lastProgressAt: at } : ended
         }),
       )
-      if (isBoys() && e.reason === 'answer') for (const t of boysEvent('agent-done', { at, mode: boysWorn() })) tbToast($, t)
-      if (staffBaseline.delete(agentId)) await $.store.set(STAFF_SAVED_KEY, staffSaved.total).catch(() => undefined)
+      if (!isHeld) await agentEnded($, agentId, at, e.reason === 'answer')
       // A background agent's report now waits on the main loop: not done until answered.
       if (reported && (await read($, manager)).task) await update($, manager, prev => (prev.doneAt ? prev : { ...prev, reportDue: at }))
       await update($, now, () => at)
