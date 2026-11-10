@@ -194,6 +194,11 @@ test('timeline: two path keys at one time are a cut 10 ms apart, never a glide f
   expect(act.css).toContain('50%{transform:translate(10px,0px)}')
   expect(act.css).toContain('50.5%{transform:translate(50px,20px)}')
 })
+test('timeline: a move whose keys end early holds its last key to the end (it never drifts back)', () => {
+  const act = new Act({ id: 'hd', ms: 4000, at: T0, W: 100, H: 50 })
+  act.mv('<rect/>', [[0, 0, 0, 1], [1, 80, -40, 0]])
+  expect(act.css).toContain('25%{transform:translate(80px,-40px);opacity:0}100%{transform:translate(80px,-40px);opacity:0}')
+})
 test('camera: wrap without the shake zooms only (a skin shakes its whole panel itself)', () => {
   const act = new Act({ id: 'cw', ms: 2000, at: T0, W: 100, H: 50 })
   const cam = new Camera(act).push(0.2, 0.4, 1.1, 50, 25, 'snap').shake(0.5, 3, 0.2)

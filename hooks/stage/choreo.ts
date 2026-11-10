@@ -42,6 +42,8 @@ export type FightLook = {
   /** Big flashes: opacity (<= .5). */
   flash?: number
   font?: string
+  /** A class for every word and bubble line in place of the font attributes (the skin's CSS sets font-family and weight). */
+  textClass?: string
 }
 type F = { name: string; x: number; y: number; face: 1 | -1; pose: string; from: number; segs: Seg[]; path: Key[]; ghosts?: [number, number]; trail: [number, number, string][]; spin: boolean }
 
@@ -65,6 +67,8 @@ export class Fight {
     return f
   }
   private log(beat: string): void { this.script.push([beat, r3(this.t)]) }
+  /** The text's font: the look's class when it has one (a few chars), else the font attributes. */
+  private fontAttrs(weight: number): string { return this.o.textClass ? `class="${this.o.textClass}"` : `font-family="${this.o.font ?? 'ui-sans-serif,system-ui,sans-serif'}" font-weight="${weight}"` }
 
   // ---------------------------------------------------------------- cast and clock
   /** A fighter standing at (x, y) in `pose` (a key cast on the act), facing `face` (1 right, -1 left), from t = 0. */
@@ -248,7 +252,7 @@ export class Fight {
   sfx(word: string, x: number, y: number, o: { size?: number; tilt?: number; d?: number; fill?: string } = {}): this {
     const size = o.size ?? 14
     const ink = this.o.ink ?? '#111111'
-    this.out += this.act.cue('pop', this.t, `<text text-anchor="middle" font-family="${this.o.font ?? 'ui-sans-serif,system-ui,sans-serif'}" font-weight="900" font-size="${r1(size)}" fill="${o.fill ?? this.o.word ?? '#FFE066'}" stroke="${ink}" stroke-width="${r1(size * 0.18)}" paint-order="stroke" transform="rotate(${o.tilt ?? -6})">${esc(word)}</text>`, { x, y, d: o.d ?? 0.55 })
+    this.out += this.act.cue('pop', this.t, `<text text-anchor="middle" ${this.fontAttrs(900)} font-size="${r1(size)}" fill="${o.fill ?? this.o.word ?? '#FFE066'}" stroke="${ink}" stroke-width="${r1(size * 0.18)}" paint-order="stroke" transform="rotate(${o.tilt ?? -6})">${esc(word)}</text>`, { x, y, d: o.d ?? 0.55 })
     return this
   }
   /** A speech bubble over a fighter from the cursor for `d` s (escaped; keep it to a few words). The stand-off's line. */
@@ -262,7 +266,7 @@ export class Fight {
     const x = r1(f.face < 0 ? f.x - w + 10 : f.x - 10)
     const tail = f.face < 0 ? `M${r1(x + w - 18)} ${y}l6 7 2-7z` : `M${r1(x + 12)} ${y}l-2 7 8-7z`
     const ink = o.ink ?? this.o.ink ?? '#111111'
-    this.out += this.act.win(this.t, this.t + d, `<rect x="${x}" y="${r1(y - 18)}" width="${w}" height="18" rx="3" fill="${o.fill ?? '#FFFFFF'}" stroke="${ink}" stroke-width="1.5"/><path d="${tail}" fill="${o.fill ?? '#FFFFFF'}" stroke="${ink}" stroke-width="1.5" stroke-linejoin="round"/><text x="${r1(x + w / 2)}" y="${r1(y - 5.5)}" text-anchor="middle" font-family="${this.o.font ?? 'ui-sans-serif,system-ui,sans-serif'}" font-weight="800" font-size="${size}" fill="${ink}">${esc(text)}</text>`)
+    this.out += this.act.win(this.t, this.t + d, `<rect x="${x}" y="${r1(y - 18)}" width="${w}" height="18" rx="3" fill="${o.fill ?? '#FFFFFF'}" stroke="${ink}" stroke-width="1.5"/><path d="${tail}" fill="${o.fill ?? '#FFFFFF'}" stroke="${ink}" stroke-width="1.5" stroke-linejoin="round"/><text x="${r1(x + w / 2)}" y="${r1(y - 5.5)}" text-anchor="middle" ${this.fontAttrs(800)} font-size="${size}" fill="${ink}">${esc(text)}</text>`)
     return this
   }
   /**
