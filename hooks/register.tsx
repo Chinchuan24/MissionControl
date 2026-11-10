@@ -37,6 +37,7 @@ import { extrasInto, glitchPanel, hackInto, overlayInto, roamOnBand, roamOverlay
 import type { ThemeCtx, ThemeEggs } from './themes'
 import { canNudge, nudge, pickQuiet, prBadge, quietOf, rememberTask, repoAndBranch, rescueText, retryOnHaiku, whatIf, whatIfText, whatIfTip } from './coach'
 import { flatSmiley, serifClip, serifW } from './mentalist-cards'
+import { CYBER_SWITCH, cyberFightBand, cyberFightEcho, maxtacClimb } from './cyber-fights'
 import { IDLE_CSS, ACT_MS, WAKE_SAMURAI_RE, bossIdle, cheerAt, cheerOf, city, cyberPlay, diveAct, gigAct, gigAt, idScan, moon, netGrid, playing, relic, sandevistanAct, stage, tower } from './cyber-motion'
 import { BADGES, BEATS_KEPT, BLANK_CRED, BOOT_H, SECRET_BADGE, award, credFor, foundOf, secretFoundFor, withFound, rockerRankOf, bdHeight, bootStrip, braindanceCard, cleanCred, credCard, credHeight, levelOf, rankOf, shiftPick, stepPick } from './extras'
 import type { Beat, Cred } from './extras'
@@ -2153,11 +2154,13 @@ const switchLookOf = (k: Skin): SwitchLook => ({ bg: k.backdrop.fill || k.colors
 /** The band takes the switch only with room for it (the band's 70 k motion budget, less the wipe's 8 k) and never over another act. */
 const SWITCH_BAND_ROOM = 60_000
 const switchLive = (at: number): { at: number; from: SwitchLook; to: SwitchLook } | undefined => (SKIN_SWAP && at >= SKIN_SWAP.at - 1000 && at < SKIN_SWAP.at + SWITCH_MS + 600 ? SKIN_SWAP : undefined)
+/** The worn skin's flavour of the switch: a theme's own, else a classic Cyberpunk skin's (cyber-fights.ts), else the generic one. */
+const switchFlavourNow = () => themeOf()?.switchFlavour ?? (cyberOf() ? CYBER_SWITCH[cyberOf() as CyberEgg] : undefined)
 /** The switch over a drawn band source (its viewBox gives the size). */
 const switchBand = (src: string, at: number): string => {
   const sw = switchLive(at)
   const box = sw && src.length <= SWITCH_BAND_ROOM && !src.includes('<!--dl-->') ? svgSizeOf(src) : undefined
-  const flavour = themeOf()?.switchFlavour
+  const flavour = switchFlavourNow()
   return sw && box ? switchInto(src, skinSwitch({ W: box.W, H: box.H, at: sw.at, surface: 'band', from: sw.from, to: sw.to, ...(flavour ? { flavour } : {}) })) : src
 }
 /** The switch over the pane's first cards (chips with a fixed width are left alone), cascading down. `room`: false while the theme keeps
@@ -2176,7 +2179,7 @@ const switchTree = <T,>(tree: T, at: number, room: boolean): T => {
       const box = svgSizeOf(n.props.source)
       if (!box) return n
       const idx = i++
-      const flavour = themeOf()?.switchFlavour
+      const flavour = switchFlavourNow()
       return { ...n, props: { ...n.props, source: switchInto(n.props.source, skinSwitch({ W: box.W, H: box.H, at: sw.at, surface: 'pane', from: sw.from, to: sw.to, i: idx, ...(flavour ? { flavour } : {}) })) } }
     }
     return Array.isArray(n.children) ? { ...n, children: n.children.map(walk) } : n
@@ -6719,6 +6722,7 @@ ${hudLines(W, d)}
 ${hudSpare(W)}
 </g>
 ${egg && !d.lite ? cyberCheer(egg, OW, OH, d) : egg && d.isParty ? celebration(OW, OH, egg, FONT, d.partyAt) : ''}
+${egg && !d.lite && !d.isParty ? cyberFightBand(egg, OW, d.at, d.isWorking, d.ctxPct) : ''}
 ${th && d.isParty ? th.cheer(OW, OH, FONT, c, d.partyAt) : ''}
 ${th?.corner ? th.corner(OW, OH, { ctxPct: d.ctxPct, overBudget: Boolean(d.budget && d.budget.usedMs > d.budget.min * 60_000) }) : ''}`,
   )
@@ -8165,6 +8169,11 @@ export const register: Register = (on, options) => {
       else if (cyberOf() && ctx >= 95 && !sirenPlayed) {
         sirenPlayed = true
         void play($, `${ADDON}/assets/maxtac.wav`)
+        // On 2077 the raid itself rolls in with the siren (at most once per 30 min; cyber-fights.ts).
+        if (cyberOf() === 'runners') {
+          const now = await $.clock.now().catch(() => Date.now())
+          if (maxtacClimb(now)) await update($, bandTick, () => now)
+        }
       }
       if (ctx < 80) psyWarned = false
       else if (egg && ctx >= 85 && !psyWarned) {
@@ -8581,7 +8590,7 @@ export const register: Register = (on, options) => {
             {egg && !drop.has('breach') ? (
               <Box key="breach" marginBottom={1}>
                 <Svg
-                  source={th ? paneCard(th.card.draw(W, boss.task, boss.isWorking, steps.filter(st => st.state === 'done').length, steps.length, SKIN.colors, FONT, cardShape, legends, steps.map(st => ({ title: st.title, state: st.state, note: st.note }))), th, 'task', clockNow, info.contextPct, (boss.celebrateUntil ?? 0) > clockNow, boss.isWorking) : breachCard(W, steps.filter(st => st.state === 'done').length, steps.length, boss.isWorking, egg, FONT, cardShape)}
+                  source={th ? paneCard(th.card.draw(W, boss.task, boss.isWorking, steps.filter(st => st.state === 'done').length, steps.length, SKIN.colors, FONT, cardShape, legends, steps.map(st => ({ title: st.title, state: st.state, note: st.note }))), th, 'task', clockNow, info.contextPct, (boss.celebrateUntil ?? 0) > clockNow, boss.isWorking) : breachCard(W, steps.filter(st => st.state === 'done').length, steps.length, boss.isWorking, egg, FONT, cardShape).replace(/<\/svg>\s*$/, `${cyberFightEcho(egg as CyberEgg, clockNow, boss.isWorking)}</svg>`)}
                   alt={th ? th.card.alt(boss.isWorking, steps.filter(st => st.state === 'done').length, steps.length) : `Breach Protocol: ${steps.filter(st => st.state === 'done').length} of ${steps.length} steps`}
                 />
               </Box>
