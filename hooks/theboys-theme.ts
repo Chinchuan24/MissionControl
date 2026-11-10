@@ -3,7 +3,7 @@
 // `solidgold`). The band is the slim band in the theme's own hand with the VNN crawl along its foot; Q-SCORE is the level card,
 // CRISIS DESK the task card with the PRESS RELEASES, FOCUS GROUP the log and THE TABLE the hierarchy.
 // The live numbers (APPROVAL, 7SPN, BREAKING, TURBO RUSH) are read from theboys-eggs.ts, which the register feeds.
-import { BAND_H, BOOTS, CSS, bustTurn, GOLD, PROPS, SCORE_W, WARNINGS, bootLine, chip, cheer, crew, ep, epW, episodeAt, figure, filmLook, foot, gauge, idle, name, pal, pip, sansW, scoreboard, syringe, vhsRoll, C, T, condW, r1 } from './theboys'
+import { BAND_H, BOOTS, CSS, bustTurn, GOLD, PROPS, SCORE_Y, WARNINGS, bootLine, chip, cheer, crew, ep, epW, episodeAt, figure, filmLook, foot, gauge, idle, name, pal, pip, sansW, scoreboard, scoreX, syringe, vhsRoll, C, T, condW, r1 } from './theboys'
 import type { Mode } from './theboys'
 import { BADGES, TITLES, credCard, credToast, deskAlt, deskCard, dialAlt, dialCard, rankOf, tableCard } from './theboys-cards'
 import type { BoysOrg } from './theboys-cards'
@@ -107,10 +107,9 @@ export const boysExtras = (m: Mode) => (o: ExtraArgs): string => {
   if (swapping && o.surface === 'band' && (m === 'brand' || m === 'book')) out.push(bustTurn(m, o.swapAt as number))
   if (o.surface === 'band') {
     if (!swapping) autoLookAtMe(o.ctxPct, o.at)
-    // The 7SPN bug sits just left of the CONTEXT readouts (or the band's right edge when they are folded away).
-    const rw = o.W < 1100 ? 62 : 100
-    const xr = o.W >= 520 ? o.W - 20 - rw * 3 - 18 - 10 : o.W - 14
-    out.push(scoreboard(xr - SCORE_W, 42, o.at, m))
+    // The 7SPN bug hangs under the top row's rule, just left of the CONTEXT readouts (or the band's right edge when they are folded
+    // away): above the task row's text, so the activity line under it stays whole.
+    out.push(scoreboard(scoreX(o.W), SCORE_Y, o.at, m))
   }
   // One thing on stage at a time (theboys-show stageAt): a typed act or an event egg, else THE AMBUSH (while a job works), else the
   // day's set piece, else a rare roamer. A scheduled piece may be drawn ahead of its start (an idle band redraws once a minute).

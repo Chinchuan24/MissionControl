@@ -5,7 +5,7 @@
 // the only "impacts" are scorch dots, a grey-pink splat and stamps. All words are ours, or a short attributed quote.
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { BandStage } from './stage/keep'
-import { BUST, C, CRAWL_Y, M, PROPS, SP, T, clip, condW, crew, esc, faceIcon, pal, pin, px, r1, sansW, spH, spW, stamp, star, tape, unit } from './theboys'
+import { BUST, C, CRAWL_Y, M, PROPS, SP, T, clip, condW, crew, esc, faceIcon, pal, pin, px, r1, sansW, scoreChip, scoreX, spH, spW, stamp, star, tape, unit } from './theboys'
 import type { Mode } from './theboys'
 import type { PaneCard } from './themes'
 import { VNN_BRAND, actMs, scoreAt } from './theboys-eggs'
@@ -866,9 +866,8 @@ const ROWS: Record<string, Row> = {
   scoreboard: {
     band: (a, g) => {
       if (scoreAt(g.at)) return ''
-      const rw = g.W < 1100 ? 62 : 100
-      const x = (g.W >= 520 ? g.W - 20 - rw * 3 - 18 - 10 : g.W - 14) - 96
-      return a.on(`<rect x="${r1(x)}" y="42" width="96" height="16" rx="2" fill="#0B1020" stroke="#C9A13B"/><rect x="${r1(x)}" y="42" width="27" height="16" rx="2" fill="${PROPS.hero}"/>${C(x + 4, 53.5, '7SPN', 8.5, '#FFFFFF', 'letter-spacing=".6"')}${C(x + 32, 53.5, 'NO GAMES YET', 8.5, '#BCC6DE', 'letter-spacing=".6"')}`, 0, 6)
+      // Where the live scoreboard hangs (theboys.ts scoreX): under the top row's rule, clear of the activity text.
+      return a.on(scoreChip(scoreX(g.W), 'NO GAMES YET'), 0, 6)
     },
     pane: ['log', (a, g) => a.on(`<rect x="44" y="46" width="92" height="18" rx="2" fill="#0B1020" stroke="#C9A13B"/><rect x="44" y="46" width="30" height="18" rx="2" fill="${PROPS.hero}"/>${C(48, 59, '7SPN', 9, '#FFFFFF', 'letter-spacing=".6"')}${C(80, 59, 'GAME DAY', 9, '#F0D27A', 'letter-spacing="1"')}`, 0, 6)],
   },

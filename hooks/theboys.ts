@@ -495,22 +495,39 @@ export const edge = (W: number, H: number, ctx: any, m: Mode) => {
   s += `<rect x="1" y="14" width="3" height="${H - 28}" rx="1.5" fill="${live}"/>`
   return s
 }
-/** The 7SPN TEST SCOREBOARD (M5): an 84 by 14 sports bug in the task row while a test runs and for 20 s after. Clean runs flash a
- *  gold SHUTOUT. OFF BOOK chalks the same numbers on a bookie's slate; SOLID GOLD a brass board. */
-export const SCORE_W = 96
-export const scoreboard = (x: number, y: number, at: number, m: Mode) => {
+/** The 7SPN TEST SCOREBOARD (M5): a sports bug hanging under the top row's rule while a test runs and for 20 s after. Clean runs
+ *  flash a gold SHUTOUT. OFF BOOK chalks the same numbers on a bookie's slate; SOLID GOLD a brass board. It hangs in the strip
+ *  between the rule (32.5) and the task row's text (its glyphs start at y 43-46; the Tasks chip, at 41, is always further left), right-aligned
+ *  to the readouts column (or the band's edge), so it never sits on the activity text or any readout at any width. */
+export const SCORE_W = 88
+export const SCORE_Y = 33
+export const SCORE_H = 10
+/** The bug's left edge on a band `W` wide: just left of the CONTEXT readouts' rule, or of the band's edge when they are folded away. */
+export const scoreX = (W: number): number => {
+  const rw = W < 1100 ? 62 : 100
+  return (W >= 520 ? W - 20 - rw * 3 - 18 - 10 : W - 14) - SCORE_W
+}
+/** The bug's frame: square top (it hangs from the rule), round bottom corners; the tag box on its left. */
+const scoreFrame = (x: number, fill: string, stroke: string, tagFill: string, tag: string): string => {
+  const y = SCORE_Y
+  const h = SCORE_H
+  const box = (w: number, f: string, st = '') => `<path d="M${r1(x)} ${y}h${w}v${h - 2}q0 2 -2 2h${-(w - 4)}q-2 0 -2 -2z" fill="${f}"${st}/>`
+  return `${box(SCORE_W, fill, stroke ? ` stroke="${stroke}" stroke-width=".8"` : '')}${box(23, tagFill)}${C(x + 3, y + 7.6, tag, 7, '#FFFFFF', 'letter-spacing=".4"')}`
+}
+export const scoreChip = (x: number, label: string): string => `${scoreFrame(x, '#0B1020', '#C9A13B', PROPS.hero as string, '7SPN')}${C(x + 27, SCORE_Y + 7.6, label, 7.4, '#BCC6DE', 'letter-spacing=".5"')}`
+export const scoreboard = (x: number, _y: number, at: number, m: Mode) => {
   const sc = scoreAt(at)
   if (!sc) return ''
   const P = pal(m)
   const bg = m === 'book' ? '#2B2E2A' : m === 'gold' ? P.olive : '#0B1020'
   const shut = !sc.running && sc.fail === 0 && sc.pass > 0
   const tag = m === 'book' ? 'SLATE' : '7SPN'
-  let s = `<g data-egg="scoreboard"><rect x="${r1(x)}" y="${y}" width="${SCORE_W}" height="16" rx="2" fill="${bg}" stroke="${m === 'brand' ? P.a : P.line}" stroke-width="1"/>`
-  s += `<rect x="${r1(x)}" y="${y}" width="27" height="16" rx="2" fill="${m === 'book' ? '#3A3F45' : PROPS.hero}"/>${C(x + 4, y + 11.5, tag, 8.5, '#FFFFFF', 'letter-spacing=".6"')}`
-  if (shut) s += `<g class="tb-shut">${C(x + 32, y + 11.5, 'SHUTOUT', 9.5, m === 'book' ? P.text : P.aT, 'letter-spacing="1.4"')}</g>${C(x + SCORE_W - 5, y + 11.5, String(sc.pass), 9.5, P.text, 'text-anchor="end"')}`
+  const y = SCORE_Y + 7.8
+  let s = `<g data-egg="scoreboard">${scoreFrame(x, bg, m === 'brand' ? P.a : P.line, m === 'book' ? '#3A3F45' : PROPS.hero as string, tag)}`
+  if (shut) s += `<g class="tb-shut">${C(x + 27, y, 'SHUTOUT', 8, m === 'book' ? P.text : P.aT, 'letter-spacing="1.1"')}</g>${C(x + SCORE_W - 4, y, String(sc.pass), 8, P.text, 'text-anchor="end"')}`
   else {
-    s += `${C(x + 32, y + 11.5, `P ${sc.pass}`, 9.5, P.done)}${C(x + 58, y + 11.5, `F ${sc.fail}`, 9.5, sc.fail ? P.alert : P.muted)}`
-    s += sc.running ? `<circle class="tb-score" cx="${r1(x + SCORE_W - 7)}" cy="${y + 8}" r="2.4" fill="${PROPS.hero}"/>` : C(x + SCORE_W - 5, y + 11.5, 'FT', 8, P.muted, 'text-anchor="end" letter-spacing=".4"')
+    s += `${C(x + 27, y, `P ${sc.pass}`, 8, P.done)}${C(x + 53, y, `F ${sc.fail}`, 8, sc.fail ? P.alert : P.muted)}`
+    s += sc.running ? `<circle class="tb-score" cx="${r1(x + SCORE_W - 6)}" cy="${SCORE_Y + 5}" r="2.2" fill="${PROPS.hero}"/>` : C(x + SCORE_W - 4, y, 'FT', 7, P.muted, 'text-anchor="end" letter-spacing=".4"')
   }
   return `${s}<title>${esc(`7SPN: ${sc.pass} passed, ${sc.fail} failed${sc.running ? ', live' : ''}`)}</title></g>`
 }
