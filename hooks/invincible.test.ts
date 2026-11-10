@@ -10,7 +10,7 @@ import type { CamPlan } from './invincible-cameos'
 import { AHEAD_MS, CLASSIC_RE, CQ_DUEL_MS, DUEL_MS, GUARDIANS_RE, TURN, swap, versionOf, NEW_SUIT_RE, SHOWDOWN_MS, SWAP_MS, THINK_RE, VARIANTS_MS, VARIANTS_RE, VARIANTS_SOLO_RE, duelPlan, fightDirector, fightDue, fightOf, isVariantsAsk, opOnly, showdown, showdownDue, showdownPlan, slotPlan, variantsDue, variantsPlan } from './invincible-eggs'
 import { VARIANTS_CSS, variants } from './invincible-variants'
 import * as VS from './invincible-variants-sprites'
-import { CSS, DONE_TURN, EPISODES, ERA1, ERA2, PROPS, SP, cheer, TITLE_WORDS, condW, contrast, episodeAt, lum, monoW, sansW, unit as unitOf } from './invincible'
+import { CSS, DONE_TURN, VICTORY, EPISODES, ERA1, ERA2, PROPS, SP, cheer, TITLE_WORDS, condW, contrast, episodeAt, lum, monoW, sansW, unit as unitOf } from './invincible'
 import { THEMES } from './themes'
 import * as MOTION from './invincible-motion-sprites'
 import { audit, doc } from './stage/budget'
@@ -1680,13 +1680,26 @@ test('conquest: the pane acts fill their card: a push-in on a tall card, centred
   // A small card keeps the old framing (no push-in): the mock sizes of phase B.
   expect(cqFrame(480, 236).k).toBe(1)
 })
+test('victory poses: the new suit\'s done cheer lands the fist, the goggle wipe, arms out (the still); the classic suit and the pane have none', () => {
+  const ch = cheer(1250, 134, 2, { delay: 'calc(@@T5000@@ + 0s)' })
+  expect(ch).toContain('data-egg="victory"')
+  expect([...ch.matchAll(/animation-name:invv(\w+)/g)].map(m => m[1])).toEqual(VICTORY.map(v => v[0]))
+  expect(ch).toMatch(/<g class="inv-vic" style="animation-name:invvarms">/)
+  expect((ch.match(/class="inv-vic" style="animation-name:invv(fist|wipe)" opacity="0"/g) ?? []).length).toBe(2)
+  expect(ch).toMatch(/@media \(prefers-reduced-motion: reduce\)\{\.inv-vic\{animation:none!important\}\}/)
+  const a = audit(doc(1250, 134, ch))
+  expect([a.dupes, a.dupeIds, a.badText]).toEqual([[], [], []])
+  expect(ch.slice(ch.indexOf('<g data-egg="victory"')).length).toBeLessThan(7_000)
+  expect(cheer(1250, 134, 1)).not.toContain('data-egg="victory"')
+  expect(cheer(480, 300, 2)).not.toContain('data-egg="victory"')
+})
 // --- the head turns (phase B): the suit swap and the done cheer -------------------------------------------------------------
 test('head turn: the suit swap turns the bust away in one suit and round in the other (9 views, stepped), none under reduced motion', () => {
   for (const to of [1, 2] as const) {
     const sw = swap(900, 134, 'band', to, { delay: '0s' })
     const from = to === 2 ? 1 : 2
     // The old suit's views come first (a0..a4), then the new suit's back and mirrored views (b4, b3..b1 flipped).
-    const uses = [...sw.matchAll(/<use href="#(\w+)"[^>]*transform="([^"]+)"/g)].map(m => [m[1] as string, m[2] as string])
+    const uses = [...sw.matchAll(/<use href="#(\w+)"[^>]*transform="([^"]+)"/g)].map(m => [m[1] as string, m[2] as string] as [string, string])
     const views = uses.filter(([id]) => /v[ab]\d$/.test(id))
     expect(views.map(([id]) => id.slice(-2))).toEqual(['a0', 'a1', 'a2', 'a3', 'a4', 'b4', 'b3', 'b2', 'b1'])
     expect(views.slice(6).every(([, tr]) => tr.includes('scale(-1 1)'))).toBe(true)
@@ -1715,7 +1728,7 @@ test('head turn: the done cheer: the band bust glances round (front, 3/4, side, 
     const a = audit(doc(1250, 134, ch))
     expect(a.dupes).toEqual([])
     expect(a.dupeIds).toEqual([])
-    expect(ch.length).toBeLessThan(12_000)
+    expect(ch.length).toBeLessThan(era === 2 ? 18_000 : 12_000) // the new suit adds its victory poses (~4 k)
     expect(cheer(480, 400, era)).not.toContain('inv-dt')
   }
 })

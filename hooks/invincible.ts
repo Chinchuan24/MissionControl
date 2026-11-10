@@ -4,6 +4,7 @@
 // never gory. Pure SVG strings and tables, no state. The cards are in invincible-cards.ts, the big eggs (the fight, the
 // showdown, the era swap) in invincible-eggs.ts and invincible-fight.ts.
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import type { Sprite } from './cast'
 import * as SP from './invincible-sprites'
 import * as MS from './invincible-motion-sprites'
 import { FrameBank } from './stage/frames'
@@ -369,7 +370,28 @@ export const cheer = (W: any, H: any, era: any, o: any = {}) => {
   const cy = H / 2 + 6
   const sub = 'JOB DONE · INVINCIBLE'
   const crack = `<path class="inv-crack" d="M${r1(cx - 70)} ${r1(cy - 40)}l12 10 -6 8 14 9 -5 11 10 6" fill="none" stroke="${P.text}" stroke-width="1.2" opacity=".7"/><path class="inv-crack" d="M${r1(cx + 64)} ${r1(cy + 36)}l-10 -9 7 -7 -12 -10 4 -9 -8 -5" fill="none" stroke="${P.text}" stroke-width="1.2" opacity=".7"/>`
-  return `<g class="inv-cheer" pointer-events="none"${o.delay ? ` style="--cd:${o.delay}"` : ''}><rect x="0" y="0" width="${W}" height="${H}" fill="${P.tile}" opacity=".78"/><rect class="inv-flashf" x="0" y="0" width="${W}" height="${H}" fill="${PROPS.flash}"/><g class="inv-cshake">${crack}<g class="inv-slam">${sfx(cx, cy + size * 0.32, 'INVINCIBLE', size, P.hero, { anchor: 'middle', skew: -12, ls: 1.5 })}</g><g class="inv-sub">${C(cx, cy + size * 0.32 + 16, sub, 9.5, P.text, 'text-anchor="middle" letter-spacing="2"')}</g></g>${H < 200 ? doneTurn(era === 2 ? 2 : 1, P.tile) : ''}</g>`
+  return `<g class="inv-cheer" pointer-events="none"${o.delay ? ` style="--cd:${o.delay}"` : ''}><rect x="0" y="0" width="${W}" height="${H}" fill="${P.tile}" opacity=".78"/><rect class="inv-flashf" x="0" y="0" width="${W}" height="${H}" fill="${PROPS.flash}"/><g class="inv-cshake">${crack}<g class="inv-slam">${sfx(cx, cy + size * 0.32, 'INVINCIBLE', size, P.hero, { anchor: 'middle', skew: -12, ls: 1.5 })}</g><g class="inv-sub">${C(cx, cy + size * 0.32 + 16, sub, 9.5, P.text, 'text-anchor="middle" letter-spacing="2"')}</g></g>${H < 200 ? doneTurn(era === 2 ? 2 : 1, P.tile) : ''}${H < 200 && era === 2 ? victory(Math.round(cx - size * 3.6), H - 14) : ''}</g>`
+}
+/**
+ * The new suit's VICTORY POSES on the band's done cheer (art set 040): the fist punched up, the goggle wipe, arms out, beside the
+ * title, in stepped windows on the cheer's clock (2.6 s). Arms out is the reduced-motion still. `VICTORY` is the order.
+ */
+export const VICTORY = [['fist', 0.3, 1.1], ['wipe', 1.1, 1.8], ['arms', 1.8, 2.6]] as const
+const VIC: Record<string, Sprite> = { fist: MS.FX3_M16_VICTORY_FIST, wipe: MS.FX3_M17_VICTORY_WIPE, arms: MS.FX3_M18_VICTORY_ARMS }
+const VIC_AX: Record<string, number> = { fist: 4 / 15, wipe: 4 / 16, arms: 4 / 12 }
+const victory = (x: number, gy: number): string => {
+  const bank = new FrameBank('invv', 7)
+  let css = '.inv-vic{animation-duration:2.6s;animation-timing-function:steps(1);animation-fill-mode:both;animation-delay:var(--cd,0s)}@media (prefers-reduced-motion: reduce){.inv-vic{animation:none!important}}'
+  let g = ''
+  for (const [k, a, b] of VICTORY) {
+    bank.add(k, VIC[k] as Sprite, VIC_AX[k])
+    const pa = Math.round((a / 2.6) * 1000) / 10
+    const pb = Math.round((b / 2.6) * 1000) / 10
+    css += `@keyframes invv${k}{0%{opacity:0}${pa}%,${Math.max(pa, pb - 0.1)}%{opacity:1}${pb}%,100%{opacity:${k === 'arms' ? 1 : 0}}}`
+    const h = (VIC[k] as Sprite).rows.length * 1.3
+    g += `<g class="inv-vic" style="animation-name:invv${k}"${k === 'arms' ? '' : ' opacity="0"'}>${bank.use(k, x, gy - h / 2, 1, 1.3)}</g>`
+  }
+  return `<g data-egg="victory"><style>${css}</style><defs>${bank.defs()}</defs><ellipse cx="${x}" cy="${gy}" rx="14" ry="2.5" fill="#000" opacity=".3"/>${g}</g>`
 }
 /**
  * The done cheer's small HEAD TURN (3D, Chin's 8-view turn): the band's bust stands over the veil and glances round, front ->
