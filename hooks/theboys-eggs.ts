@@ -80,9 +80,24 @@ export const approvalAt = (at: number): number => {
 export const lastApproval = (): number => S.approval
 export const bumpApproval = (delta: number, at: number): number => {
   const b = S.boost && at >= S.boost.at - 1000 && at < S.boost.until ? S.boost.delta : 0
+  const was = approvalAt(at)
   S.approval = Math.max(0, Math.min(100, approvalAt(at) - b - modAt(at) + delta))
   S.approvalSince = at
+  // A real dip (a red run, -3 or more; not a single tool error's -2): the band bust's smile twitches (theboys.ts figure).
+  if (approvalAt(at) <= was - 3) S.lastAct['dip'] = at
   return S.approval
+}
+/** The band bust's face moments (theboys.ts figure): when a tool call last failed (`err`), a test run last failed (`red`), the
+ *  approval last dipped 4+ (`dip`), a failing run last turned green (`green`). Each shows for `FACE_MS` from its time. */
+export const FACE_MS = 3_000
+export const faceAt = (at: number): { err?: number; red?: number; dip?: number; green?: number } => {
+  const near = (t: number | undefined): number | undefined => (t !== undefined && t > 0 && at >= t - 500 && at < t + FACE_MS ? t : undefined)
+  const errs = S.failedAt.filter(t => t > 0 && t <= at + 500)
+  const err = near(errs.length ? Math.max(...errs) : undefined)
+  const red = near(S.spinAt)
+  const dip = near(S.lastAct['dip'])
+  const green = near(S.fixedAt)
+  return { ...(err !== undefined ? { err } : {}), ...(red !== undefined ? { red } : {}), ...(dip !== undefined ? { dip } : {}), ...(green !== undefined ? { green } : {}) }
 }
 /** The test pass rate of a run, 0..1 (undefined with no counts). */
 export const passRate = (pass: number, fail: number): number | undefined => (pass + fail > 0 ? pass / (pass + fail) : undefined)
@@ -232,6 +247,19 @@ const core = (ev: BoysEvent, a: BoysEventArgs): BoysAct[] => {
   }
 }
 
+/**
+ * F2 OFF THE BOOKS' own trigger (theboys.md section 4): in OFF BOOK, a job of 10+ minutes that ends GREEN after a red test run in
+ * it brings Butcher and Homelander on instead of the cheer, once a day (local). `comebackDue` only asks; `markComeback` spends the
+ * day's one.
+ */
+export const COMEBACK_MS = 10 * 60_000
+export const comebackDue = (at: number, mode: BoysMode, jobMs: number): boolean => {
+  if (mode !== 'book' || jobMs < COMEBACK_MS) return false
+  if (!(S.fixedAt > 0 && S.fixedAt >= at - jobMs && S.fixedAt <= at && S.testFails === 0)) return false
+  const last = S.lastAct['comeback'] ?? 0
+  return !(last > 0 && new Date(last).toDateString() === new Date(at).toDateString())
+}
+export const markComeback = (at: number): void => { S.lastAct['comeback'] = at }
 /** A tool call that worked ends the run of errors. Returns how many failed in a row (after a tool-error: 3 = E18). */
 export const toolOk = (): void => { S.errRun = 0 }
 /** The failed test runs in a row, and when a failing run last turned green. */

@@ -11,7 +11,7 @@ import { bbRightLine } from './breakingbad-cards'
 import { THEMES, themeKeyOf } from './themes'
 import { SWITCH_CARDS, SWITCH_MS, into as switchInto, sizeOf as svgSizeOf, skinSwitch } from './stage/wipe'
 import { playsFrom, playsOf, registerPlay, runPlay } from './stage/replay'
-import type { SwitchLook } from './stage/wipe'
+import type { SwitchFlavour, SwitchLook } from './stage/wipe'
 import { ramStatus, settingsTagline, settingsTones } from './settingslook'
 import type { SettingsSection } from './settingslook'
 import { GROUP_TAGLINE, GROUP_TITLE, SKIN_GROUPS, groupOf, skinTagline, skinsSummary } from './skinslook'
@@ -29,7 +29,7 @@ import { BOOK as TB_BOOK, BRAND as TB_BRAND, GOLD as TB_GOLD, NOIR as TB_NOIR } 
 import type { Mode as BoysMode } from './theboys'
 import { GREETINGS as TB_GREETINGS, noteTurn as tbNoteTurn } from './theboys-theme'
 import { COST_STEPS as TB_COST_STEPS, CURTAIN_RE as TB_CURTAIN_RE, CURTAIN_UP_RE as TB_CURTAIN_UP_RE, IDLE_NAP_MS as TB_IDLE_MS, idleFor as tbIdleFor, isCompaction as tbIsCompaction, isNight as tbIsNight, localDay as tbDay, noteBusy as tbNoteBusy, quiet as tbQuiet, resetEvents as tbResetEvents, resetShow as tbResetShow, toolEnd as tbToolEnd, toolStart as tbToolStart } from './theboys-show'
-import { REPLAYS as TB_REPLAYS, SPIN_BOOK, SPIN_BRAND, SPIN_GOLD, SPIN_NOIR, TOOLS_BRAND as TB_TOOLS, TOOLS_GOLD as TB_TOOLS_GOLD, boysEvent, errRun as tbErrRun, inFlight as tbInFlight, toolOk as tbToolOk, fireTyped as tbFire, parseCounts, prToast, resetBoys, scoreEnd, scoreStop as tbScoreStop, boysState, setBoysFx, setInFlight, toastOk as tbToastOk, typed as tbTyped } from './theboys-eggs'
+import { REPLAYS as TB_REPLAYS, comebackDue as tbComebackDue, markComeback as tbMarkComeback, SPIN_BOOK, SPIN_BRAND, SPIN_GOLD, SPIN_NOIR, TOOLS_BRAND as TB_TOOLS, TOOLS_GOLD as TB_TOOLS_GOLD, boysEvent, errRun as tbErrRun, inFlight as tbInFlight, toolOk as tbToolOk, fireTyped as tbFire, parseCounts, prToast, resetBoys, scoreEnd, scoreStop as tbScoreStop, boysState, setBoysFx, setInFlight, toastOk as tbToastOk, typed as tbTyped } from './theboys-eggs'
 import { VERBS as INV_VERBS } from './invincible-cards'
 import { BYE_CAPRI_RE, CAPRICORN_RE, CAPRI_WORD_RE, ER2_FONT, ER2_TOOLS, ER2_WORDS } from './edgerunners2'
 import { CAPRI_MODE, ER2_MODE_DEFAULT } from './edgerunners2-duet'
@@ -48,6 +48,7 @@ import { LIVE_N, glide, isNewReading, isSame, liveText, liveWidth, pin, sentLeng
 import { COLOR_RE, FONT_BAD_RE, ID_RE, TOOL_KEY_RE, contrast, skinCheck, skinNew } from './skinkit'
 import { WARM_PROMPT, WARM_TAG, isWarmDue, isWarmed, warmCall, warmLimitHit } from './warm'
 import type { BandStage } from './stage/keep'
+import { switchFlavour } from './switch-flavours'
 import { BLANK_PICK, BLANK_SPEND, SPEND_KINDS, TODAY_PERIOD, exportSpend, isRescanDue, loadSpend, logSpendDay, monthLabel, monthOf, cleanDays, combineDays, monthsWithData, parseSpendArgs, pickSpendKind, pickSpendMonth, readSpend, setSpendPeriod, shiftMonth, spendCard, typeSpendDay } from './spend'
 import type { SpendDirs, SpendIo, SpendKind, SpendRecord } from './spend'
 import { minMove, noteSample, planProgress as stepProgress, stopSignal, stopText } from './stopsignal'
@@ -2164,16 +2165,18 @@ let BB_REVEAL_AT = 0
 // band and the top pane cards play a short wipe from the old skin's ground to the new one (well under a second; a 2 px rule under
 // reduced motion). Typed unlocks with a transition of their own (CAPRI, SOLID GOLD, NOIR, the Heisenberg reveal, the era swap) never
 // set it.
-let SKIN_SWAP: { at: number; from: SwitchLook; to: SwitchLook } | undefined
+let SKIN_SWAP: { at: number; from: SwitchLook; to: SwitchLook; id?: string } | undefined
 const switchLookOf = (k: Skin): SwitchLook => ({ bg: k.backdrop.fill || k.colors.tile, accent: k.colors.accent, ink: k.colors.text })
 /** The band takes the switch only with room for it (the band's 70 k motion budget, less the wipe's 8 k) and never over another act. */
 const SWITCH_BAND_ROOM = 60_000
-const switchLive = (at: number): { at: number; from: SwitchLook; to: SwitchLook } | undefined => (SKIN_SWAP && at >= SKIN_SWAP.at - 1000 && at < SKIN_SWAP.at + SWITCH_MS + 600 ? SKIN_SWAP : undefined)
+const switchLive = (at: number): { at: number; from: SwitchLook; to: SwitchLook; id?: string } | undefined => (SKIN_SWAP && at >= SKIN_SWAP.at - 1000 && at < SKIN_SWAP.at + SWITCH_MS + 600 ? SKIN_SWAP : undefined)
+/** A skin's own flavour of the switch (switch-flavours.ts: Invincible, The Boys, SOLID GOLD, NOIR), as skinSwitch's option. */
+const flavourOf = (id: string | undefined): { flavour?: SwitchFlavour } => { const f = id ? switchFlavour(id) : undefined; return f ? { flavour: f } : {} }
 /** The switch over a drawn band source (its viewBox gives the size). */
 const switchBand = (src: string, at: number): string => {
   const sw = switchLive(at)
   const box = sw && src.length <= SWITCH_BAND_ROOM && !src.includes('<!--dl-->') ? svgSizeOf(src) : undefined
-  return sw && box ? switchInto(src, skinSwitch({ W: box.W, H: box.H, at: sw.at, surface: 'band', from: sw.from, to: sw.to })) : src
+  return sw && box ? switchInto(src, skinSwitch({ W: box.W, H: box.H, at: sw.at, surface: 'band', from: sw.from, to: sw.to, ...flavourOf(sw.id) })) : src
 }
 /** The switch over the pane's first cards (chips with a fixed width are left alone), cascading down. `room`: false while the theme keeps
  *  a fight's reserve (a job works), so the reserve stays free. */
@@ -2191,7 +2194,7 @@ const switchTree = <T,>(tree: T, at: number, room: boolean): T => {
       const box = svgSizeOf(n.props.source)
       if (!box) return n
       const idx = i++
-      return { ...n, props: { ...n.props, source: switchInto(n.props.source, skinSwitch({ W: box.W, H: box.H, at: sw.at, surface: 'pane', from: sw.from, to: sw.to, i: idx })) } }
+      return { ...n, props: { ...n.props, source: switchInto(n.props.source, skinSwitch({ W: box.W, H: box.H, at: sw.at, surface: 'pane', from: sw.from, to: sw.to, i: idx, ...flavourOf(sw.id) })) } }
     }
     return Array.isArray(n.children) ? { ...n, children: n.children.map(walk) } : n
   }
@@ -2201,7 +2204,7 @@ const switchTree = <T,>(tree: T, at: number, room: boolean): T => {
 async function noteSwitch($: EngineInterface, from: Skin): Promise<void> {
   if (from.id === SKIN.id && from.cast === SKIN.cast) return
   const at = await $.clock.now().catch(() => Date.now())
-  SKIN_SWAP = { at, from: switchLookOf(from), to: switchLookOf(SKIN) }
+  SKIN_SWAP = { at, from: switchLookOf(from), to: switchLookOf(SKIN), id: SKIN.id }
   await update($, bandTick, () => at)
   await update($, paneTick, () => at)
 }
@@ -6955,6 +6958,8 @@ async function finishIfIdle($: EngineInterface): Promise<void> {
   const isAsking = !outcome && hasOpenPlan(boss.plan)
   const isQuietEnd = Boolean(outcome) || isAsking || Boolean(boss.isFollowUp)
   const isWorthACheer = !isQuietEnd && (crew.length > 0 || at - job.startedAt > 20_000)
+  // The Boys, OFF BOOK: a long job ending green after a red run gets F2 OFF THE BOOKS instead of the cheer, once a day.
+  const comeback = isWorthACheer && isBoys() && tbComebackDue(at, boysWorn(), at - job.startedAt)
   // Claimed in one atomic step: two agents finishing together run this twice, and
   // only the first may cheer and pay out.
   let isMine = false
@@ -6962,9 +6967,13 @@ async function finishIfIdle($: EngineInterface): Promise<void> {
     isMine = false
     if (prev.doneAt || prev.isWorking || prev.task !== boss.task) return prev
     isMine = true
-    return { ...prev, doneAt: at, activity: '', reportDue: undefined, ...(isQuietEnd ? { outcome } : isWorthACheer ? { celebrateUntil: at + CELEBRATE_MS } : { settled: true }) }
+    return { ...prev, doneAt: at, activity: '', reportDue: undefined, ...(isQuietEnd ? { outcome } : isWorthACheer && !comeback ? { celebrateUntil: at + CELEBRATE_MS } : { settled: true }) }
   })
   if (!isMine) return
+  if (comeback) {
+    tbMarkComeback(at)
+    setBoysFx('offthebooks', at + 300)
+  }
   // A follow-up Claude started after the job was done ends as quietly as it began.
   if (isBoys() && outcome === 'stopped') for (const t of boysEvent('cancel', { at, mode: boysWorn() })) tbToast($, t)
   if (boss.isFollowUp || outcome === 'stopped') return

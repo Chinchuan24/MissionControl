@@ -7,8 +7,9 @@
 import * as SP from './theboys-sprites'
 import { COND, FONT, MONO, clamp, clip, clipC, condW, contrast, esc, hash, monoW, px, r1, sansW, spH, spW, unit } from './invincible'
 import { pin } from './smooth'
-import { approvalAt, breakingAt, scoreAt, turboAt, vnnLine } from './theboys-eggs'
+import { approvalAt, breakingAt, faceAt, scoreAt, turboAt, vnnLine } from './theboys-eggs'
 import { TB_PROP_SHIELD_TURN } from './theboys-motion-sprites'
+import * as MS from './theboys-motion-sprites'
 import { FrameBank } from './stage/frames'
 import { turntable } from './stage/turntable'
 
@@ -113,11 +114,13 @@ export const CSS = `
 .tb-streak{animation:tb-streak .7s linear infinite}@keyframes tb-streak{to{transform:translateX(-24px)}}
 .tb-br{animation:tb-br 4.2s steps(1) infinite}@keyframes tb-br{0%,48%{transform:none}50%,98%{transform:translateY(-.9px)}}
 .tb-lid{opacity:0;animation:tb-lid 7.4s steps(1) infinite}@keyframes tb-lid{0%,95.9%{opacity:0}96%,97.9%{opacity:1}98%,100%{opacity:0}}
+.tb-face{animation:tb-face 3s steps(1) both}@keyframes tb-face{0%,99.9%{opacity:1}100%{opacity:0}}
+.tb-twitch{animation:tb-tw 3s steps(1) both}@keyframes tb-tw{0%,9.9%{opacity:1}10%,19.9%{opacity:0}20%,34.9%{opacity:1}35%,100%{opacity:0}}
 .tb-chase{animation:tb-chase .9s steps(3) infinite}@keyframes tb-chase{to{transform:translateX(18px)}}
 .tb-grain{animation:tb-grain 1.2s steps(1) infinite}@keyframes tb-grain{0%{transform:none}25%{transform:translate(-13px,-7px)}50%{transform:translate(-5px,-15px)}75%{transform:translate(-17px,-3px)}}
 .tb-cheer,.tb-flash,.tb-slam,.tb-fall,.tb-pop{animation-delay:var(--cd,0s)}
 @media (prefers-reduced-motion: reduce){
- .tb-pulse,.tb-run,.tb-glide,.tb-flick,.tb-puff,.tb-glint,.tb-slosh,.tb-crawl,.tb-break,.tb-bslide,.tb-blink,.tb-cheer,.tb-flash,.tb-slam,.tb-fall,.tb-pop,.tb-score,.tb-shut,.tb-swap,.tb-tear,.tb-static,.tb-wipe,.tb-streak,.tb-br,.tb-lid,.tb-chase,.tb-grain{animation:none}
+ .tb-pulse,.tb-run,.tb-glide,.tb-flick,.tb-puff,.tb-glint,.tb-slosh,.tb-crawl,.tb-break,.tb-bslide,.tb-blink,.tb-cheer,.tb-flash,.tb-slam,.tb-fall,.tb-pop,.tb-score,.tb-shut,.tb-swap,.tb-tear,.tb-static,.tb-wipe,.tb-streak,.tb-br,.tb-lid,.tb-chase,.tb-grain,.tb-face,.tb-twitch,.tb-bt{animation:none}
  .tb-flash,.tb-fall,.tb-static{opacity:0}.tb-slam{transform:rotate(-8deg)}.tb-crawl{transform:none}.tb-wipe{display:none}
 }`
 
@@ -353,15 +356,59 @@ export const LIDS: Record<Mode, { eyes: [number, number][]; y0: number; y1: numb
 }
 /** The bust in the figure slot, alive: a 1 px breath every 4.2 s and a blink every 7.4 s (two stepped loops, still under reduced
  *  motion). ON BRAND's eyes glow red when the approval drops under 30 (the disgusted frame). */
+/** The living bust (art set 026 / 042): hand-drawn patches over the shipped busts at 0,0 ('.' keeps the bust). ON BRAND: his blink,
+ *  the red eyes (errors), the smile twitch (the approval dips). OFF BOOK: Butcher's blink, the scowl (errors), the smirk (a red run
+ *  turned green). SOLID GOLD and NOIR keep the code lids. `figure` picks the moment (`faceAt`). */
+export const PATCH: Partial<Record<Mode, { blink: any; err: any; dip?: any; green?: any }>> = {
+  brand: { blink: MS.TB_HOMELANDER_BUST_BLINK, err: MS.TB_HOMELANDER_BUST_REDEYES, dip: MS.TB_HOMELANDER_BUST_SMILE },
+  book: { blink: MS.TB_BUTCHER_BUST_BLINK, err: MS.TB_BUTCHER_BUST_SCOWL, green: MS.TB_BUTCHER_BUST_SMIRK },
+}
+/** The bust in the figure slot, alive: a 1 px breath every 4.2 s and a blink every 7.4 s (two stepped loops, still under reduced
+ *  motion), and its face moments (`faceAt`), each pinned to its moment and gone 3 s later by itself. ON BRAND's eyes also glow red
+ *  when the approval drops under 30 (the disgusted frame). */
 export const figure = (m: Mode, at: number) => {
   const sp = BUST[m]
   const s = 0.86
   const x = 37 - (spW(sp) * s) / 2
   const L = LIDS[m]
-  const lids = L.eyes.map(([a, b]) => `<rect x="${r1(x + a * s)}" y="${r1(39 + L.y0 * s)}" width="${r1((b - a + 1) * s)}" height="${r1((L.y1 - L.y0 + 1) * s)}" fill="${L.lid}"/><rect x="${r1(x + a * s)}" y="${r1(39 + (L.y1 + 0.55) * s)}" width="${r1((b - a + 1) * s)}" height="${r1(0.45 * s)}" fill="${L.lash}"/>`).join('')
+  const P = PATCH[m]
+  const lids = P ? px(P.blink, x, 39, s) : L.eyes.map(([a, b]) => `<rect x="${r1(x + a * s)}" y="${r1(39 + L.y0 * s)}" width="${r1((b - a + 1) * s)}" height="${r1((L.y1 - L.y0 + 1) * s)}" fill="${L.lid}"/><rect x="${r1(x + a * s)}" y="${r1(39 + (L.y1 + 0.55) * s)}" width="${r1((b - a + 1) * s)}" height="${r1(0.45 * s)}" fill="${L.lash}"/>`).join('')
   let out = `${px(sp, x, 39, s)}<g class="tb-lid" data-egg="blink">${lids}</g>`
-  if (m === 'brand' && approvalAt(at) < 30) out += `<g class="tb-glint"><rect x="${r1(x + 21 * s)}" y="${r1(39 + 9 * s)}" width="${r1(2 * s)}" height="${r1(s)}" fill="#FF2A2A"/><rect x="${r1(x + 26 * s)}" y="${r1(39 + 9 * s)}" width="${r1(2 * s)}" height="${r1(s)}" fill="#FF2A2A"/></g>`
+  const f = P ? faceAt(at) : {}
+  const moment = (cls: string, egg: string, t: number, patch: any): string => `<g class="${cls}" data-egg="${egg}" style="animation-delay:calc(${pin(t)} + 0s)">${px(patch, x, 39, s)}</g>`
+  // ON BRAND: red eyes on a failed tool call, the smile twitch when the approval dips (a red run). OFF BOOK: the scowl on either.
+  const bad = m === 'book' ? (f.err !== undefined && f.red !== undefined ? Math.max(f.err, f.red) : f.err ?? f.red) : f.err
+  if (P && bad !== undefined) out += moment('tb-face', m === 'book' ? 'scowl' : 'redeyes', bad, P.err)
+  else if (P?.dip && f.dip !== undefined) out += moment('tb-twitch', 'smile', f.dip, P.dip)
+  else if (P?.green && f.green !== undefined) out += moment('tb-face', 'smirk', f.green, P.green)
+  else if (m === 'brand' && approvalAt(at) < 30) out += `<g class="tb-glint"><rect x="${r1(x + 21 * s)}" y="${r1(39 + 9 * s)}" width="${r1(2 * s)}" height="${r1(s)}" fill="#FF2A2A"/><rect x="${r1(x + 26 * s)}" y="${r1(39 + 9 * s)}" width="${r1(2 * s)}" height="${r1(s)}" fill="#FF2A2A"/></g>`
   return `<g class="tb-br" data-egg="breath">${out}</g>`
+}
+/**
+ * The mode swap's 3D HEAD TURN on the band bust (art sets 011 and 020, the 8-view turns): ON BRAND to OFF BOOK, the caped leader
+ * turns away (front, side, back) and the long-coat man comes round (back, side) onto the real bust; the other way back. Five
+ * views, 0.18 s each, stepped, pinned to the swap; the slot is covered while it turns. Under reduced motion none of it shows (the
+ * new bust stays). `BUST_TURN` is the order.
+ */
+export const BUST_TURN = ['a0', 'a2', 'a4', 'b4', 'b6'] as const
+const TURN_VIEWS: Record<'brand' | 'book', any[]> = { brand: MS.TB_HOMELANDER_TURN, book: MS.TB_BUTCHER_TURN }
+export const bustTurn = (to: 'brand' | 'book', since: number): string => {
+  const from = to === 'book' ? 'brand' : 'book'
+  const bank = new FrameBank(`tbt${to[1]}`, 5)
+  for (const k of BUST_TURN) bank.add(k, TURN_VIEWS[k[0] === 'a' ? from : to][Number(k[1])])
+  const T = 1.1
+  const step = 0.18
+  const pc = (t: number): number => Math.round((t / T) * 1000) / 10
+  const d = `animation-delay:calc(${pin(since)} + .1s)`
+  let css = `.tb-bt{animation-duration:${T}s;animation-timing-function:steps(1);animation-fill-mode:both}@media (prefers-reduced-motion: reduce){.tb-bt{animation:none!important}}@keyframes tbtc{0%,${pc(BUST_TURN.length * step) - 0.1}%{opacity:1}${pc(BUST_TURN.length * step)}%,100%{opacity:0}}`
+  let views = ''
+  BUST_TURN.forEach((k, i) => {
+    const a = pc(i * step)
+    const b = pc((i + 1) * step)
+    css += `@keyframes tbt${i}{0%{opacity:0}${a}%,${b - 0.1}%{opacity:1}${b}%,100%{opacity:0}}`
+    views += `<g class="tb-bt" opacity="0" style="animation-name:tbt${i};${d}">${bank.use(k, 37, 56.2, 1, 0.86)}</g>`
+  })
+  return `<g pointer-events="none" data-egg="bustturn"><style>${css}</style><defs>${bank.defs()}</defs><rect class="tb-bt" opacity="0" style="animation-name:tbtc;${d}" x="15" y="35" width="44" height="42" fill="${pal(to).tile}"/>${views}</g>`
 }
 /** The idle slot (12 by 16): a VoughtSonic cup (ON BRAND), a chipped mug (OFF BOOK), a gold record (SOLID GOLD). */
 export const idle = (x: number, y: number, m: Mode) => {
@@ -485,7 +532,29 @@ export const cheer = (W: number, H: number, m: Mode, o: { delay?: string } = {})
   const ink = m === 'book' ? PROPS.marker : m === 'gold' ? P.a : P.aT
   s += `<g class="tb-slam">${m === 'book' ? tape(cx, cy - 6, condW(word, 30, 2) + 40, 40, 0, 0.92) : ''}${stamp(cx, cy - 6, word, ink, 26, 0)}</g>`
   s += T(cx, cy + 30, line, 12, 700, P.text, 'text-anchor="middle"')
+  if (m === 'brand' && H < 200) s += victory(cx - Math.max(150, condW(word, 26, 0) / 2 + 70), H - 28)
   return `${s}</g>`
+}
+/**
+ * ON BRAND's job-done cheer gets his VICTORY POSES (art set 025): he hovers in, waves to the crowd, lands hands on hips, beside the
+ * APPROVED stamp. Stepped windows on the cheer's own clock (`--cd`); the last pose is the reduced-motion still. `VICTORY` is the order.
+ */
+export const VICTORY = [['hover', 0.15, 0.95], ['wave', 0.95, 1.75], ['hips', 1.75, 2.8]] as const
+const VIC: Record<string, any> = { hover: MS.TB_HOMELANDER_VICTORY_HOVER, wave: MS.TB_HOMELANDER_VICTORY_WAVE, hips: MS.TB_HOMELANDER_VICTORY_HIPS }
+const victory = (x: number, gy: number): string => {
+  const bank = new FrameBank('tbv', 6)
+  let css = '.tb-vic{animation-duration:2.8s;animation-timing-function:steps(1);animation-fill-mode:both;animation-delay:var(--cd,0s)}@media (prefers-reduced-motion: reduce){.tb-vic{animation:none!important}}'
+  let g = ''
+  for (const [k, a, b] of VICTORY) {
+    bank.add(k, VIC[k], 0.5)
+    const pa = Math.round((a / 2.8) * 1000) / 10
+    const pb = Math.round((b / 2.8) * 1000) / 10
+    css += `@keyframes tbv${k}{0%{opacity:0}${pa}%,${Math.max(pa, pb - 0.1)}%{opacity:1}${pb}%,100%{opacity:${k === 'hips' ? 1 : 0}}}`
+    // The hover drifts down onto the landing spot; the others stand on it.
+    const y = gy - (47 * 1.15) / 2 - (k === 'hover' ? 8 : 0)
+    g += `<g class="tb-vic" style="animation-name:tbv${k}"${k === 'hips' ? '' : ' opacity="0"'}>${bank.use(k, x, y, 1, 1.15)}</g>`
+  }
+  return `<g data-egg="victory"><style>${css}</style><defs>${bank.defs()}</defs><ellipse cx="${r1(x)}" cy="${gy}" rx="16" ry="3" fill="#000" opacity=".3"/>${g}</g>`
 }
 
 // ---------------------------------------------------------------- SOLID GOLD's tape and NOIR's film (band overlays; theme extras)

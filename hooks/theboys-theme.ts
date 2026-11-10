@@ -3,7 +3,7 @@
 // `solidgold`). The band is the slim band in the theme's own hand with the VNN crawl along its foot; Q-SCORE is the level card,
 // CRISIS DESK the task card with the PRESS RELEASES, FOCUS GROUP the log and THE TABLE the hierarchy.
 // The live numbers (APPROVAL, 7SPN, BREAKING, TURBO RUSH) are read from theboys-eggs.ts, which the register feeds.
-import { BAND_H, BOOTS, CSS, GOLD, PROPS, SCORE_W, WARNINGS, bootLine, chip, cheer, crew, ep, epW, episodeAt, figure, filmLook, foot, gauge, idle, name, pal, pip, sansW, scoreboard, syringe, vhsRoll, C, T, condW, r1 } from './theboys'
+import { BAND_H, BOOTS, CSS, bustTurn, GOLD, PROPS, SCORE_W, WARNINGS, bootLine, chip, cheer, crew, ep, epW, episodeAt, figure, filmLook, foot, gauge, idle, name, pal, pip, sansW, scoreboard, syringe, vhsRoll, C, T, condW, r1 } from './theboys'
 import type { Mode } from './theboys'
 import { BADGES, TITLES, credCard, credToast, deskAlt, deskCard, dialAlt, dialCard, rankOf, tableCard } from './theboys-cards'
 import type { BoysOrg } from './theboys-cards'
@@ -103,6 +103,8 @@ export const boysExtras = (m: Mode) => (o: ExtraArgs): string => {
   const out: string[] = []
   const swapping = swapLive(o.swapAt, o.at)
   if (swapping) out.push(swapLayer(o.W, o.H, m, o.swapAt))
+  // The bust turns with the swap: the old face away, the new one round (theboys.ts bustTurn), over the swap's veil.
+  if (swapping && o.surface === 'band' && (m === 'brand' || m === 'book')) out.push(bustTurn(m, o.swapAt))
   if (o.surface === 'band') {
     if (!swapping) autoLookAtMe(o.ctxPct, o.at)
     // The 7SPN bug sits just left of the CONTEXT readouts (or the band's right edge when they are folded away).
