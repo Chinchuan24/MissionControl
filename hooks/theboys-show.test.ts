@@ -35,7 +35,8 @@ test('event eggs: every one of E1-E24 answers its own engine event (an act, a BR
       ['plan', 'knight', () => undefined],
       ['resume', 'wakey', () => undefined],
       ['ctx95', 'lookatme', () => undefined],
-      ['turbo', 'turbo', () => undefined],
+      ['turbo', 'race', () => undefined],
+      ['turbo', 'turbo', at => { fire('turbo', at - 40_000) }],
       ['idle10', 'terror', () => undefined],
       ['agent-spawn', 'recruit', () => undefined],
       ['errors3', 'mirror', () => undefined],
@@ -157,12 +158,14 @@ test('THE AMBUSH: rare (about every 30-45 min) while a job works, 12 s, the thre
   let n = 0
   for (let s = 6000; s < 6100; s++) {
     const a = ambushOfSlot(s)
+    // One slot in four is the look's FIGHT (theboys-fights.ts): it shares the slot, so it is never an AMBUSH too.
+    if (a.src === 'fight') { expect(ambushAt(a.startAt + 6000)).toBeUndefined(); continue }
     if (!ambushAt(a.startAt + 6000)) continue
     n++
     expect(stageAt(a.startAt + 6000, { mode: 'brand', working: true })?.kind).toBe(a.kind)
     expect(stageAt(a.startAt + 6000, { mode: 'brand', working: false })?.src).not.toBe('ambush')
   }
-  expect(n).toBeGreaterThan(90)  // of 100 slots (a few give way to a set piece)
+  expect(n).toBeGreaterThan(68)  // of the 75 AMBUSH slots in 100 (a few give way to a set piece)
   // C steals the real progress bar (the slot goes empty with a dashed outline), on the band.
   const c = actOn('ambush-c', { W: 900, H: 148, m: 'brand', at: T0, on: 'band' })
   expect(c).toContain('stroke-dasharray="3 2"')

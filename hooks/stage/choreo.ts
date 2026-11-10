@@ -44,6 +44,8 @@ export type FightLook = {
   font?: string
   /** A class for every word and bubble line in place of the font attributes (the skin's CSS sets font-family and weight). */
   textClass?: string
+  /** `false`: no afterimages anywhere (each ghost repeats every pose's <use>: a tight band budget turns them off). */
+  ghosts?: boolean
 }
 type F = { name: string; x: number; y: number; face: 1 | -1; pose: string; from: number; segs: Seg[]; path: Key[]; ghosts?: [number, number]; trail: [number, number, string][]; spin: boolean }
 
@@ -177,7 +179,7 @@ export class Fight {
     const t0 = this.t
     const fast = Math.abs(x - f.x) / Math.max(0.05, d) > 300
     if (o.lines ?? fast) f.trail.push([t0, t0 + d, fx.speedLines(-f.face * 10 * this.sc, -4 * this.sc, 14 * this.sc, 4, f.face, this.o.lines ?? '#FFFFFF', { seed: `${who}${t0}` })])
-    if (o.ghosts ?? fast) f.ghosts ??= [t0, t0 + d]
+    if (this.o.ghosts !== false && (o.ghosts ?? fast)) f.ghosts ??= [t0, t0 + d]
     this.move(f, x, o.y ?? f.y, d, o.ease ?? 'snap')
     return this
   }
@@ -201,8 +203,9 @@ export class Fight {
   /**
    * The hit, at the cursor: `target` takes it (pose for `d` s), a 3-frame star, sparks, a flash, a shake, a word, then
    * the HIT-STOP (`freeze` s, default 0.07: every path holds while the star plays). `impact` adds an impact frame.
+   * `star: false` skips the star (the skin's own impact mark goes at `hits[hits.length - 1]`).
    */
-  hit(target: string, o: { pose?: string; d?: number; x?: number; y?: number; r?: number; flash?: number | false; shake?: 1 | 2 | 3 | 4 | false; freeze?: number | false; word?: string; sparks?: boolean; impact?: boolean } = {}): this {
+  hit(target: string, o: { pose?: string; d?: number; x?: number; y?: number; r?: number; flash?: number | false; shake?: 1 | 2 | 3 | 4 | false; freeze?: number | false; word?: string; sparks?: boolean; impact?: boolean; star?: boolean } = {}): this {
     this.log('hit')
     const g = this.get(target)
     const t = this.t
@@ -213,7 +216,8 @@ export class Fight {
     this.hits.push({ t, x, y, who: target })
     if (o.pose) this.pose(target, o.pose)
     if (o.impact) this.impact()
-    this.out += fx.star3(this.act, t, x, y, r, { ...this.o.star, ...(this.o.ink ? { ink: this.o.ink } : {}) })
+    // `star: false`: the skin draws its own mark at `hits` (a censor mosaic, a slash line): the hit-stop and shake stay.
+    if (o.star ?? true) this.out += fx.star3(this.act, t, x, y, r, { ...this.o.star, ...(this.o.ink ? { ink: this.o.ink } : {}) })
     if (o.sparks ?? true) this.out += fx.sparks(this.act, t + 0.02, x, y, { seed: `hit${t}${target}`, ...(this.o.spark ? { color: this.o.spark } : {}) })
     // With an impact frame the flash follows it (a flash over the ink frame would grey it out).
     if (o.flash !== false && (o.flash ?? 0) > 0) this.out += fx.flash(this.act, o.impact ? t + 0.08 : t, { a: Math.min(0.5, o.flash as number) })
@@ -279,7 +283,7 @@ export class Fight {
     const d = o.d ?? 0.45
     if (o.pose) this.pose(who, o.pose)
     const t0 = this.t
-    f.ghosts ??= [t0, t0 + d]
+    if (this.o.ghosts !== false) f.ghosts ??= [t0, t0 + d]
     const x1 = f.x - f.face * dx
     const y1 = f.y + (o.dy ?? 0)
     this.move(f, x1, y1, d, o.ease ?? 'settle', { ...(o.rot !== undefined ? { rot: o.rot } : {}), arc: o.arc ?? 10, n: 5 })
@@ -299,7 +303,7 @@ export class Fight {
     this.log('throw')
     const f = this.get(who)
     if (o.pose) this.pose(who, o.pose)
-    f.ghosts ??= [this.t, this.t + (o.d ?? 0.5)]
+    if (this.o.ghosts !== false) f.ghosts ??= [this.t, this.t + (o.d ?? 0.5)]
     this.move(f, x, y, o.d ?? 0.5, 'linear', { arc: o.arc ?? 30, rot: 360 * (o.turns ?? 1), n: 8 })
     f.spin = true
     return this

@@ -8,6 +8,9 @@ import * as SP from './theboys-sprites'
 import { COND, FONT, MONO, clamp, clip, clipC, condW, contrast, esc, hash, monoW, px, r1, sansW, spH, spW, unit } from './invincible'
 import { pin } from './smooth'
 import { approvalAt, breakingAt, scoreAt, turboAt, vnnLine } from './theboys-eggs'
+import { TB_PROP_SHIELD_TURN } from './theboys-motion-sprites'
+import { FrameBank } from './stage/frames'
+import { turntable } from './stage/turntable'
 
 export { SP, COND, FONT, MONO, clamp, clip, clipC, condW, contrast, esc, hash, monoW, px, r1, sansW, spH, spW, unit, pin }
 export type Mode = 'brand' | 'book' | 'gold' | 'noir'
@@ -108,9 +111,13 @@ export const CSS = `
 .tb-static{animation:tb-static .18s steps(2) infinite}@keyframes tb-static{50%{transform:translateY(3px)}}
 .tb-wipe{animation:tb-wipe 2.2s cubic-bezier(.7,0,.3,1) both}@keyframes tb-wipe{0%{transform:translateX(-110%)}35%,70%{transform:none}100%{transform:translateX(110%)}}
 .tb-streak{animation:tb-streak .7s linear infinite}@keyframes tb-streak{to{transform:translateX(-24px)}}
+.tb-br{animation:tb-br 4.2s steps(1) infinite}@keyframes tb-br{0%,48%{transform:none}50%,98%{transform:translateY(-.9px)}}
+.tb-lid{opacity:0;animation:tb-lid 7.4s steps(1) infinite}@keyframes tb-lid{0%,95.9%{opacity:0}96%,97.9%{opacity:1}98%,100%{opacity:0}}
+.tb-chase{animation:tb-chase .9s steps(3) infinite}@keyframes tb-chase{to{transform:translateX(18px)}}
+.tb-grain{animation:tb-grain 1.2s steps(1) infinite}@keyframes tb-grain{0%{transform:none}25%{transform:translate(-13px,-7px)}50%{transform:translate(-5px,-15px)}75%{transform:translate(-17px,-3px)}}
 .tb-cheer,.tb-flash,.tb-slam,.tb-fall,.tb-pop{animation-delay:var(--cd,0s)}
 @media (prefers-reduced-motion: reduce){
- .tb-pulse,.tb-run,.tb-glide,.tb-flick,.tb-puff,.tb-glint,.tb-slosh,.tb-crawl,.tb-break,.tb-bslide,.tb-blink,.tb-cheer,.tb-flash,.tb-slam,.tb-fall,.tb-pop,.tb-score,.tb-shut,.tb-swap,.tb-tear,.tb-static,.tb-wipe,.tb-streak{animation:none}
+ .tb-pulse,.tb-run,.tb-glide,.tb-flick,.tb-puff,.tb-glint,.tb-slosh,.tb-crawl,.tb-break,.tb-bslide,.tb-blink,.tb-cheer,.tb-flash,.tb-slam,.tb-fall,.tb-pop,.tb-score,.tb-shut,.tb-swap,.tb-tear,.tb-static,.tb-wipe,.tb-streak,.tb-br,.tb-lid,.tb-chase,.tb-grain{animation:none}
  .tb-flash,.tb-fall,.tb-static{opacity:0}.tb-slam{transform:rotate(-8deg)}.tb-crawl{transform:none}.tb-wipe{display:none}
 }`
 
@@ -135,10 +142,15 @@ export const faceIcon = (x: number, y: number, n: number, still = false) => {
 }
 /** The APPROVAL RATING meter (M1): the face, a 60 by 10 poll bar split HOMETEAMERS (gold) / STARLIGHTERS (white), the number.
  *  OFF BOOK flips the label to the Boys' side (DIRT ON HIM, the other share); SOLID GOLD reads PAYBACK FANS. `wide` names both camps. */
-export const approvalW = (wide: boolean, m: Mode) => (wide ? sansW(m === 'book' ? 'DIRT ON HIM' : m === 'gold' ? 'PAYBACK FANS' : 'HOMETEAMERS', 9.5, 0.8, true) + 6 + 60 + 6 + sansW('100%', 13, 0, true) + (m === 'brand' ? 8 + sansW('· STARLIGHTERS 100%', 9.5, 0.4, true) : 0) : sansW('APPROVAL', 9.5, 0.8, true) + 6 + 60 + 6 + sansW('100%', 13, 0, true)) + 14
+export const approvalW = (wide: boolean, m: Mode) => m === 'noir' ? sansW('…', 9.5, 0.8, true) + 6 + 60 + 14 : (wide ? sansW(m === 'book' ? 'DIRT ON HIM' : m === 'gold' ? 'PAYBACK FANS' : 'HOMETEAMERS', 9.5, 0.8, true) + 6 + 60 + 6 + sansW('100%', 13, 0, true) + (m === 'brand' ? 8 + sansW('· STARLIGHTERS 100%', 9.5, 0.4, true) : 0) : sansW('APPROVAL', 9.5, 0.8, true) + 6 + 60 + 6 + sansW('100%', 13, 0, true)) + 14
 export const approval = (x: number, y: number, n: number, m: Mode, wide: boolean) => {
   const P = pal(m)
   const v = Math.round(clamp(n, 0, 100))
+  // THIS MEANS NOIR says nothing: no face, no camps, no number; a dark bar that fills with the same share, and `…`.
+  if (m === 'noir') {
+    const bx = x + sansW('…', 9.5, 0.8, true) + 6
+    return `<g data-egg="approval"><title>…</title>${T(x, y, '…', 9.5, 700, P.muted, 'letter-spacing=".8"')}<rect x="${r1(bx)}" y="${y - 6}" width="60" height="3" rx="1.5" fill="${P.track}"/><rect x="${r1(bx)}" y="${y - 6}" width="${r1((60 * v) / 100)}" height="3" rx="1.5" fill="${P.a}" opacity=".8"/></g>`
+  }
   const shown = m === 'book' ? 100 - v : v
   const label = wide ? (m === 'book' ? 'DIRT ON HIM' : m === 'gold' ? 'PAYBACK FANS' : 'HOMETEAMERS') : 'APPROVAL'
   let s = `<g data-egg="approval"><title>${esc(`HomeTeamers ${v}% · Starlighters ${100 - v}%`)}</title>${faceIcon(x, y - 9.5, v)}`
@@ -168,6 +180,7 @@ export const name = (x: number, y: number, W: number, m: Mode, usd: number, at: 
   let s = ''
   if (m === 'brand') s += `<rect x="${x}" y="${y - 12}" width="${r1(tw)}" height="16" rx="8" fill="${P.ink}" stroke="${P.a}" stroke-width="1.2"/>${C(x + 8, y, label, 10, P.aT, 'letter-spacing="1.4"')}`
   else if (m === 'book') s += `${tape(x + tw / 2, y - 4, tw + 4, 15, -1.5, 0.92)}${C(x + 8, y, label, 10, PROPS.paperInk, 'letter-spacing="1.4"')}`
+  else if (m === 'noir') s += `<rect x="${x}" y="${y - 12}" width="${r1(tw)}" height="16" fill="${P.ink}" stroke="${P.text}" stroke-width=".7"/><rect x="${x + 2}" y="${y - 10}" width="${r1(tw - 4)}" height="12" fill="none" stroke="${P.text}" stroke-width=".4" opacity=".6"/>${C(x + 8, y, label, 10, P.text, 'letter-spacing="1.4"')}`
   else s += `<rect x="${x}" y="${y - 12}" width="${r1(tw)}" height="16" rx="2" fill="${P.olive}" stroke="${P.a}" stroke-width="1"/>${bulbs(x + 3, y - 13.5, tw - 6, 'gold', at)}${C(x + 8, y, label, 10, P.text, 'letter-spacing="1.4"')}`
   let w = tw + 2
   const tot = total(x + w + 12, y, usd, m)
@@ -177,21 +190,21 @@ export const name = (x: number, y: number, W: number, m: Mode, usd: number, at: 
   const ap = approval(x + w + 16, y, approvalAt(at), m, wide)
   s += ap
   w += 16 + approvalW(wide, m)
-  const firm = W >= 1450 ? (m === 'book' ? 'THE BOYS · OFF THE BOOKS' : m === 'gold' ? 'SOLID GOLD · LIVE' : 'VOUGHT INTERNATIONAL · SUPE OPERATIONS') : W >= 1000 ? (m === 'book' ? 'THE BOYS' : m === 'gold' ? 'SOLID GOLD' : 'VOUGHT INTERNATIONAL') : ''
+  const firm = W >= 1450 ? (m === 'book' ? 'THE BOYS · OFF THE BOOKS' : m === 'gold' ? 'SOLID GOLD · LIVE' : m === 'noir' ? 'A SILENT PICTURE · 1979' : 'VOUGHT INTERNATIONAL · SUPE OPERATIONS') : W >= 1000 ? (m === 'book' ? 'THE BOYS' : m === 'gold' ? 'SOLID GOLD' : m === 'noir' ? '1979' : 'VOUGHT INTERNATIONAL') : ''
   if (firm) {
-    s += m === 'book' ? C(x + w + 10, y, firm, 10, P.aT, 'letter-spacing="2"') : M(x + w + 10, y, firm, 9, m === 'gold' ? P.aT : P.a, 'letter-spacing="1.2"')
+    s += m === 'book' ? C(x + w + 10, y, firm, 10, P.aT, 'letter-spacing="2"') : M(x + w + 10, y, firm, 9, m === 'gold' ? P.aT : m === 'noir' ? P.muted : P.a, 'letter-spacing="1.2"')
     w += 10 + (m === 'book' ? condW(firm, 10, 2) : monoW(firm, 9) + firm.length * 1.2)
   }
   return { svg: s, w }
 }
-/** A row of marquee bulbs (SOLID GOLD), every other one lit, the lit ones chasing. */
+/** A row of marquee bulbs (SOLID GOLD): every bulb a dim brass dot, one in three lit, and the lit ones CHASE: the lit row slides one
+ *  bulb (6 px) per step, three steps a loop, inside a clip of the row. Two patterns and one clip in place of a circle per bulb. */
 export const bulbs = (x: number, y: number, w: number, _m: Mode, _at: number) => {
-  // Two patterns (every other bulb lit, the lit ones chasing) in place of one circle per bulb: a band-wide row stays small.
   const n = Math.max(2, Math.floor(w / 6))
   const id = `tbb${hash(`${r1(x)}|${r1(y)}|${n}`) % 100000}`
   const ww = r1(n * 6)
-  const pat = (k: string, cx: number, fill: string) => `<pattern id="${id}${k}" x="${r1(x)}" y="${r1(y - 2)}" width="12" height="4" patternUnits="userSpaceOnUse"><circle cx="${cx}" cy="2" r="1.1" fill="${fill}"/></pattern>`
-  return `<g><defs>${pat('l', 3, '#FFF3C4')}${pat('u', 9, GOLD.a)}</defs><rect x="${r1(x)}" y="${r1(y - 2)}" width="${ww}" height="4" fill="url(#${id}u)"/><rect class="tb-run" x="${r1(x)}" y="${r1(y - 2)}" width="${ww}" height="4" fill="url(#${id}l)"/></g>`
+  const pat = (k: string, pw: number, fill: string) => `<pattern id="${id}${k}" x="${r1(x)}" y="${r1(y - 2)}" width="${pw}" height="4" patternUnits="userSpaceOnUse"><circle cx="3" cy="2" r="1.1" fill="${fill}"/></pattern>`
+  return `<g><defs>${pat('u', 6, GOLD.a)}${pat('l', 18, '#FFF3C4')}<clipPath id="${id}c"><rect x="${r1(x)}" y="${r1(y - 2)}" width="${ww}" height="4"/></clipPath></defs><rect x="${r1(x)}" y="${r1(y - 2)}" width="${ww}" height="4" fill="url(#${id}u)" opacity=".55"/><g clip-path="url(#${id}c)"><rect class="tb-chase" x="${r1(x - 18)}" y="${r1(y - 2)}" width="${r1(n * 6 + 18)}" height="4" fill="url(#${id}l)"/></g></g>`
 }
 /** The context chip: 85-94 STAY ON BRAND with the stressed smile; 95+ LOOK AT ME. in laser red with two eye glints. */
 export const CHIP_WORDS: Record<Mode, [string, string]> = { brand: ['STAY ON BRAND', 'LOOK AT ME.'], book: ['DIRT RUNNING OUT', 'CLEAR THE DECKS, MATE'], gold: ['THAWING…', 'CHEST GLOW'], noir: ['…', '… …'] }
@@ -228,6 +241,7 @@ export const ep = (xr: number, y: number, code: string, title: string, full: boo
   x -= cw
   if (m === 'brand') s += `<rect x="${r1(x)}" y="${y - 11.5}" width="${r1(cw)}" height="15" rx="7.5" fill="${P.ink}" stroke="${P.a}" stroke-width="1.2"/>${C(x + 8, y, code, 9.5, '#FFFFFF', 'letter-spacing=".8"')}`
   else if (m === 'book') s += `${tape(x + cw / 2, y - 4, cw + 2, 15, 2, 0.95)}${C(x + 8, y, code, 9.5, PROPS.paperInk, 'letter-spacing=".8"')}`
+  else if (m === 'noir') s += `<rect x="${r1(x)}" y="${y - 11.5}" width="${r1(cw)}" height="15" fill="${P.ink}" stroke="${P.text}" stroke-width=".6"/>${C(x + 8, y + 0.5, code, 9.5, P.text, 'letter-spacing=".8"')}`
   else s += `<rect x="${r1(x)}" y="${y - 11.5}" width="${r1(cw)}" height="15" fill="${P.text}"/><rect x="${r1(x)}" y="${y - 11.5}" width="${r1(cw)}" height="3" fill="${P.ink}"/>${C(x + 8, y + 0.5, code, 9.5, P.ink, 'letter-spacing=".8"')}`
   return s
 }
@@ -240,7 +254,7 @@ export const gauge = (xr: number, y: number, isWorking: boolean, done: number, t
   const P = pal(m)
   const lit = litOf(done, total)
   const full = lit >= SEATS
-  const label = full ? (m === 'book' ? 'ALL THE DIRT' : m === 'gold' ? 'FULL PAYBACK' : 'FULL ROSTER') : !isWorking && lit === 0 ? (m === 'book' ? 'NO DIRT YET' : m === 'gold' ? 'PAYBACK' : 'SEATS VACANT') : m === 'book' ? 'DIRT' : m === 'gold' ? 'PAYBACK' : 'ROSTER'
+  const label = m === 'noir' ? '…' : full ? (m === 'book' ? 'ALL THE DIRT' : m === 'gold' ? 'FULL PAYBACK' : 'FULL ROSTER') : !isWorking && lit === 0 ? (m === 'book' ? 'NO DIRT YET' : m === 'gold' ? 'PAYBACK' : 'SEATS VACANT') : m === 'book' ? 'DIRT' : m === 'gold' ? 'PAYBACK' : 'ROSTER'
   const count = `${lit}/${SEATS}`
   const lw = sansW(label, 9.5, 0.8, true)
   const cw = sansW(count, 13, 0, true)
@@ -252,6 +266,8 @@ export const gauge = (xr: number, y: number, isWorking: boolean, done: number, t
     const on = i < lit
     const cx = sx + i * 9
     if (m === 'gold') s += star(cx + 3.5, y - 4, 3.6, on ? P.a : 'none', on ? '' : `stroke="${P.muted}" stroke-width=".8"`)
+    // NOIR: seven bowler hats on a hat rack, worn (amber) or waiting (an outline).
+    else if (m === 'noir') s += `<path d="M${r1(cx - 0.5)} ${y - 1}h8v-1.2h-1.4v-2.6a2.6 2.8 0 0 0 -5.2 0v2.6h-1.4z" fill="${on ? P.a : 'none'}" stroke="${on ? P.aT : P.muted}" stroke-width=".7"/>`
     else if (m === 'book') s += `<rect x="${r1(cx)}" y="${y - 9}" width="7" height="9" fill="${on ? P.manila : 'none'}" stroke="${on ? P.manila : P.muted}" stroke-width=".8"/>${on ? `<path d="M${r1(cx + 1.5)} ${y - 4.5}l1.6 1.8 2.6 -3.6" fill="none" stroke="${P.red}" stroke-width="1.2"/><path d="M${r1(cx + 4.5)} ${y - 10.5}v3" stroke="${P.sub}" stroke-width=".8"/>` : ''}`
     else s += `<path d="M${r1(cx)} ${y - 1}v-6.5a3.5 3 0 0 1 7 0V${y - 1}z" fill="${on ? P.a : 'none'}" stroke="${on ? P.aT : P.muted}" stroke-width=".8"/>${on ? `<circle cx="${r1(cx + 3.5)}" cy="${y - 5}" r="1" fill="${P.ink}"/>` : ''}`
   }
@@ -259,17 +275,30 @@ export const gauge = (xr: number, y: number, isWorking: boolean, done: number, t
   s += T(sx + SEATS * 9 + 7, y, count, 13, 700, P.text, 'font-variant-numeric="tabular-nums"')
   return { svg: `${s}</g>`, w }
 }
+/** Soldier Boy's shield (the Blender turnaround, 5 views + their mirror), 22 by 20 px centred at (cx, cy): a full turn every 4.8 s
+ *  while a job works (stepped, one view per 0.6 s), the front view at rest and under reduced motion. ~7 k chars, gold band only. */
+export const shieldHero = (cx: number, cy: number, working: boolean) => {
+  const bank = new FrameBank('tbsh', 5)
+  TB_PROP_SHIELD_TURN.slice(0, 5).forEach((sp, i) => bank.add(`v${i}`, sp, 0.48))
+  const t = turntable(bank, { id: 'tbshT', views: ['v0', 'v1', 'v2', 'v3', 'v4'], mirror: true, x: cx, y: cy, sc: 0.5, period: working ? 4.8 : 0, dir: 1, still: 0 })
+  return `<g data-egg="shield">${t.css ? `<style>${t.css}</style>` : ''}<defs>${bank.defs()}</defs>${t.svg}</g>`
+}
 /** The Compound V syringe (the task row's gauge): a needle at the left, the glass barrel, the blue dose filling to the progress
  *  point with the plunger head riding it, the rod and its flange at the right. At 95%+ context it flickers gold (unstable).
  *  OFF BOOK: scratched glass and a strip of tape. SOLID GOLD: a brass VU meter in its place. */
-export const syringe = (x: number, y: number, w: number, pct: number, m: Mode, o: { near?: boolean; working?: boolean; stolen?: boolean } = {}) => {
+export const syringe = (x: number, y: number, w: number, pct: number, m: Mode, o: { near?: boolean; working?: boolean; stolen?: boolean; bare?: boolean } = {}) => {
   const P = pal(m)
   const p = clamp(pct, 0, 100) / 100
   if (m === 'gold') {
-    const n = Math.max(4, Math.floor((w - 4) / 4))
+    // The VU meter, with Soldier Boy's shield at its right end as the gauge's hero (it turns while a job works).
+    // `bare`: a fight is on the band, so the shield steps off the meter (its 2-7 k is the fight's budget).
+    const hero = w >= 120 && !o.bare
+    const vw = hero ? w - 26 : w
+    const n = Math.max(4, Math.floor((vw - 4) / 4))
     const lit = Math.round(p * n)
-    let s = `<g data-egg="vu"><rect x="${r1(x)}" y="${y - 1}" width="${r1(w)}" height="9" rx="1.5" fill="${P.tile2}" stroke="${P.line}"/>`
+    let s = `<g data-egg="vu"><rect x="${r1(x)}" y="${y - 1}" width="${r1(vw)}" height="9" rx="1.5" fill="${P.tile2}" stroke="${P.line}"/>`
     for (let i = 0; i < n; i++) s += `<rect x="${r1(x + 2 + i * 4)}" y="${y + 1}" width="2.6" height="5" fill="${i >= n * 0.86 ? P.redT : i < lit ? P.a : P.track}"/>`
+    if (hero) s += shieldHero(x + w - 11, y + 3.5, Boolean(o.working))
     return `${s}</g>`
   }
   const bx = x + 12
@@ -281,7 +310,7 @@ export const syringe = (x: number, y: number, w: number, pct: number, m: Mode, o
     return `${s}</g>`
   }
   s += `<rect x="${r1(bx)}" y="${y - 1}" width="${r1(bw)}" height="9" rx="2" fill="${PROPS.glass}" fill-opacity=".1" stroke="${P.sub}" stroke-opacity=".7"/>`
-  if (p > 0) s += `<rect x="${r1(bx + 1)}" y="${y}" width="${r1(Math.max(0, fx - bx - 1))}" height="7" rx="1.4" fill="${PROPS.vblue}"${o.near ? ' class="tb-flick"' : ''}/><rect x="${r1(bx + 1)}" y="${y + 0.6}" width="${r1(Math.max(0, fx - bx - 2))}" height="1.4" fill="#BFE9FF" opacity=".75"/>`
+  if (p > 0) s += `<rect x="${r1(bx + 1)}" y="${y}" width="${r1(Math.max(0, fx - bx - 1))}" height="7" rx="1.4" fill="${m === 'noir' ? '#C9CED4' : PROPS.vblue}"${o.near ? ' class="tb-flick"' : ''}/><rect x="${r1(bx + 1)}" y="${y + 0.6}" width="${r1(Math.max(0, fx - bx - 2))}" height="1.4" fill="${m === 'noir' ? '#F4F1E8' : '#BFE9FF'}" opacity=".75"/>`
   for (let i = 1; i < 10; i++) s += `<rect x="${r1(bx + (bw * i) / 10)}" y="${y - 1}" width=".8" height="${i % 5 ? 2.5 : 4}" fill="${P.sub}" opacity=".6"/>`
   s += `<rect x="${r1(fx - 1)}" y="${y - 0.5}" width="3" height="8" fill="${m === 'book' ? '#2A2D32' : '#1A2340'}"/><path d="M${r1(fx + 2)} ${y + 3.5}H${r1(bx + bw + 6)}" stroke="${P.sub}" stroke-width="1.6"/><rect x="${r1(bx + bw + 6)}" y="${y - 2}" width="2.2" height="11" rx="1" fill="${P.sub}"/>`
   if (m === 'book') s += `<path d="M${r1(bx + bw * 0.2)} ${y + 6}l9 -6M${r1(bx + bw * 0.62)} ${y + 7}l6 -5" stroke="${P.text}" stroke-width=".5" opacity=".45"/>${tape(bx + bw * 0.36, y + 3.5, 16, 12, 12, 0.8)}`
@@ -314,13 +343,25 @@ export const crew = (x: number, y: number, color: string, m: Mode, live = false)
 /** The avatar (34 by 40 at x 20, y 36): Homelander smiling (ON BRAND), Butcher (OFF BOOK), Soldier Boy in gold (SOLID GOLD). On ON
  *  BRAND his eyes glow red when the approval drops under 30 (the disgusted frame). */
 export const BUST: Record<Mode, any> = { brand: SP.TB_HOMELANDER_BUST, book: SP.TB_BUTCHER_BUST, gold: SP.TB_SOLIDGOLD_BUST, noir: SP.TB_NOIR_BUST }
+/** Each bust's eyes (sprite pixels: left eye x0..x1, right eye x0..x1, rows y0..y1), the lid colour and its lash line. Noir has
+ *  no eyes to shut: his amber lenses go dark for the step instead. */
+export const LIDS: Record<Mode, { eyes: [number, number][]; y0: number; y1: number; lid: string; lash: string }> = {
+  brand: { eyes: [[20, 22], [26, 28]], y0: 9, y1: 10, lid: '#F4B88F', lash: '#A86E51' },
+  book: { eyes: [[19, 21], [24, 26]], y0: 10, y1: 10, lid: '#EDB088', lash: '#A86E51' },
+  gold: { eyes: [[20, 22], [26, 27]], y0: 9, y1: 10, lid: '#FFF3C4', lash: '#B08A2A' },
+  noir: { eyes: [[20, 24], [26, 28]], y0: 8, y1: 11, lid: '#31313D', lash: '#191922' },
+}
+/** The bust in the figure slot, alive: a 1 px breath every 4.2 s and a blink every 7.4 s (two stepped loops, still under reduced
+ *  motion). ON BRAND's eyes glow red when the approval drops under 30 (the disgusted frame). */
 export const figure = (m: Mode, at: number) => {
   const sp = BUST[m]
   const s = 0.86
   const x = 37 - (spW(sp) * s) / 2
-  let out = px(sp, x, 39, s)
+  const L = LIDS[m]
+  const lids = L.eyes.map(([a, b]) => `<rect x="${r1(x + a * s)}" y="${r1(39 + L.y0 * s)}" width="${r1((b - a + 1) * s)}" height="${r1((L.y1 - L.y0 + 1) * s)}" fill="${L.lid}"/><rect x="${r1(x + a * s)}" y="${r1(39 + (L.y1 + 0.55) * s)}" width="${r1((b - a + 1) * s)}" height="${r1(0.45 * s)}" fill="${L.lash}"/>`).join('')
+  let out = `${px(sp, x, 39, s)}<g class="tb-lid" data-egg="blink">${lids}</g>`
   if (m === 'brand' && approvalAt(at) < 30) out += `<g class="tb-glint"><rect x="${r1(x + 21 * s)}" y="${r1(39 + 9 * s)}" width="${r1(2 * s)}" height="${r1(s)}" fill="#FF2A2A"/><rect x="${r1(x + 26 * s)}" y="${r1(39 + 9 * s)}" width="${r1(2 * s)}" height="${r1(s)}" fill="#FF2A2A"/></g>`
-  return out
+  return `<g class="tb-br" data-egg="breath">${out}</g>`
 }
 /** The idle slot (12 by 16): a VoughtSonic cup (ON BRAND), a chipped mug (OFF BOOK), a gold record (SOLID GOLD). */
 export const idle = (x: number, y: number, m: Mode) => {
@@ -445,6 +486,47 @@ export const cheer = (W: number, H: number, m: Mode, o: { delay?: string } = {})
   s += `<g class="tb-slam">${m === 'book' ? tape(cx, cy - 6, condW(word, 30, 2) + 40, 40, 0, 0.92) : ''}${stamp(cx, cy - 6, word, ink, 26, 0)}</g>`
   s += T(cx, cy + 30, line, 12, 700, P.text, 'text-anchor="middle"')
   return `${s}</g>`
+}
+
+// ---------------------------------------------------------------- SOLID GOLD's tape and NOIR's film (band overlays; theme extras)
+// SOLID GOLD is an 80s tape: about every 2 min the tracking rolls (two noise bars climb the band in steps, the line under each
+// jitters 2-3 px sideways, the deck's TRACKING read-out shows over the bust). Pinned to its slot, so a redraw resumes it; no filters,
+// no colour split. It never sits on the numbers: the bars are thin, see-through and gone in 0.6 s.
+export const TRACK_MS = 120_000
+export const TRACK_JITTER_MS = 30_000
+export const TRACK_LEN_MS = 1_200
+/** The roll of slot `n`: a seeded moment in the slot's first 30 s (two rolls are 90-150 s apart, about one every 2 min). */
+export const trackOfSlot = (n: number): number => n * TRACK_MS + Math.floor(unit(`tb-trk|${n}`) * TRACK_JITTER_MS)
+/** The roll playing at `at`, or the next one within `ahead` ms (an idle band redraws once a minute): its start, else undefined. */
+export const trackAt = (at: number, ahead = 75_000): number | undefined => {
+  const n = Math.floor(at / TRACK_MS)
+  for (const k of [n - 1, n, n + 1]) {
+    const t = trackOfSlot(k)
+    if (at < t + TRACK_LEN_MS && t <= at + ahead) return t
+  }
+  return undefined
+}
+const TRACK_CSS = '.tb-trk{animation:tb-trk 1.2s linear both}@keyframes tb-trk{0%{opacity:1;transform:translateY(160px);animation-timing-function:steps(8)}50%{opacity:1;transform:translateY(-44px)}50.1%,100%{opacity:0;transform:translateY(-44px)}}.tb-trj{animation:tb-trj .15s steps(1) infinite}@keyframes tb-trj{0%{transform:translateX(2px)}50%{transform:translateX(-3px)}}.tb-osd{animation:tb-osd 1.2s steps(1) both}@keyframes tb-osd{0%{opacity:0}.1%,96%{opacity:1}100%{opacity:0}}@media (prefers-reduced-motion: reduce){.tb-trk,.tb-osd,.tb-trj{display:none}}'
+/** The tracking roll layer for a band of W by H at `at` ('' between rolls). */
+export const vhsRoll = (W: number, H: number, at: number) => {
+  const t = trackAt(at)
+  if (t === undefined) return ''
+  const d = `animation-delay:calc(${pin(t)} + 0s)`
+  let specks = ''
+  for (let i = 0; i < 9; i++) specks += `<rect x="${Math.floor(unit(`trs${i}`) * 23)}" y="${i % 5}" width="${1 + Math.floor(unit(`trw${i}`) * 3)}" height="1" fill="${i % 3 ? '#EFE3C2' : '#8A8470'}" opacity="${i % 2 ? 0.8 : 0.5}"/>`
+  // The noise stays on the left half (the bust, the title, the bar's start): never over the %, the readouts or the counts.
+  const bw = r1(W * 0.48 - 14)
+  const bar = (y: number, h: number) => `<g class="tb-trj"><rect x="14" y="${y}" width="${bw}" height="${h}" fill="url(#tbtn)" opacity=".55"/><rect x="14" y="${y + h}" width="${bw}" height="1" fill="#EFE3C2" opacity=".45"/><rect x="14" y="${y + h + 1}" width="${bw}" height="1.5" fill="#000000" opacity=".3"/></g>`
+  const osd = `<g class="tb-osd" style="${d}"><rect x="15" y="27" width="46" height="18" fill="#000000" opacity=".35"/><text x="18" y="35" font-family="${MONO}" font-size="7" font-weight="700" fill="#FFFFFF" letter-spacing=".6">TRACKING</text>${[0, 1, 2, 3, 4].map(i => `<rect x="${18 + i * 8}" y="38" width="6" height="3" fill="#FFFFFF" opacity="${i < 2 ? 1 : 0.3}"/>`).join('')}</g>`
+  return `<g data-egg="vhs" pointer-events="none"><style>${TRACK_CSS}</style><defs><pattern id="tbtn" width="23" height="5" patternUnits="userSpaceOnUse">${specks}</pattern></defs><g class="tb-trk" style="${d}">${bar(0, 4)}${bar(30, 3)}</g>${osd}</g>`
+}
+// THIS MEANS NOIR is a silent picture: film grain (a tile of specks whose rect jumps between four offsets, ~3 fps), one hairline
+// scratch that hops about, thin letterbox bars and a soft vignette. Stepped loops only, no filters; grain at 6 %.
+const FILM_CSS = (W: number) => `.tb-scr{animation:tb-scr 1.7s steps(1) infinite}@keyframes tb-scr{0%{transform:none;opacity:.12}30%{transform:translateX(${r1(W * 0.37)}px);opacity:0}45%{transform:translateX(${r1(W * 0.61)}px);opacity:.1}80%{transform:translateX(${r1(W * 0.18)}px);opacity:.08}}@media (prefers-reduced-motion: reduce){.tb-scr{animation:none}}`
+export const filmLook = (W: number, H: number) => {
+  let specks = ''
+  for (let i = 0; i < 14; i++) specks += `<rect x="${Math.floor(unit(`fg${i}`) * 41)}" y="${Math.floor(unit(`fgy${i}`) * 37)}" width="${i % 4 ? 1 : 2}" height="1" fill="${i % 3 ? '#F4F1E8' : '#000000'}"/>`
+  return `<g data-egg="film" pointer-events="none"><style>${FILM_CSS(W)}</style><defs><pattern id="tbgr" width="41" height="37" patternUnits="userSpaceOnUse">${specks}</pattern><clipPath id="tbgc"><rect width="${W}" height="${H}" rx="10"/></clipPath><radialGradient id="tbvg" cx=".5" cy=".5" r=".72"><stop offset=".62" stop-color="#000000" stop-opacity="0"/><stop offset="1" stop-color="#000000" stop-opacity=".38"/></radialGradient></defs><g clip-path="url(#tbgc)"><rect width="${W}" height="${H}" fill="url(#tbvg)"/><rect class="tb-grain" width="${W + 20}" height="${H + 20}" fill="url(#tbgr)" opacity=".06"/><rect class="tb-scr" x="${r1(W * 0.12)}" y="0" width=".8" height="${H}" fill="#F4F1E8" opacity=".12"/><rect width="${W}" height="3" fill="#000000" opacity=".85"/><rect y="${H - 3}" width="${W}" height="3" fill="#000000" opacity=".85"/></g></g>`
 }
 
 // ---------------------------------------------------------------- the boot strip

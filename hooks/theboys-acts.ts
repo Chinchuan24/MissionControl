@@ -4,10 +4,16 @@
 // Reduced motion: the movers stop at their still pose, flashes are hidden, and the act still ends on time. PG-13: no hit lands,
 // the only "impacts" are scorch dots, a grey-pink splat and stamps. All words are ours, or a short attributed quote.
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { BUST, C, CRAWL_Y, M, PROPS, SP, T, clip, condW, crew, faceIcon, pal, pin, px, r1, sansW, spH, spW, stamp, star, tape, unit } from './theboys'
+import { BUST, C, CRAWL_Y, M, PROPS, SP, T, clip, condW, crew, esc, faceIcon, pal, pin, px, r1, sansW, spH, spW, stamp, star, tape, unit } from './theboys'
 import type { Mode } from './theboys'
 import type { PaneCard } from './themes'
 import { VNN_BRAND, actMs, scoreAt } from './theboys-eggs'
+import { Act as StageAct } from './stage/timeline'
+import { FrameBank } from './stage/frames'
+import * as fx from './stage/fx'
+import { ease } from './stage/ease'
+import * as MS from './theboys-motion-sprites'
+import type { Sprite } from './cast'
 
 export type ActSurface = PaneCard | 'band' | 'table'
 /** Where an act is drawn: the panel's size, the mode, the clock it started at, and (band only) the task title and its width. */
@@ -18,7 +24,23 @@ type Fr = [number, number, number, number?, string?]
 export class Act {
   css = ''
   n = 0
+  /** The surface this act draws on (actOn sets it): the stage act below takes its size and its id from it. */
+  geo?: { W: number; H: number; on: string }
+  private stage?: StageAct
+  /** Colours per pose on the stage act (rect-path quantise): the fights take 7 to fit the band budget. Set before `sg` is used. */
+  sgK = 8
   constructor(readonly kind: string, readonly ms: number, readonly at: number) {}
+  /**
+   * The shared stage engine's act on this act's clock (same length, same pinned start): its `fx` cues (dust, sparks, speed
+   * lines, rings), frame-swap actors (`sg.cast` + `sg.actor`, a pose per beat), wipes and camera pieces all inline anywhere in
+   * this act's body. Wrap them in `a.fx()` so reduced motion hides them (the act's own movers keep their still pose).
+   */
+  get sg(): StageAct {
+    this.stage ??= new StageAct({ id: `tb-${this.kind}-${this.geo?.on ?? 'x'}`, ms: this.ms, at: this.at, W: this.geo?.W ?? 600, H: this.geo?.H ?? 148, K: this.sgK })
+    return this.stage
+  }
+  /** A stage piece (fx, a stage actor, a wipe): drawn as is, hidden under reduced motion. */
+  fx = (svg: string): string => `<g class="tqh">${svg}</g>`
   pc = (t: number): number => +Math.min(100, Math.max(0, ((t * 1000) / this.ms) * 100)).toFixed(2)
   k = (): string => `x${this.kind.slice(0, 4)}${this.n++}`
   /** Moves `svg` through [t s, x, y, opacity?, extra transform?] frames; held at frame `still` when motion is reduced. */
@@ -53,7 +75,10 @@ export class Act {
   done(body: string, extraCss = ''): string {
     const s = this.ms / 1000
     const css = `.tq,.tql{animation-duration:${s}s;animation-fill-mode:both;animation-delay:calc(${pin(this.at)} + 0s);animation-timing-function:linear}.tql{animation-name:tql;animation-timing-function:steps(1,end)}@keyframes tql{0%,99.4%{opacity:1}100%{opacity:0;visibility:hidden}}.tqc{transform-box:fill-box;transform-origin:50% 50%}.tqb{animation:tqb .36s steps(2) infinite}@keyframes tqb{50%{transform:translateY(-1.6px)}}.tqw{animation:tqw 1.2s ease-in-out infinite}@keyframes tqw{0%,60%,100%{transform:none}30%{transform:translateY(-5px)}}.tqf1{animation:tqf .3s steps(1) infinite}.tqf2{animation:tqf .3s steps(1) infinite;animation-delay:-.15s}@keyframes tqf{50%{opacity:0}}@media (prefers-reduced-motion: reduce){.tq,.tqb,.tqw,.tqf1,.dl-cam{animation:none!important}.tqh,.tqf2{display:none}}${extraCss}${this.css}`
-    return `<g class="tql" pointer-events="none" data-egg="act-${this.kind}"><style>${css}</style>${body}</g>`
+    // The stage act's pieces read --p/--q (tracks) and --s (cues) off the root; its CSS and its pose <defs> ride along.
+    const sg = this.stage
+    const vars = sg ? ` style="--p:${pin(this.at)};--q:var(--p);--s:calc(${pin(this.at)} + 0s)"` : ''
+    return `<g class="tql" pointer-events="none" data-egg="act-${this.kind}"${vars}><style>${css}${sg ? sg.styles() : ''}</style>${sg ? `<defs>${sg.bank.defs()}</defs>` : ''}${body}</g>`
   }
 }
 
@@ -86,13 +111,26 @@ export const bub = (x: number, y: number, text: string, m: Mode, left = false) =
   return `<rect x="${r1(bx)}" y="${r1(by)}" width="${r1(w)}" height="${h}" rx="7" fill="${fill}" stroke="${PROPS.ink}" stroke-width="1.2"/><path d="M${r1(x - 3)} ${r1(by + h - 0.6)}L${r1(x)} ${r1(y)}L${r1(x + 5)} ${r1(by + h - 0.6)}z" fill="${fill}" stroke="${PROPS.ink}" stroke-width="1.2" stroke-linejoin="round"/><rect x="${r1(x - 2)}" y="${r1(by + h - 2)}" width="6" height="2.4" fill="${fill}"/>${T(bx + 8, by + 14, text, z, 700, PROPS.paperInk)}`
 }
 /** A film slate: the striped clapper (it claps at `clap` when animated by the caller) over a black board. */
-export const slate = (x: number, y: number, title: string, sub: string, z = 11, wMin = 0) => {
+export const slate = (x: number, y: number, title: string, sub: string, z = 11, wMin = 0, arm = true) => {
   const w = Math.max(wMin, Math.max(condW(title, z, 1), condW(sub, 8.5, 0.8)) + 20)
   let st = ''
   for (let i = 0; i < Math.ceil(w / 10); i++) st += `<path d="M${r1(x + i * 10)} ${y}h5l-4 7h-5z" fill="#F4F1E8"/>`
+  if (!arm) st = ''
   return `<rect x="${r1(x)}" y="${y}" width="${r1(w)}" height="7" fill="#15161A"/>${st}<rect x="${r1(x)}" y="${y + 8}" width="${r1(w)}" height="${z + 16}" rx="1.5" fill="#15161A" stroke="#F4F1E8" stroke-width=".8"/>${C(x + 10, y + 9 + z + 1, title, z, '#FFFFFF', 'letter-spacing="1"')}${C(x + 10, y + z + 20, sub, 8.5, '#C9C2B0', 'letter-spacing=".8"')}`
 }
 export const slateW = (title: string, sub: string, z = 11) => Math.max(condW(title, z, 1), condW(sub, 8.5, 0.8)) + 20
+/**
+ * The slate that claps: the striped arm sits open on its hinge (left end), opens a little wider (the wind-up) and snaps shut at
+ * `clap` s, bounces once, and a chalk puff jumps off the hinge. Reduced motion: the arm drawn shut.
+ */
+export const clapSlate = (a: Act, x: number, y: number, title: string, sub: string, clap: number, z = 11, wMin = 0) => {
+  const w = Math.max(wMin, slateW(title, sub, z))
+  let st = ''
+  for (let i = 0; i < Math.ceil(w / 10); i++) st += `<path d="M${r1(x + 2 + i * 10)} ${y}h5l4 7h-5z" fill="#15161A"/>`
+  const end = a.ms / 1000
+  const arm = a.kf(`<rect x="${r1(x)}" y="${y}" width="${r1(w)}" height="7" fill="#F4F1E8"/>${st}`, [[0, 'transform:translateY(-7px) rotate(-24deg)'], [Math.max(0.01, clap - 0.16), 'transform:translateY(-7px) rotate(-31deg)'], [clap, 'transform:translateY(-7px) rotate(0deg)'], [clap + 0.06, 'transform:translateY(-7px) rotate(-4deg)'], [clap + 0.12, 'transform:translateY(-7px)'], [end, 'transform:translateY(-7px)']], { ease: ease('snap'), origin: `${r1(x)}px ${y + 7}px`, still: 'transform="translate(0 -7)"' })
+  return slate(x, y, title, sub, z, wMin) + arm + a.fx(fx.puff(a.sg, clap, x + 8, y - 6, { s: 0.45, fill: '#F4F1E8' }) + fx.sparks(a.sg, clap, x + w * 0.5, y - 2, { n: 5, seed: `clap${x}`, color: '#FFFFFF', len: 4 }))
+}
 const heart = (x: number, y: number, s = 1, c = '#E8455A') => `<path transform="translate(${r1(x)} ${r1(y)}) scale(${s})" d="M5 9C3 7.4 0 5.6 0 3A2.6 2.6 0 0 1 5 1.6A2.6 2.6 0 0 1 10 3C10 5.6 7 7.4 5 9z" fill="${c}"/>`
 const note = (x: number, y: number, c: string) => `<g transform="translate(${r1(x)} ${r1(y)})"><ellipse cx="2.2" cy="8" rx="2.4" ry="1.7" fill="${c}"/><rect x="3.8" y="0" width="1.1" height="8" fill="${c}"/><path d="M4.9 0q3.4 1.4 2.4 4.6" fill="none" stroke="${c}" stroke-width="1.1"/></g>`
 const poof = (x: number, y: number) => `<g transform="translate(${r1(x)} ${r1(y)})">${[[0, 0, 7], [-7, 3, 5], [7, 3, 5], [-3, -6, 5], [4, -5, 4]].map(([a, b, r]) => `<circle cx="${a}" cy="${b}" r="${r}" fill="#9FDBFF" opacity=".85"/>`).join('')}<circle r="3" fill="#FFFFFF"/></g>`
@@ -128,6 +166,12 @@ const tv = (x: number, y: number, title: string, s = 2.4) => `<g transform="tran
 const palm = (x: number, y: number) => `<g transform="translate(${r1(x)} ${r1(y)}) scale(1.6)"><path d="M5 22C6 15 5 8 6 3" fill="none" stroke="#8A6A42" stroke-width="2"/><path d="M6 3C2 1 -1 3 -1 6C2 3 4 3 6 3ZM6 3C10 0 13 2 13 5C10 2 8 3 6 3ZM6 3C4 -1 7 -3 9 -2C7 -1 6 1 6 3ZM6 3C3 5 2 8 3 10C4 7 5 5 6 3Z" fill="#3FA35B"/></g>`
 const crate = (x: number, y: number, m: Mode) => `<g transform="translate(${r1(x)} ${r1(y)})"><rect width="60" height="40" fill="#7A5A3E" stroke="#4A3524" stroke-width="1.4"/><path d="M0 0L60 40M60 0L0 40" stroke="#4A3524" stroke-width="1.4"/><rect x="6" y="13" width="48" height="14" fill="#DDF3FF"/>${C(30, 21, 'STORAGE', 7.5, '#1A2340', 'text-anchor="middle" letter-spacing=".8"')}${C(30, 26, 'DO NOT THAW', 4.8, '#1A2340', 'text-anchor="middle" letter-spacing=".5"')}<rect x="26" y="31" width="10" height="8" rx="1" fill="${m === 'gold' ? '#D4A637' : '#C9A13B'}"/><path d="M28 31v-3a3 3 0 0 1 6 0v3" fill="none" stroke="#9A9AA0" stroke-width="1.4"/><path d="M0 0h60v5h-60z" fill="#E8F6FF" opacity=".8"/></g>`
 const frostEdge = (W: number, H: number, d = 10) => `<g opacity=".8"><rect width="${W}" height="${d}" fill="#DDF3FF" opacity=".45"/><rect y="${H - d}" width="${W}" height="${d}" fill="#DDF3FF" opacity=".45"/><rect width="${d}" height="${H}" fill="#DDF3FF" opacity=".45"/><rect x="${W - d}" width="${d}" height="${H}" fill="#DDF3FF" opacity=".45"/>${Array.from({ length: Math.min(40, Math.floor(W / 24)) }, (_, i) => `<path transform="translate(${r1(unit(`fr${i}`) * W)} ${r1(i % 2 ? H - 4 - unit(`fy${i}`) * 6 : 4 + unit(`fy${i}`) * 6)})" d="M-3 0h6M0 -3v6M-2 -2l4 4M2 -2l-4 4" stroke="#FFFFFF" stroke-width=".8"/>`).join('')}</g>`
+/** A silent-film intertitle: black card, a double cream rule, the words in a serif (escaped). */
+export const intertitle = (cx: number, cy: number, text: string, z = 18) => {
+  const w = Math.max(120, text.length * z * 0.62 + 44)
+  const h = z + 22
+  return `<g><rect x="${r1(cx - w / 2)}" y="${r1(cy - h / 2)}" width="${r1(w)}" height="${h}" fill="#0B0C0E"/><rect x="${r1(cx - w / 2 + 4)}" y="${r1(cy - h / 2 + 4)}" width="${r1(w - 8)}" height="${h - 8}" fill="none" stroke="#F4F1E8" stroke-width=".8"/><rect x="${r1(cx - w / 2 + 7)}" y="${r1(cy - h / 2 + 7)}" width="${r1(w - 14)}" height="${h - 14}" fill="none" stroke="#F4F1E8" stroke-width=".4" opacity=".6"/><text x="${r1(cx)}" y="${r1(cy + z * 0.36)}" text-anchor="middle" font-family="Georgia,'Times New Roman',serif" font-size="${z}" font-style="italic" fill="#F4F1E8" letter-spacing="2">${esc(text)}</text></g>`
+}
 const pillar = (W: number, H: number, frac = 0.16) => `<rect width="${r1(W * frac)}" height="${H}" fill="#050505"/><rect x="${r1(W * (1 - frac))}" width="${r1(W * frac)}" height="${H}" fill="#050505"/>`
 const grainDefs = (id: string) => `<filter id="${id}" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="1" seed="7"/><feColorMatrix values="0 0 0 0 .5 0 0 0 0 .5 0 0 0 0 .5 0 0 0 .9 0"/></filter>`
 const gid = (g: Geo, s: string) => `tq${s}${g.on === 'band' ? 'b' : g.on[0]}`
@@ -159,13 +203,65 @@ const dim = (W: number, H: number, P: any, op = 0.6) => `<rect width="${W}" heig
 export type Draw = (a: Act, g: Geo, P: any) => string
 export type Row = { band: Draw; pane: [ActSurface | 'all', Draw]; shake?: Partial<Record<'band' | PaneCard | 'all', [number, string][]>> }
 
-const runner = (a: Act, s: number) => `<g class="tqf1">${feet(SP.TB_ATRAIN_RUN1, s)}</g><g class="tqf2">${feet(SP.TB_ATRAIN_RUN2, s)}</g>`
+/** A-Train's sprint on all four frames of his run cycle (.36 s a stride, steps); reduced motion: frame 1, still. */
+const runner = (a: Act, s: number) => {
+  if (!a.css.includes('@keyframes tqr{')) a.css += '.tqr{opacity:0;animation:tqr .36s steps(1,end) infinite}@keyframes tqr{0%{opacity:1}25%,100%{opacity:0}}@media (prefers-reduced-motion: reduce){.tqr{animation:none!important}.tqr0{opacity:1}}'
+  return [0, 1, 2, 3].map(i => `<g class="tqr${i ? '' : ' tqr0'}" style="animation-delay:-${r1(((4 - i) % 4) * 0.09)}s">${runFrame(a, i, s)}</g>`).join('')
+}
+/** One frame of A-Train's run, feet at the origin, cut once per Svg into the act's stage bank (`dir` -1 runs left). */
+const RUN = [SP.TB_ATRAIN_RUN1, SP.TB_ATRAIN_RUN2, SP.TB_ATRAIN_RUN3, SP.TB_ATRAIN_RUN4]
+const runFrame = (a: Act, i: number, s: number, dir: 1 | -1 = 1): string => {
+  const sp = RUN[i] as Sprite
+  if (!a.sg.bank.has(`run${i}`)) a.sg.cast(`run${i}`, sp)
+  return a.sg.bank.use(`run${i}`, 0, -(sp.rows.length * s) / 2, dir, s)
+}
 const streak = (w: number, col: string, n = 4) => Array.from({ length: n }, (_, i) => `<rect x="${-w - 14 - i * 6}" y="${-30 + i * 7}" width="${w - i * 8}" height="1.6" rx=".8" fill="${col}" opacity="${0.85 - i * 0.15}"/>`).join('')
 
+// ---------------------------------------------------------------- pose to pose, on the shared stage (a.sg)
+/** Every stage pose is padded to PH rows, so the feet share one line whatever the pose (the engine anchors a pose at its middle). */
+const PH = 54
+const padPose = (sp: Sprite): Sprite => {
+  const w = Math.max(...sp.rows.map(r => r.length))
+  return { ...sp, rows: [...Array.from({ length: Math.max(0, PH - sp.rows.length) }, () => '.'.repeat(w)), ...sp.rows.map(r => r.padEnd(w, '.'))] }
+}
+/** Puts poses on the act's stage (each cut once per Svg, then a `<use>`). */
+const poses = (a: Act, m: Record<string, any>): Act => {
+  for (const [k, sp] of Object.entries(m)) if (!a.sg.bank.has(k)) a.sg.cast(k, padPose(sp))
+  return a
+}
+/** A path key in FEET coordinates: act time, x, the feet's y, and a y-squash (about the feet). */
+type FK = [number, number, number, number?]
+/**
+ * A pose-to-pose actor: `segs` say which pose shows when ([t0, t1, pose, dir]), `keys` move it (feet coordinates; k[3] squashes
+ * it about its feet: .9 lands, 1.04 springs). `h` is the landing pose's height in sprite rows. Hidden under reduced motion: pair
+ * it with `stillPose` for the reduced-motion frame.
+ */
+const actor = (a: Act, name: string, segs: [number, number, string, (1 | -1)?][], keys: FK[], sc: number, o: { ghosts?: [number, number]; trail?: [number, number, string][]; h?: number } = {}): string => {
+  const half = (PH * sc) / 2
+  const sq = keys.some(k => k[3] !== undefined)
+  const hv = (o.h ?? 45) * sc
+  const path = keys.map(([t, x, y, q]) => (sq ? [t, x, y - half + ((1 - (q ?? 1)) * hv) / 2, 0, undefined, q ?? 1] : [t, x, y - half])) as any
+  return a.fx(a.sg.actor(name, segs, path, { sc, ...(o.ghosts ? { ghosts: o.ghosts } : {}), ...(o.trail ? { trail: o.trail } : {}) }))
+}
+/** The reduced-motion frame of a stage actor: `pose` standing at (x, feet y). Drawn only under reduced motion. */
+const stillPose = (a: Act, pose: string, x: number, y: number, sc: number, dir: 1 | -1 = 1): string => `<g class="${a.sg.p}-s">${a.sg.still(pose, x, y - (PH * sc) / 2, dir, sc)}</g>`
+/** A jump: keys along a parabola from (x0, y) to (x1, y), `h` px high, in `n` steps between t0 and t1 (rise eases out, fall in). */
+const arc = (t0: number, t1: number, x0: number, x1: number, y: number, h: number, n = 6): FK[] =>
+  Array.from({ length: n + 1 }, (_, i) => { const u = i / n; return [t0 + (t1 - t0) * u, x0 + (x1 - x0) * u, y - h * 4 * u * (1 - u)] as FK })
+/** THE AMBUSH's scrim: it dims the stage strip the cast plays on (the title row, the bar row, the foot) but never the working
+ *  numbers: the top row (Total, APPROVAL, ROSTER) stays above it, and the bar's percent, the step count, the right-hand readouts
+ *  and the cost line are cut out of it. */
+export const stageScrim = (W: number, P: any, op = 0.72): string => {
+  const q = gaugeOf(W)
+  const right = W >= 520 ? q.r0 - 24 : W
+  const hole = (x: number, y: number, w: number, h: number) => `M${r1(x)} ${y}h${r1(w)}v${h}h${r1(-w)}z`
+  return `<path fill-rule="evenodd" d="M0 46H${r1(right)}V${CRAWL_Y}H0z${hole(q.x + q.w + 2, 64, 56, 26)}${hole(64, 98, 50, 22)}${hole(W * 0.6, 96, right - W * 0.6 - 2, 38)}" fill="${P.tile}" opacity="${op}"/>`
+}
+
 /** Rows other files add (phase 3: the event eggs, the set pieces, the roamers, THE AMBUSH); `scrim` puts the band scrim behind it. */
-const XROWS: Record<string, Row & { scrim?: boolean }> = {}
-export const defineActs = (rows: Record<string, Row & { scrim?: boolean }>): void => { Object.assign(XROWS, rows) }
-const rowOf = (kind: string): (Row & { scrim?: boolean }) | undefined => ROWS[kind] ?? XROWS[kind]
+const XROWS: Record<string, Row & { scrim?: boolean | 'stage' }> = {}
+export const defineActs = (rows: Record<string, Row & { scrim?: boolean | 'stage' }>): void => { Object.assign(XROWS, rows) }
+const rowOf = (kind: string): (Row & { scrim?: boolean | 'stage' }) | undefined => ROWS[kind] ?? XROWS[kind]
 const ROWS: Record<string, Row> = {
   // T1 `oh, diabolical`: Butcher's bust slides in at the left and says it.
   diabolical: {
@@ -182,7 +278,7 @@ const ROWS: Record<string, Row> = {
       const big = 2.1
       const sp = SP.TB_HOMELANDER_BUST
       const x = Math.max(70, g.W / 2 - 150)
-      const word = g.m === 'book' ? 'LOOK AT ME!' : 'LOOK AT ME!'
+      const word = g.m === 'book' ? 'LOOK AT ’IM.' : 'LOOK AT ME!'
       return a.on(dim(g.W, g.H, P, 0.82), 0.15, 2.4) + a.kf(`<g transform="translate(${r1(x)} ${r1(g.H - 8 - spH(sp) * big)})">${px(sp, 0, 0, big)}</g>`, [[0, 'opacity:0;transform:scale(.4)'], [0.2, 'opacity:0;transform:scale(.4)'], [0.55, 'opacity:1;transform:scale(1.04)'], [0.7, 'opacity:1;transform:none'], [2.3, 'opacity:1;transform:none'], [2.4, 'opacity:0']], { c: true, ease: 'cubic-bezier(.2,1.2,.3,1)' }) + a.on(`<g>${C(x + spW(sp) * big + 24, g.H / 2 + 12, word, 34, PROPS.hero, 'letter-spacing="2" stroke="#FFFFFF" stroke-width=".8"')}</g>`, 0.7, 2.35) 
     },
     pane: ['task', (a, g) => a.on(`<rect width="${g.W}" height="${g.H}" fill="${PROPS.hero}" opacity=".12"/>${cap(g.W / 2, g.H / 2 + 6, 'LOOK AT ME.', g.m, { z: 16, mid: true, red: true })}<g class="tqh"><circle cx="${r1(g.W / 2 - 14)}" cy="${r1(g.H / 2 - 22)}" r="3" fill="#FF2A2A"/><circle cx="${r1(g.W / 2 + 14)}" cy="${r1(g.H / 2 - 22)}" r="3" fill="#FF2A2A"/></g>`, 0.6, 2.4)],
@@ -321,7 +417,7 @@ const ROWS: Record<string, Row> = {
   training: {
     band: (a, g) => {
       const x = Math.max(160, g.W * 0.32)
-      return a.on(slate(x, 34, 'TRAINING A-TRAIN', 'PHASE 7 · TAKE 1'), 0, 3) + a.mv(`<g class="tqf1">${feet(SP.TB_ATRAIN_RUN3, 0.84)}</g><g class="tqf2">${feet(SP.TB_ATRAIN_RUN4, 0.84)}</g>`, [[0, x - 30, GROUND, 0], [0.2, x - 30, GROUND, 1], [2.8, x - 30, GROUND, 1], [3, x - 30, GROUND, 0]], { still: 1 }) + a.on(T(x + slateW('TRAINING A-TRAIN', 'PHASE 7 · TAKE 1') + 12, 52, 'fweet!', 12, 700, '#FFFFFF', 'font-style="italic"'), 1.4, 2.2)
+      return a.on(clapSlate(a, x, 34, 'TRAINING A-TRAIN', 'PHASE 7 · TAKE 1', 0.35), 0, 3) + a.mv(`<g class="tqf1">${feet(SP.TB_ATRAIN_RUN3, 0.84)}</g><g class="tqf2">${feet(SP.TB_ATRAIN_RUN4, 0.84)}</g>`, [[0, x - 30, GROUND, 0], [0.2, x - 30, GROUND, 1], [2.8, x - 30, GROUND, 1], [3, x - 30, GROUND, 0]], { still: 1 }) + a.on(T(x + slateW('TRAINING A-TRAIN', 'PHASE 7 · TAKE 1') + 12, 52, 'fweet!', 12, 700, '#FFFFFF', 'font-style="italic"'), 1.4, 2.2)
     },
     pane: ['cred', (a, g) => a.slam(stamp(g.W - 100, 40, 'PHASE 7 · NOW CASTING', g.m === 'book' ? PROPS.marker : '#C9A13B', 11, -6), 0.2, 2.9)],
   },
@@ -335,11 +431,22 @@ const ROWS: Record<string, Row> = {
     band: (a, g) => {
       const x = 14
       const y = 102
-      let s = a.on(`<rect x="${x}" y="${y}" width="${g.W - 28}" height="26" fill="#0B1020" opacity=".94"/><rect x="${x}" y="${y}" width="98" height="26" fill="${PROPS.hero}"/>${C(x + 8, y + 18, 'SEVEN ON 7', 12, '#FFFFFF', 'letter-spacing="1.2"')}`, 0, 6)
-      for (let i = 0; i < 7; i++) s += a.on(T(x + 110, y + 17.5, clip(VNN_BRAND[(i * 9) % VNN_BRAND.length] as string, 11, g.W - 160, 0, true), 11, 700, '#FFFFFF'), 0.2 + i * 0.8, 1.0 + i * 0.8, { still: i === 0 })
-      return s
+      const w = g.W - 28
+      const cid = gid(g, 's7')
+      // The lower-third whips in from the left, the red tab slams with a spark, a LIVE dot blinks, and seven headlines roll up
+      // through the slot (in from below, settle, out above), the way a news desk turns its crawl over.
+      let s = a.kf(`<rect x="${x}" y="${y}" width="${r1(w)}" height="26" fill="#0B1020" opacity=".94"/>`, [[0, 'transform:scaleX(0)'], [0.05, 'transform:scaleX(0)'], [0.4, 'transform:none'], [5.6, 'transform:none'], [5.9, 'transform:scaleX(0)'], [6, 'transform:scaleX(0)']], { ease: ease('whip'), origin: `${x}px 0` })
+      s += a.slam(`<rect x="${x}" y="${y}" width="98" height="26" fill="${PROPS.hero}"/>${C(x + 8, y + 18, 'SEVEN ON 7', 12, '#FFFFFF', 'letter-spacing="1.2"')}`, 0.3, 5.7)
+      s += a.on(`<g class="tqf1"><circle cx="${r1(x + w - 44)}" cy="${y + 13}" r="3" fill="#FF3B3B"/></g>${C(x + w - 36, y + 17, 'LIVE', 9, '#FFFFFF', 'letter-spacing="1"')}`, 0.5, 5.6)
+      let lines = ''
+      for (let i = 0; i < 7; i++) {
+        const t0 = 0.55 + i * 0.72
+        lines += a.mv(T(x + 110, y + 17.5, clip(VNN_BRAND[(i * 9) % VNN_BRAND.length] as string, 11, g.W - 220, 0, true), 11, 700, '#FFFFFF'), [[0, 0, 24, 0], [t0, 0, 24, 1], [t0 + 0.2, 0, 0, 1], [t0 + 0.58, 0, 0, 1], [t0 + 0.72, 0, -24, 1], [6, 0, -24, 0]], { still: i === 0 ? 2 : 0, ease: ease('settle') })
+      }
+      s += `<defs><clipPath id="${cid}"><rect x="${x + 102}" y="${y}" width="${r1(w - 160)}" height="26"/></clipPath></defs><g clip-path="url(#${cid})">${lines}</g>`
+      return s + a.fx(fx.sparks(a.sg, 0.52, x + 98, y + 13, { seed: 's7', color: '#F0D27A' }) + fx.ring(a.sg, 0.52, x + 49, y + 26, { rx: 40, color: '#F0D27A', w: 1.4 }))
     },
-    pane: ['log', (a, g) => a.on(`<rect x="44" y="46" width="112" height="18" rx="2" fill="${PROPS.hero}"/>${C(52, 59, 'SEVEN ON 7 · LIVE', 9.5, '#FFFFFF', 'letter-spacing="1"')}<circle class="tqh" cx="164" cy="55" r="3" fill="${PROPS.hero}"/>`, 0, 6)],
+    pane: ['log', (a, g) => a.slam(`<rect x="44" y="46" width="112" height="18" rx="2" fill="${PROPS.hero}"/>${C(52, 59, 'SEVEN ON 7 · LIVE', 9.5, '#FFFFFF', 'letter-spacing="1"')}`, 0.15, 5.8) + a.on(`<g class="tqf1"><circle cx="164" cy="55" r="3" fill="${PROPS.hero}"/></g>`, 0.4, 5.8) + a.fx(fx.sparks(a.sg, 0.37, 156, 55, { seed: 's7p', color: '#F0D27A' }))],
   },
   // T23 `dawn of the seven`: THE PREMIERE now: the carpet, the flashbulbs, the stare, the marquee.
   premiere: {
@@ -359,11 +466,18 @@ const ROWS: Record<string, Row> = {
   funcut: {
     band: (a, g) => {
       const id = gid(g, 'gr')
-      return a.on(`<defs>${grainDefs(id)}</defs>${pillar(g.W, g.H)}<rect width="${g.W}" height="${g.H}" filter="url(#${id})" opacity=".08"/>`, 0, 8) + a.on(slate(Math.max(16, g.W * 0.16 + 10), 38, 'DAWN OF THE SEVEN', 'RE-RE-RELEASE · FUN CUT · +2 HRS'), 0.2, 3.2)
+      const pw = r1(g.W * 0.16)
+      // The 4:3 bars close in from the sides (snap), the grain comes up, the slate drops in (overshoot), CLAPS, and is yanked away.
+      const bar = (right: boolean) => a.kf(`<rect x="${right ? r1(g.W - pw) : 0}" width="${pw}" height="${g.H}" fill="#050505"/>`, [[0, `transform:translateX(${right ? '' : '-'}${pw}px)`], [0.05, `transform:translateX(${right ? '' : '-'}${pw}px)`], [0.42, 'transform:none'], [7.6, 'transform:none'], [8, `transform:translateX(${right ? '' : '-'}${pw}px)`]], { ease: ease('snap') })
+      const sx = Math.max(16, g.W * 0.16 + 10)
+      const sl = clapSlate(a, sx, 38, 'DAWN OF THE SEVEN', 'RE-RE-RELEASE · FUN CUT · +2 HRS', 1.2)
+      return bar(false) + bar(true) + a.on(`<defs>${grainDefs(id)}</defs><rect width="${g.W}" height="${g.H}" filter="url(#${id})" opacity=".08"/>`, 0.3, 8) + a.mv(sl, [[0, 0, -96], [0.45, 0, -96], [0.85, 0, 0], [2.9, 0, 0], [3.0, 0, 6], [3.3, 0, -96], [8, 0, -96]], { still: 2, ease: ease('overshoot') })
     },
     pane: ['all', (a, g) => {
       const id = gid(g, 'gr')
-      return a.on(`<defs>${grainDefs(id)}</defs>${pillar(g.W, g.H, 0.1)}<rect width="${g.W}" height="${g.H}" filter="url(#${id})" opacity=".06"/>${g.on === 'task' ? C(g.W / 2, g.H - 10, 'FUN CUT · +2 HRS', 9, '#FFFFFF', 'text-anchor="middle" letter-spacing="2"') : ''}`, 0, 8)
+      const pw = r1(g.W * 0.1)
+      const bar = (right: boolean) => a.kf(`<rect x="${right ? r1(g.W - pw) : 0}" width="${pw}" height="${g.H}" fill="#050505"/>`, [[0, `transform:translateX(${right ? '' : '-'}${pw}px)`], [0.1, `transform:translateX(${right ? '' : '-'}${pw}px)`], [0.5, 'transform:none'], [7.6, 'transform:none'], [8, `transform:translateX(${right ? '' : '-'}${pw}px)`]], { ease: ease('snap') })
+      return bar(false) + bar(true) + a.on(`<defs>${grainDefs(id)}</defs><rect width="${g.W}" height="${g.H}" filter="url(#${id})" opacity=".06"/>${g.on === 'task' ? C(g.W / 2, g.H - 10, 'FUN CUT · +2 HRS', 9, '#FFFFFF', 'text-anchor="middle" letter-spacing="2"') : ''}`, 0.4, 8)
     }],
     shake: { band: [[0, 'filter:grayscale(1) contrast(1.15)'], [8, 'filter:grayscale(1) contrast(1.15)']], all: [[0, 'filter:grayscale(1) contrast(1.1)'], [8, 'filter:grayscale(1) contrast(1.1)']] },
   },
@@ -373,9 +487,21 @@ const ROWS: Record<string, Row> = {
       const b = bustAt(g.m)
       const id = gid(g, 'ol')
       const tag = '“You can’t kill what you can’t see.”'
-      return a.on(coverBust(P), 0.6, 3.9, { fade: 0.5 }) + a.on(`<defs>${outlineDefs(id, '#DDE8F2')}</defs><g filter="url(#${id})" class="tb-pulse">${px(b.sp, b.x, b.y, b.s)}</g>`, 1.0, 3.9) + a.on(`<g transform="translate(70 30)"><rect width="${sansW(tag, 10.5) + 20}" height="50" rx="2" fill="#0B0C10" stroke="#9AA6B8"/>${C(10, 17, 'TRANSLUCENT: INVISIBLE FORCE 2', 11, '#DDE8F2', 'letter-spacing="1"')}${T(10, 36, tag, 10.5, 400, '#C9D3E0', 'font-style="italic"')}</g>`, 0.8, 3.9)
+      // A light bar wipes down the bust and takes it with it (a shimmer outline is all that is left), the poster drops in, and a
+      // line of footprints walks off along the foot: someone nobody can see, kicking up dust.
+      let s = a.on(coverBust(P), 0.6, 3.9, { fade: 0.4 }) + a.on(`<defs>${outlineDefs(id, '#DDE8F2')}</defs><g filter="url(#${id})" class="tb-pulse">${px(b.sp, b.x, b.y, b.s)}</g>`, 1.0, 3.9)
+      s += a.kf(`<rect x="14" y="34" width="46" height="3" fill="#FFFFFF" opacity=".85"/>`, [[0, 'opacity:0;transform:none'], [0.45, 'opacity:0;transform:none'], [0.5, 'opacity:1;transform:none'], [1.0, 'opacity:1;transform:translateY(46px)'], [1.05, 'opacity:0;transform:translateY(46px)'], [4, 'opacity:0']], { ease: ease('settle'), still: 'opacity="0"' })
+      s += a.mv(`<rect width="${sansW(tag, 10.5) + 20}" height="50" rx="2" fill="#0B0C10" stroke="#9AA6B8"/>${C(10, 17, 'TRANSLUCENT: INVISIBLE FORCE 2', 11, '#DDE8F2', 'letter-spacing="1"')}${T(10, 36, tag, 10.5, 400, '#C9D3E0', 'font-style="italic"')}`, [[0, 70, -60, 0], [0.7, 70, -60, 1], [1.05, 70, 30, 1], [3.6, 70, 30, 1], [3.9, 70, 30, 0], [4, 70, 30, 0]], { still: 2, ease: ease('overshoot') })
+      let steps = ''
+      for (let i = 0; i < 7; i++) {
+        const t = 1.3 + i * 0.32
+        const x = 92 + i * 34
+        const y = GROUND - 2 - (i % 2) * 4
+        steps += a.sg.win(t, 3.9, `<ellipse cx="${x}" cy="${y}" rx="3.4" ry="1.6" fill="#C9D3E0" opacity=".55"/>`) + fx.dust(a.sg, t, x, y, { n: 2, seed: `inv${i}`, color: '#C9D3E0', dx: -5, s: 0.7 })
+      }
+      return s + a.fx(fx.sparks(a.sg, 0.95, 37, 60, { seed: 'invs', color: '#DDE8F2', n: 6 }) + steps)
     },
-    pane: ['cred', (a, g) => a.on(`<g transform="translate(${r1(g.W - 220)} 26)"><rect width="200" height="64" rx="2" fill="#0B0C10" stroke="#9AA6B8" stroke-dasharray="3 3"/>${C(100, 26, 'INVISIBLE FORCE 2', 13, '#DDE8F2', 'text-anchor="middle" letter-spacing="1.4"')}${C(100, 46, 'NOW SHOWING · SORT OF', 8.5, '#9AA6B8', 'text-anchor="middle" letter-spacing="1"')}</g>`, 0.4, 3.9, { fade: 0.4 })],
+    pane: ['cred', (a, g) => a.mv(`<rect width="200" height="64" rx="2" fill="#0B0C10" stroke="#9AA6B8" stroke-dasharray="3 3"/>${C(100, 26, 'INVISIBLE FORCE 2', 13, '#DDE8F2', 'text-anchor="middle" letter-spacing="1.4"')}${C(100, 46, 'NOW SHOWING · SORT OF', 8.5, '#9AA6B8', 'text-anchor="middle" letter-spacing="1"')}`, [[0, g.W - 220, -70, 0], [0.3, g.W - 220, -70, 1], [0.7, g.W - 220, 26, 1], [3.5, g.W - 220, 26, 1], [3.9, g.W - 220, 26, 0], [4, g.W - 220, 26, 0]], { still: 2, ease: ease('overshoot') }) + a.kf(`<rect x="${r1(g.W - 220)}" y="26" width="200" height="64" fill="#DDE8F2"/>`, [[0, 'opacity:0'], [1.6, 'opacity:0'], [1.7, 'opacity:.35'], [2.4, 'opacity:0'], [4, 'opacity:0']], { still: 'opacity="0"' }) + a.fx(fx.sparks(a.sg, 1.65, g.W - 120, 58, { seed: 'invp', color: '#DDE8F2', n: 8 }) + fx.dust(a.sg, 2.2, g.W - 150, 92, { n: 3, seed: 'invpd', color: '#9AA6B8' }))],
   },
   // T26 `this means noir` (phase 3 adds the hidden skin): Noir steps in, says nothing; the 1979 tape.
   noirmode: {
@@ -396,7 +522,7 @@ const ROWS: Record<string, Row> = {
     band: (a, g) => {
       const x = g.W * 0.3
       const fr: Fr[] = [[0, x, GROUND + 10, 0], [0.3, x, GROUND + 10, 1, 'rotate(-40deg)'], [0.8, x + 60, GROUND - 50, 1], [1.3, x + 120, GROUND + 10, 1, 'rotate(40deg)'], [1.5, x + 150, GROUND + 10, 0], [1.6, x + 160, GROUND + 10, 1, 'rotate(-40deg)'], [2.1, x + 220, GROUND - 50, 1], [2.6, x + 280, GROUND + 10, 1, 'rotate(40deg)'], [2.8, x + 280, GROUND + 10, 0], [3.5, x + 280, GROUND + 10, 0]]
-      return a.mv(dolphin(-16, -8), fr, { still: 2, c: true }) + a.on(slate(Math.max(80, x - 220), 34, 'NOT WITHOUT MY DOLPHIN', 'FROM THE MEMOIR “DEEPER”'), 0.4, 3.4)
+      return a.mv(dolphin(-16, -8), fr, { still: 2, c: true }) + a.on(clapSlate(a, Math.max(80, x - 220), 34, 'NOT WITHOUT MY DOLPHIN', 'FROM THE MEMOIR “DEEPER”', 0.5), 0.4, 3.4)
     },
     pane: ['log', (a, g) => a.mv(dolphin(-16, -8, 2), [[0, 40, g.H, 0], [0.4, 60, g.H - 20, 1, 'rotate(-40deg)'], [1.6, g.W / 2, 24, 1], [2.8, g.W - 60, g.H - 20, 1, 'rotate(40deg)'], [3.2, g.W - 40, g.H, 0], [3.5, g.W - 40, g.H, 0]], { still: 2, c: true })],
   },
@@ -407,8 +533,18 @@ const ROWS: Record<string, Row> = {
   },
   // T30 `american hero`: THE TABLE's open seats get spotlights and a VOTE bar.
   americanhero: {
-    band: (a, g) => a.on(cone(g.W * 0.35, 0, GROUND, 80) + cone(g.W * 0.65, 0, GROUND, 80), 0.2, 4.8, { fade: 0.3 }) + a.on(cap(g.W / 2, 30, 'AMERICAN HERO · 2 OPEN SLOTS · VOTE NOW', g.m, { z: 11, mid: true }), 0.3, 4.8),
-    pane: ['table', (a, g) => a.on(cone(g.W * 0.3, 0, g.H - 20, 70) + cone(g.W * 0.7, 0, g.H - 20, 70), 0.2, 4.8, { fade: 0.3 }) + a.on(cap(g.W / 2, 50, 'AMERICAN HERO · 2 OPEN SLOTS', g.m, { mid: true }), 0.3, 4.8) + vote(a, g.W * 0.3 - 50, g.H - 30) + vote(a, g.W * 0.7 - 50, g.H - 30)],
+    band: (a, g) => {
+      const fx2 = g.W * 0.65
+      // Two spotlights swing down onto the open slots (overshoot), Frenchie hops into the right one and POINTs at the vote.
+      poses(a, { fr: SP.TB_FRENCHIE, frp: SP.TB_FRENCHIE_POINT })
+      const swing = (x: number, dir: number) => a.kf(cone(x, 0, GROUND, 80), [[0, `opacity:0;transform:rotate(${dir * 38}deg)`], [0.2, `opacity:0;transform:rotate(${dir * 38}deg)`], [0.3, `opacity:1;transform:rotate(${dir * 38}deg)`], [0.85, 'opacity:1;transform:rotate(0deg)'], [4.6, 'opacity:1;transform:rotate(0deg)'], [5, 'opacity:0;transform:rotate(0deg)']], { ease: ease('overshoot'), origin: `${r1(x)}px 0px`, still: 'opacity="1"' })
+      const fr = actor(a, 'fr', [[0, 1.6, 'fr', -1], [1.6, 5, 'frp', -1]], [[0, g.W + 30, GROUND], [0.6, g.W + 30, GROUND], [1.2, fx2, GROUND], [1.3, fx2, GROUND, 0.88], [1.45, fx2, GROUND - 10, 1.06], [1.62, fx2, GROUND, 0.9], [1.75, fx2, GROUND, 1], [4.5, fx2, GROUND], [5, g.W + 30, GROUND]], 0.96, { h: 45 })
+      return swing(g.W * 0.35, 1) + swing(fx2, -1) + fr + stillPose(a, 'frp', fx2, GROUND, 0.96, -1) + a.fx(fx.dust(a.sg, 1.62, fx2 + 12, GROUND - 2, { n: 3, seed: 'ahd' }) + fx.ring(a.sg, 1.62, fx2, GROUND - 1, { rx: 14, color: '#FFF4C2', w: 1.2 })) + a.on(cap(g.W / 2, 30, 'AMERICAN HERO · 2 OPEN SLOTS · VOTE NOW', g.m, { z: 11, mid: true }), 0.9, 4.8)
+    },
+    pane: ['table', (a, g) => {
+      const swing = (x: number, dir: number) => a.kf(cone(x, 0, g.H - 20, 70), [[0, `opacity:0;transform:rotate(${dir * 30}deg)`], [0.2, `opacity:1;transform:rotate(${dir * 30}deg)`], [0.8, 'opacity:1;transform:rotate(0deg)'], [4.6, 'opacity:1;transform:rotate(0deg)'], [5, 'opacity:0;transform:rotate(0deg)']], { ease: ease('overshoot'), origin: `${r1(x)}px 0px`, still: 'opacity="1"' })
+      return swing(g.W * 0.3, 1) + swing(g.W * 0.7, -1) + a.on(cap(g.W / 2, 50, 'AMERICAN HERO · 2 OPEN SLOTS', g.m, { mid: true }), 0.3, 4.8) + vote(a, g.W * 0.3 - 50, g.H - 30) + vote(a, g.W * 0.7 - 50, g.H - 30) + a.fx(fx.ring(a.sg, 0.8, g.W * 0.3, g.H - 22, { rx: 30, color: '#FFF4C2', w: 1.2 }) + fx.ring(a.sg, 0.8, g.W * 0.7, g.H - 22, { rx: 30, color: '#FFF4C2', w: 1.2 }))
+    }],
   },
   // T31 `rock my kiss` / `supersonic` / `super-sweet`: a tiny stage, three silhouettes, a heart spotlight, the cassette.
   rockmykiss: {
@@ -463,13 +599,29 @@ const ROWS: Record<string, Row> = {
   },
   // T36 `you're bad product`: BAD PRODUCT slams on the bust; it winces. The contract's seal cracks.
   badproduct: {
-    band: (a, g) => a.slam(stamp(37, 60, 'BAD PRODUCT', PROPS.stamp, 9, -12), 0.15, 1.9) + a.on(`<path d="M52 44q2 4 0 6q-2 -2 0 -6z" fill="#9FDBFF"/>${T(64, 30, 'wince.', 11, 700, '#FFFFFF', 'font-style="italic"')}`, 0.5, 1.9),
-    pane: ['cred', (a, g) => a.slam(stamp(g.W - 110, 46, 'BAD PRODUCT', PROPS.stamp, 14, -8), 0.2, 1.9) + a.on(`<path d="M${g.W - 60} 20l-8 14 6 6-10 12M${g.W - 60} 20l10 10-4 8" fill="none" stroke="#1A1C22" stroke-width="1.4"/>`, 0.4, 1.95)],
+    band: (a, g, P) => {
+      const b = bustAt(g.m)
+      // The stamp rises and tilts back (the wind-up), slams onto the bust, which squashes and springs back; a sweat drop falls.
+      const bust = a.kf(px(b.sp, b.x, b.y, b.s), [[0, 'transform:none'], [0.42, 'transform:none'], [0.47, 'transform:scale(1.1,.84)'], [0.6, 'transform:scale(.96,1.05)'], [0.74, 'transform:none'], [2, 'transform:none']], { origin: '37px 82px' })
+      const st = a.kf(stamp(37, 60, 'BAD PRODUCT', PROPS.stamp, 9, -12), [[0, 'opacity:0;transform:translate(10px,-20px) scale(1.5) rotate(-10deg)'], [0.08, 'opacity:1;transform:translate(10px,-20px) scale(1.5) rotate(-10deg)'], [0.32, 'opacity:1;transform:translate(14px,-30px) scale(1.6) rotate(-22deg)'], [0.44, 'opacity:1;transform:none'], [0.52, 'opacity:1;transform:scale(.92)'], [0.6, 'opacity:1;transform:none'], [1.9, 'opacity:1;transform:none'], [1.96, 'opacity:0'], [2, 'opacity:0']], { c: true, ease: ease('snap') })
+      return a.on(coverBust(P), 0.02, 1.98) + bust + st + a.mv(`<path d="M0 0q2 4 0 6q-2 -2 0 -6z" fill="#9FDBFF"/>`, [[0, 52, 44, 0], [0.6, 52, 44, 1], [1.5, 52, 58, 1], [1.7, 52, 60, 0], [2, 52, 60, 0]], { still: 1, ease: ease('settle') }) + a.on(T(64, 30, 'wince.', 11, 700, '#FFFFFF', 'font-style="italic"'), 0.55, 1.9) + a.fx(fx.sparks(a.sg, 0.45, 37, 58, { seed: 'bp', color: '#FFE9A8', n: 8 }) + fx.dust(a.sg, 0.46, 50, 82, { n: 3, seed: 'bpd' }))
+    },
+    pane: ['cred', (a, g) => a.kf(stamp(g.W - 110, 46, 'BAD PRODUCT', PROPS.stamp, 14, -8), [[0, 'opacity:0;transform:translateY(-24px) scale(1.4) rotate(-12deg)'], [0.1, 'opacity:1;transform:translateY(-24px) scale(1.4) rotate(-12deg)'], [0.3, 'opacity:1;transform:translateY(-32px) scale(1.5) rotate(-18deg)'], [0.42, 'opacity:1;transform:none'], [0.5, 'opacity:1;transform:scale(.94)'], [0.58, 'opacity:1;transform:none'], [1.9, 'opacity:1;transform:none'], [2, 'opacity:0']], { c: true, ease: ease('snap') }) + a.kf(`<path d="M${g.W - 60} 20l-8 14 6 6-10 12M${g.W - 60} 20l10 10-4 8" fill="none" stroke="#1A1C22" stroke-width="1.4" stroke-dasharray="60"/>`, [[0, 'stroke-dashoffset:60;opacity:1'], [0.45, 'stroke-dashoffset:60;opacity:1'], [0.75, 'stroke-dashoffset:0;opacity:1'], [1.95, 'stroke-dashoffset:0;opacity:1'], [2, 'opacity:0']], { still: 'stroke-dashoffset="0"' }) + a.fx(fx.sparks(a.sg, 0.43, g.W - 110, 46, { seed: 'bpp', color: '#FFE9A8', n: 8 }))],
   },
   // T37 `…really a pharmaceutical company`: the Q-SCORE watermark for 5 s.
   pharma: {
-    band: (a, g) => a.on(`${vial(gaugeOf(g.W).x + gaugeOf(g.W).w * 0.5, 34, 1.3)}${cap(gaugeOf(g.W).x + gaugeOf(g.W).w * 0.5 + 18, 46, 'R&D · VOUGHT PHARMACEUTICALS', g.m)}`, 0.2, 4.8),
-    pane: ['cred', (a, g) => a.on(`<g transform="translate(${g.W / 2} ${g.H / 2}) rotate(-12)">${C(0, 6, 'A PHARMACEUTICAL COMPANY, REALLY.', Math.min(22, g.W / 22), '#C9A13B', 'text-anchor="middle" letter-spacing="2"')}</g>`, 0, 5, { fade: 0.5, op: 0.55 })],
+    band: (a, g) => {
+      const q = gaugeOf(g.W)
+      const gx = q.x + q.w * 0.5
+      // The bust tosses a vial: it flips end over end along an arc, lands upright on the gauge (squash, a blue splash), and the
+      // label slides out from it.
+      const fr: [number, number, number, number?, string?][] = []
+      for (let i = 0; i <= 6; i++) { const u = i / 6; fr.push([0.15 + u * 0.75, 40 + (gx - 40) * u, 40 - 44 * 4 * u * (1 - u), 1, `rotate(${Math.round(u * 720)}deg)`]) }
+      fr.unshift([0, 40, 40, 0, 'rotate(0deg)'])
+      fr.push([0.98, gx, 40, 1, 'rotate(720deg) scale(1.18,.8)'], [1.08, gx, 40, 1, 'rotate(720deg) scale(.94,1.08)'], [1.18, gx, 40, 1, 'rotate(720deg)'], [4.7, gx, 40, 1, 'rotate(720deg)'], [5, gx, 40, 0, 'rotate(720deg)'])
+      return a.mv(vial(-5, -11, 1.3), fr, { still: 9, c: true }) + a.mv(cap(0, 46, 'R&D · VOUGHT PHARMACEUTICALS', g.m), [[0, gx + 6, 0, 0], [1.1, gx + 6, 0, 0], [1.45, gx + 18, 0, 1], [4.8, gx + 18, 0, 1], [5, gx + 18, 0, 0]], { still: 2, ease: ease('settle') }) + a.fx(fx.sparks(a.sg, 0.95, gx, 50, { seed: 'phs', color: PROPS.vblue, n: 7 }) + fx.ring(a.sg, 0.95, gx, 52, { rx: 12, color: '#9FDBFF', w: 1.4 }))
+    },
+    pane: ['cred', (a, g) => a.kf(`<g transform="translate(${g.W / 2} ${g.H / 2}) rotate(-12)">${C(0, 6, 'A PHARMACEUTICAL COMPANY, REALLY.', Math.min(22, g.W / 22), '#C9A13B', 'text-anchor="middle" letter-spacing="2"')}</g>`, [[0, 'opacity:0;transform:scale(1.6)'], [0.2, 'opacity:0;transform:scale(1.6)'], [0.5, 'opacity:.55;transform:scale(.96)'], [0.62, 'opacity:.55;transform:none'], [4.5, 'opacity:.55;transform:none'], [5, 'opacity:0;transform:none']], { c: true, ease: ease('snap'), still: 'opacity=".55"' })],
   },
   // T38 `storage boy`: a frosted crate slides onto the foot with a padlock; frost creeps 10 px.
   storage: {
@@ -480,12 +632,22 @@ const ROWS: Record<string, Row> = {
   redscare: {
     band: (a, g) => {
       const cx = g.W / 2
-      let s = a.on(`<rect width="${g.W}" height="${g.H}" rx="10" fill="#3A2A18" opacity=".55"/>`, 0, 5, { fade: 0.3 })
-      for (const [i, n] of ['3', '2', '1'].entries()) s += a.on(`<circle cx="${cx}" cy="${g.H / 2}" r="30" fill="#E8DCC0" stroke="#3A2A18" stroke-width="2"/><path d="M${cx - 40} ${g.H / 2}h80M${cx} ${g.H / 2 - 40}v80" stroke="#3A2A18"/>${C(cx, g.H / 2 + 14, n, 38, '#3A2A18', 'text-anchor="middle"')}`, 0.2 + i * 0.5, 0.7 + i * 0.5, { still: i === 2 })
-      const sp = SP.TB_SOLDIERBOY_BUST
-      return s + a.on(`<g transform="translate(${r1(cx - 160)} 30)"><rect width="52" height="58" fill="#E8DCC0" stroke="#3A2A18" stroke-width="2"/><g style="filter:brightness(.25) sepia(1)">${px(sp, 4, 6, 44 / spW(sp))}</g></g><g transform="translate(${r1(cx - 96)} 50)">${C(0, 0, 'VOUGHT RISING · 2027', 20, '#F4EAD0', 'letter-spacing="2"')}${C(0, 22, '“RED SCARE”', 12, '#E8DCC0', 'letter-spacing="2"')}</g>`, 1.75, 5)
+      const cy = g.H / 2
+      // A 1950s newsreel: the sepia picture flickers (stepped), the leader counts 3·2·1 with its sweep hand going round, the poster
+      // frame swings in on its nail with Soldier Boy SALUTING, the title card rolls in from the right, a scratch runs down the film.
+      const flick: [number, string][] = [[0, 'opacity:0']]
+      for (let i = 0; i < 24; i++) flick.push([0.3 + i * 0.2, `opacity:${(0.5 + unit(`rsf${i}`) * 0.12).toFixed(2)}`])
+      flick.push([5, 'opacity:0'])
+      let s = a.kf(`<rect width="${g.W}" height="${g.H}" rx="10" fill="#3A2A18"/>`, flick, { ease: 'steps(1,end)', still: 'opacity=".55"' })
+      for (const [i, n] of ['3', '2', '1'].entries()) s += a.on(`<circle cx="${cx}" cy="${cy}" r="30" fill="#E8DCC0" stroke="#3A2A18" stroke-width="2"/><path d="M${cx - 40} ${cy}h80M${cx} ${cy - 40}v80" stroke="#3A2A18"/>${C(cx, cy + 14, n, 38, '#3A2A18', 'text-anchor="middle"')}`, 0.2 + i * 0.5, 0.7 + i * 0.5, { still: i === 2 })
+      s += a.kf(`<path d="M${cx} ${cy}V${cy - 30}A30 30 0 0 1 ${r1(cx + 21.2)} ${r1(cy - 21.2)}z" fill="#3A2A18" opacity=".35"/>`, [[0, 'opacity:0;transform:rotate(0deg)'], [0.2, 'opacity:1;transform:rotate(0deg)'], [1.7, 'opacity:1;transform:rotate(1080deg)'], [1.72, 'opacity:0;transform:rotate(1080deg)'], [5, 'opacity:0']], { origin: `${cx}px ${cy}px`, still: 'opacity="0"' })
+      const sp = SP.TB_SOLDIERBOY_SALUTE
+      const fx0 = cx - 160
+      s += a.kf(`<g transform="translate(${r1(fx0)} 30)"><path d="M26 -8L6 0M26 -8L46 0" stroke="#3A2A18" stroke-width="1.2"/><circle cx="26" cy="-8" r="2" fill="#3A2A18"/><rect width="52" height="58" fill="#E8DCC0" stroke="#3A2A18" stroke-width="2"/><g style="filter:brightness(.35) sepia(1)">${px(sp, 26 - (spW(sp) * 1.08) / 2, 3, 1.08)}</g></g>`, [[0, 'opacity:0;transform:rotate(-24deg)'], [1.75, 'opacity:0;transform:rotate(-24deg)'], [1.8, 'opacity:1;transform:rotate(-24deg)'], [2.3, 'opacity:1;transform:rotate(6deg)'], [2.6, 'opacity:1;transform:rotate(-2deg)'], [2.8, 'opacity:1;transform:none'], [5, 'opacity:1;transform:none']], { ease: ease('settle'), origin: `${r1(fx0 + 26)}px 22px`, still: 'opacity="1"' })
+      s += a.mv(`${C(0, 0, 'VOUGHT RISING · 2027', 20, '#F4EAD0', 'letter-spacing="2"')}${C(0, 22, '“RED SCARE”', 12, '#E8DCC0', 'letter-spacing="2"')}`, [[0, g.W + 20, 50, 0], [1.9, g.W + 20, 50, 1], [2.4, cx - 96, 50, 1], [5, cx - 96, 50, 1]], { still: 2, ease: ease('settle') })
+      return s + a.fx(a.sg.win(2.0, 2.3, `<path d="M${r1(cx + 120)} 0V${g.H}" stroke="#F4EAD0" stroke-width=".8" opacity=".6"/>`) + a.sg.win(3.4, 3.6, `<path d="M${r1(cx - 220)} 0V${g.H}" stroke="#F4EAD0" stroke-width=".8" opacity=".5"/>`) + fx.dust(a.sg, 2.3, fx0 + 26, 90, { n: 3, seed: 'rsd', color: '#E8DCC0' }))
     },
-    pane: ['cred', (a, g) => a.on(`<rect width="${g.W}" height="${g.H}" fill="#3A2A18" opacity=".35"/><rect x="${g.W / 2 - 120}" y="${g.H / 2 - 26}" width="240" height="52" fill="#E8DCC0" stroke="#3A2A18" stroke-width="2"/>${C(g.W / 2, g.H / 2 - 2, 'VOUGHT RISING', 18, '#3A2A18', 'text-anchor="middle" letter-spacing="2"')}${C(g.W / 2, g.H / 2 + 16, '1950s · “RED SCARE”', 9.5, '#3A2A18', 'text-anchor="middle" letter-spacing="1.4"')}`, 0.4, 5, { fade: 0.4 })],
+    pane: ['cred', (a, g) => a.on(`<rect width="${g.W}" height="${g.H}" fill="#3A2A18" opacity=".35"/>`, 0.2, 5, { fade: 0.3 }) + a.mv(`<rect x="-120" y="-26" width="240" height="52" fill="#E8DCC0" stroke="#3A2A18" stroke-width="2"/>${C(0, -2, 'VOUGHT RISING', 18, '#3A2A18', 'text-anchor="middle" letter-spacing="2"')}${C(0, 16, '1950s · “RED SCARE”', 9.5, '#3A2A18', 'text-anchor="middle" letter-spacing="1.4"')}`, [[0, g.W / 2, -40, 0], [0.4, g.W / 2, -40, 1], [0.8, g.W / 2, g.H / 2, 1], [4.6, g.W / 2, g.H / 2, 1], [5, g.W / 2, g.H / 2, 0]], { still: 2, ease: ease('overshoot') })],
   },
   // T40 `godolkin`: the GOD U. pennant flutters on the band's corner; #ThinkBrink drifts along the crawl; a crest on THE TABLE.
   godolkin: {
@@ -546,12 +708,28 @@ const ROWS: Record<string, Row> = {
   // T45 `full roster` (alone): all seven seats light with their emblems, one flash.
   fullroster: {
     band: (a, g) => {
-      const x = g.W / 2 - 120
-      let s = a.on(`<rect x="${x}" y="22" width="240" height="56" rx="6" fill="#0B1020" stroke="#C9A13B" stroke-width="1.4"/>${C(x + 120, 72, 'FULL ROSTER', 13, '#F0D27A', 'text-anchor="middle" letter-spacing="3"')}`, 0, 2)
-      for (let i = 0; i < 7; i++) s += a.on(`<circle cx="${r1(x + 24 + i * 32)}" cy="42" r="11" fill="#C9A13B"/>${emblem(i, x + 18.5 + i * 32, 36.5, '#0A1430')}`, 0.1 + i * 0.1, 2)
-      return s + a.on(`<rect width="${g.W}" height="${g.H}" rx="10" fill="#FFFFFF" opacity=".75"/>`, 0.9, 1.0, { still: false })
+      const x = g.W / 2 - 155
+      const y0 = 46
+      // All nine on a dolly zoom: the seats and the panel fall back while the nine faces pop in and push forward (vertigo), one
+      // flash for the photo, confetti.
+      const B = [SP.TB_HOMELANDER_BUST, SP.TB_STARLIGHT_BUST, SP.TB_NOIR_BUST, SP.TB_ATRAIN_BUST, SP.TB_SOLDIERBOY_BUST, SP.TB_BUTCHER_BUST, SP.TB_HUGHIE_BUST, SP.TB_KIMIKO_BUST, SP.TB_FRENCHIE_BUST]
+      // The faces at half resolution (every other pixel, drawn twice the size): nine heads in ~5 k, inside the act budget.
+      const bank = new FrameBank(`tbfr${g.on[0]}`, 4)
+      B.forEach((sp, i) => bank.add(`h${i}`, { ...sp, rows: sp.rows.slice(0, 24).filter((_: string, r: number) => r % 2 === 0).map((r: string) => [...r].filter((_, c) => c % 2 === 0).join('')) }))
+      let seats = `<rect x="${x}" y="${y0}" width="310" height="60" rx="6" fill="#0B1020" stroke="#C9A13B" stroke-width="1.4"/>`
+      for (let i = 0; i < 7; i++) seats += emblem(i, x + 42.5 + i * 36, y0 + 6, '#C9A13B', 1.2)
+      let s = a.kf(seats, [[0, 'opacity:0;transform:scale(.8)'], [0.15, 'opacity:1;transform:none'], [0.8, 'opacity:1;transform:none'], [1.9, 'opacity:1;transform:scale(.95)'], [2, 'opacity:0;transform:scale(.95)']], { origin: `${r1(x + 155)}px ${y0 + 30}px`, ease: ease('settle'), still: 'opacity="1"' })
+      let heads = ''
+      for (let i = 0; i < 9; i++) heads += a.kf(bank.use(`h${i}`, x + 31 + i * 31, y0 + 34, 1, 1.5), [[0, 'opacity:0;transform:scale(.2)'], [0.12 + i * 0.06, 'opacity:0;transform:scale(.2)'], [0.3 + i * 0.06, 'opacity:1;transform:scale(1.15)'], [0.4 + i * 0.06, 'opacity:1;transform:none'], [2, 'opacity:1;transform:none']], { c: true, ease: ease('overshoot') })
+      s += a.kf(heads, [[0, 'transform:none'], [0.8, 'transform:none'], [1.9, 'transform:scale(1.06)'], [2, 'transform:scale(1.06)']], { origin: `${r1(x + 155)}px ${y0 + 34}px`, ease: ease('settle') })
+      s += a.kf(C(x + 155, y0 + 56, 'FULL ROSTER', 13, '#F0D27A', 'text-anchor="middle" letter-spacing="3"'), [[0, 'opacity:0;transform:translateY(8px)'], [0.55, 'opacity:0;transform:translateY(8px)'], [0.75, 'opacity:1;transform:none'], [2, 'opacity:1;transform:none']], { ease: ease('settle'), still: 'opacity="1"' })
+      return `<defs>${bank.defs()}</defs>` + s + a.on(`<rect width="${g.W}" height="${g.H}" rx="10" fill="#FFFFFF" opacity=".6"/>`, 0.9, 0.98, { still: false }) + a.fx(fx.confetti(a.sg, 0.95, x + 60, y0 + 10, { n: 8, seed: 'frc', colors: ['#F0D27A', '#FFFFFF', PROPS.hero] }) + fx.confetti(a.sg, 1.0, x + 250, y0 + 10, { n: 8, seed: 'frd', colors: ['#F0D27A', '#FFFFFF', PROPS.hero] }))
     },
-    pane: ['table', (a, g) => a.on(Array.from({ length: 7 }, (_, i) => cone(g.W * (0.14 + i * 0.12), 0, g.H - 20, 40)).join('') + cap(g.W / 2, 50, 'FULL ROSTER', g.m, { mid: true }), 0.1, 2)],
+    pane: ['table', (a, g) => {
+      let s = ''
+      for (let i = 0; i < 7; i++) s += a.kf(cone(g.W * (0.14 + i * 0.12), 0, g.H - 20, 40), [[0, 'opacity:0;transform:scaleY(.2)'], [0.05 + i * 0.07, 'opacity:0;transform:scaleY(.2)'], [0.25 + i * 0.07, 'opacity:1;transform:none'], [2, 'opacity:1;transform:none']], { origin: `${r1(g.W * (0.14 + i * 0.12))}px 0px`, ease: ease('overshoot'), still: 'opacity="1"' })
+      return s + a.slam(cap(g.W / 2, 50, 'FULL ROSTER', g.m, { mid: true }), 0.6, 1.95)
+    }],
   },
   // T46 `hometeamers`: APPROVAL +10 for 5 s; a crowd cheer wave.
   hometeamers: {
@@ -588,8 +766,17 @@ const ROWS: Record<string, Row> = {
   },
   // T51 `it's what clara would have wanted` (spoilers on only): the chip, a wilted rose, a shrug.
   clara: {
-    band: (a, g) => a.on(`${rose(64, 30)}${cap(86, 52, 'IT’S WHAT CLARA WOULD HAVE WANTED.', g.m, { z: 11 })}${T(86, 76, '(shrugs)', 11, 400, '#C9C2B0', 'font-style="italic"')}`, 0.1, 2.9, { fade: 0.3 }),
-    pane: ['cred', (a, g) => a.on(`${rose(g.W - 50, 20)}${cap(g.W - 60 - capW('CLARA WOULD HAVE WANTED IT.'), 40, 'CLARA WOULD HAVE WANTED IT.', g.m)}`, 0.1, 2.9, { fade: 0.3 })],
+    band: (a, g) => {
+      // The rose drops in, holds, then wilts: the bloom droops on its stem, a petal falls; the caption slides in; a little shrug.
+      const bloom = (x: number, y: number) => a.kf(`<path transform="translate(${r1(x)} ${r1(y)}) scale(1.6)" d="M5 6C2 6 1 3 3 1C4 3 6 2 7 4C8 6 6 7 5 6z" fill="#8E2F3A"/>`, [[0, 'transform:none'], [1.1, 'transform:none'], [1.7, 'transform:rotate(58deg)'], [1.85, 'transform:rotate(50deg)'], [3, 'transform:rotate(52deg)']], { origin: `${r1(x + 8)}px ${r1(y + 9.6)}px`, ease: ease('settle'), still: `transform="rotate(52 ${r1(x + 8)} ${r1(y + 9.6)})"` })
+      const rx = 64
+      const ry = 30
+      const stem = `<path transform="translate(${rx} ${ry}) scale(1.6)" d="M3 14C3 10 4 8 5 6M4 10l-3 -1" fill="none" stroke="#5B7A3A" stroke-width="1"/>`
+      const rose = a.mv(`${stem}${bloom(rx, ry)}`, [[0, 0, -60, 0], [0.1, 0, -60, 1], [0.45, 0, 0, 1], [2.85, 0, 0, 1], [3, 0, 0, 0]], { still: 2, ease: ease('overshoot') })
+      const petal = a.mv(`<ellipse rx="2.2" ry="1.2" fill="#8E2F3A"/>`, [[0, rx + 12, ry + 6, 0], [1.6, rx + 12, ry + 6, 1], [2.0, rx + 18, ry + 22, 1, 'rotate(90deg)'], [2.4, rx + 10, ry + 40, 1, 'rotate(200deg)'], [2.8, rx + 16, ry + 56, 0, 'rotate(300deg)'], [3, rx + 16, ry + 56, 0, 'rotate(300deg)']], { still: 0, c: true })
+      return rose + petal + a.mv(cap(86, 52, 'IT’S WHAT CLARA WOULD HAVE WANTED.', g.m, { z: 11 }), [[0, -14, 0, 0], [0.3, -14, 0, 0], [0.65, 0, 0, 1], [2.85, 0, 0, 1], [3, 0, 0, 0]], { still: 2, ease: ease('settle') }) + a.kf(T(86, 76, '(shrugs)', 11, 400, '#C9C2B0', 'font-style="italic"'), [[0, 'opacity:0;transform:none'], [1.8, 'opacity:0;transform:none'], [1.85, 'opacity:1;transform:none'], [1.95, 'opacity:1;transform:translateY(-4px)'], [2.08, 'opacity:1;transform:none'], [2.18, 'opacity:1;transform:translateY(-4px)'], [2.3, 'opacity:1;transform:none'], [2.9, 'opacity:1;transform:none'], [3, 'opacity:0']], { still: 'opacity="1"' })
+    },
+    pane: ['cred', (a, g) => a.mv(`${rose(0, 0)}`, [[0, g.W - 50, -50, 0], [0.1, g.W - 50, -50, 1], [0.45, g.W - 50, 20, 1], [2.85, g.W - 50, 20, 1], [3, g.W - 50, 20, 0]], { still: 2, ease: ease('overshoot') }) + a.on(cap(g.W - 60 - capW('CLARA WOULD HAVE WANTED IT.'), 40, 'CLARA WOULD HAVE WANTED IT.', g.m), 0.3, 2.9, { fade: 0.3 })],
   },
   // T52 `cracked mirror`: the bust sits in a cracked-mirror frame for 8 s (approval -5).
   mirror: {
@@ -602,8 +789,17 @@ const ROWS: Record<string, Row> = {
   // T53 `it's a deepfake`: a censor mosaic pixelates the title (coarse, then fine) under a DEEPFAKE? tag; the CRISIS DESK stamps
   // UNDER REVIEW.
   deepfake: {
-    band: (a, g) => deepfakeTear(a, g),
-    pane: ['task', (a, g) => a.slam(stamp(g.W - 110, 44, 'UNDER REVIEW', PROPS.stamp, 13, -8), 0.3, 2.4)],
+    // The mosaic (coarse, then fine) with a scan line combing down the title, as a feed being 'verified'.
+    band: (a, g) => deepfakeTear(a, g) + a.kf(`<rect x="62" y="40" width="${r1(Math.min(g.titleW ?? 300, 320))}" height="1.4" fill="#FFFFFF" opacity=".7"/>`, [[0, 'opacity:0;transform:none'], [0.12, 'opacity:1;transform:none'], [0.9, 'opacity:1;transform:translateY(22px)'], [0.98, 'opacity:0;transform:translateY(22px)'], [2.5, 'opacity:0']], { ease: ease('settle'), still: 'opacity="0"' }),
+    pane: ['task', (a, g) => {
+      // The censor mosaic scans down the CRISIS DESK (a coarse block, then fine), then UNDER REVIEW lifts and slams with sparks.
+      const cell = 6
+      let tile = ''
+      for (let i = 0; i < 12; i++) tile += `<rect x="${(i % 4) * cell}" y="${Math.floor(i / 4) * cell}" width="${cell}" height="${cell}" fill="${['#2A3350', '#3D4A6E', '#56648A', '#1C2440'][Math.floor(unit(`dfp${i}`) * 4) % 4]}"/>`
+      const pid = gid(g, 'dfp')
+      const block = `<defs><pattern id="${pid}" width="${cell * 4}" height="${cell * 3}" patternUnits="userSpaceOnUse">${tile}</pattern></defs><rect x="10" y="0" width="${g.W - 20}" height="${cell * 3}" fill="url(#${pid})" opacity=".9"/>`
+      return a.mv(block, [[0, 0, -20, 0], [0.05, 0, 10, 1], [0.9, 0, g.H - 30, 1], [1.0, 0, g.H - 30, 0], [2.5, 0, g.H - 30, 0]], { still: 0, ease: ease('settle') }) + a.kf(stamp(g.W - 110, 44, 'UNDER REVIEW', PROPS.stamp, 13, -8), [[0, 'opacity:0'], [0.85, 'opacity:0;transform:translateY(-20px) scale(1.4) rotate(-10deg)'], [0.95, 'opacity:1;transform:translateY(-28px) scale(1.5) rotate(-16deg)'], [1.08, 'opacity:1;transform:none'], [1.16, 'opacity:1;transform:scale(.94)'], [1.24, 'opacity:1;transform:none'], [2.4, 'opacity:1;transform:none'], [2.5, 'opacity:0']], { c: true, ease: ease('snap'), still: 'opacity="1"' }) + a.fx(fx.sparks(a.sg, 1.08, g.W - 110, 44, { seed: 'dfs', color: '#FFE9A8', n: 8 }))
+    }],
   },
   // T54 `the boys are back in town`: THE WALK: Butcher, Hughie, Frenchie, Kimiko and Terror cross the foot, left to right.
   walk: {
@@ -612,15 +808,33 @@ const ROWS: Record<string, Row> = {
   },
   // T55 `did i ever tell you about nicaragua`: Soldier Boy asks; a palm tree; nobody answers.
   nicaragua: {
-    band: (a, g) => a.on(`${palm(g.W * 0.3 - 40, GROUND - 36)}<g transform="translate(${r1(g.W * 0.3)} ${GROUND})">${feet(SP.TB_SOLDIERBOY, 0.86)}</g>`, 0, 3) + a.on(bub(g.W * 0.3 + 10, GROUND - 44, 'Did I ever tell you about Nicaragua?', g.m), 0.3, 2.9),
-    pane: ['task', (a, g) => a.on(`<g transform="translate(${g.W - 200} 16) rotate(-3)"><rect width="180" height="64" fill="${PROPS.manila}" stroke="#8A7A5A"/><rect x="0" y="-6" width="60" height="8" fill="${PROPS.manila}"/>${C(10, 18, 'CLASSIFIED · PAYBACK', 9, '#7A3B2A', 'letter-spacing="1.2"')}${C(10, 38, 'NICARAGUA · 1984', 13, PROPS.paperInk, 'letter-spacing="1"')}<rect x="10" y="46" width="120" height="8" fill="#111"/></g>`, 0.2, 3, { fade: 0.3 })],
+    band: (a, g) => {
+      const x = g.W * 0.3
+      // Soldier Boy dips (the wind-up) and SALUTES; the palm sways in the heat; a tumbleweed bounces across the foot. Nobody answers.
+      poses(a, { sb: SP.TB_SOLDIERBOY, sbs: SP.TB_SOLDIERBOY_SALUTE })
+      const sb = actor(a, 'sb', [[0, 0.42, 'sb'], [0.42, 3, 'sbs']], [[0, x, GROUND], [0.2, x, GROUND], [0.32, x, GROUND, 0.93], [0.44, x, GROUND, 1.04], [0.56, x, GROUND, 1], [3, x, GROUND]], 0.96, { h: 48 })
+      const palm2 = a.kf(palm(x - 40, GROUND - 36), [[0, 'transform:rotate(-2deg)'], [0.75, 'transform:rotate(3deg)'], [1.5, 'transform:rotate(-2deg)'], [2.25, 'transform:rotate(3deg)'], [3, 'transform:rotate(-2deg)']], { origin: `${r1(x - 32)}px ${GROUND}px`, ease: 'ease-in-out' })
+      const weed = `<g><circle r="7" fill="none" stroke="#B08A5A" stroke-width="1.4"/><path d="M-6 -2q6 4 12 0M-4 4q4 -6 8 -1M-2 -6q2 8 3 12" fill="none" stroke="#B08A5A" stroke-width="1"/></g>`
+      // It rolls only over the stage strip: in from the cost line's left edge, out before the step count (never over a number).
+      const w0 = g.W * 0.6 - 14
+      const w1 = 128
+      const at = (i: number) => w0 - ((w0 - w1) * (i + 1)) / bounces.length
+      const fr: [number, number, number, number?, string?][] = [[0, w0, GROUND - 7, 0, 'rotate(0deg)'], [0.2, w0, GROUND - 7, 1, 'rotate(0deg)']]
+      const bounces = [0.5, 0.95, 1.4, 1.85, 2.3, 2.75]
+      bounces.forEach((t, i) => { fr.push([t - 0.22, at(i) + (w0 - w1) / 12, GROUND - 22, 1, `rotate(${-(i * 2 + 1) * 90}deg)`], [t, at(i), GROUND - 7, i === bounces.length - 1 ? 0 : 1, `rotate(${-(i * 2 + 2) * 90}deg)`]) })
+      fr.push([3, w1, GROUND - 7, 0, 'rotate(-1080deg)'])
+      let dust = ''
+      bounces.forEach((t, i) => { dust += fx.dust(a.sg, t, at(i), GROUND - 2, { n: 2, seed: `tw${i}`, color: '#C9B08A', dx: 6, s: 0.8 }) })
+      return palm2 + sb + stillPose(a, 'sbs', x, GROUND, 0.96) + a.mv(weed, fr, { still: 0, c: true }) + a.fx(dust) + a.on(bub(x + 10, GROUND - 50, 'Did I ever tell you about Nicaragua?', g.m), 0.6, 2.9)
+    },
+    pane: ['task', (a, g) => a.kf(`<g transform="translate(${g.W - 200} 16) rotate(-3)"><rect width="180" height="64" fill="${PROPS.manila}" stroke="#8A7A5A"/><rect x="0" y="-6" width="60" height="8" fill="${PROPS.manila}"/>${C(10, 18, 'CLASSIFIED · PAYBACK', 9, '#7A3B2A', 'letter-spacing="1.2"')}${C(10, 38, 'NICARAGUA · 1984', 13, PROPS.paperInk, 'letter-spacing="1"')}<rect x="10" y="46" width="120" height="8" fill="#111"/></g>`, [[0, 'opacity:0;transform:translate(30px,-10px) rotate(8deg)'], [0.2, 'opacity:1;transform:translate(30px,-10px) rotate(8deg)'], [0.6, 'opacity:1;transform:none'], [2.8, 'opacity:1;transform:none'], [3, 'opacity:0']], { ease: ease('settle'), still: 'opacity="1"' })],
   },
   // T56 `payback` (alone): the slate PAYBACK · 1984 and seven brass stars light.
   payback: {
     band: (a, g) => {
       const x = Math.max(140, g.W * 0.3)
-      let s = a.on(slate(x, 34, 'PAYBACK', '1984 · THE TEAM BEFORE THE SEVEN'), 0, 2.5)
-      for (let i = 0; i < 7; i++) s += a.kf(star(x + slateW('PAYBACK', '1984 · THE TEAM BEFORE THE SEVEN') + 20 + i * 18, 56, 7, '#D4A637'), [[0, 'opacity:.2'], [0.3 + i * 0.15, 'opacity:.2'], [0.35 + i * 0.15, 'opacity:1'], [2.5, 'opacity:1']], {})
+      let s = a.on(clapSlate(a, x, 34, 'PAYBACK', '1984 · THE TEAM BEFORE THE SEVEN', 0.3), 0, 2.5)
+      for (let i = 0; i < 7; i++) s += a.kf(star(x + slateW('PAYBACK', '1984 · THE TEAM BEFORE THE SEVEN') + 20 + i * 18, 56, 7, '#D4A637'), [[0, 'opacity:.2'], [0.4 + i * 0.15, 'opacity:.2'], [0.45 + i * 0.15, 'opacity:1'], [2.5, 'opacity:1']], {})
       return s
     },
     pane: ['cred', (a, g) => {
@@ -749,13 +963,14 @@ export const actOn = (kind: string, g: Geo): string => {
   const row = rowOf(kind)
   if (!row) return ''
   const a = new Act(kind, actMs(kind), g.at)
+  a.geo = { W: g.W, H: g.H, on: g.on }
   const P = pal(g.m)
   let body = ''
   if (g.on === 'band') body = row.band(a, g, P)
   else if (row.pane[0] === g.on || (row.pane[0] === 'all' && g.on !== 'table')) body = row.pane[1](a, g, P)
   // THE TABLE is only drawn with a crew: its acts also caption the FOCUS GROUP, so the pane always shows them.
   else if (row.pane[0] === 'table' && g.on === 'log') body = a.on(cap(44, 60, TABLE_CAP[kind] ?? kind.toUpperCase(), g.m), 0.2, a.ms / 1000 - 0.2)
-  if (g.on === 'band' && body && (SCRIM.has(kind) || row.scrim)) body = a.on(dim(g.W, g.H, P, 0.72), 0, a.ms / 1000, { fade: 0.25 }) + body
+  if (g.on === 'band' && body && (SCRIM.has(kind) || row.scrim)) body = a.on(row.scrim === 'stage' ? stageScrim(g.W, P) : dim(g.W, g.H, P, 0.72), 0, a.ms / 1000, { fade: 0.25 }) + body
   const sh = row.shake?.[g.on as 'band'] ?? (g.on !== 'band' && g.on !== 'table' ? row.shake?.all : undefined)
   let extra = ''
   if (sh) {
@@ -780,5 +995,5 @@ export const paneOf = (kind: string): ActSurface | 'all' | undefined => rowOf(ki
 /** Every kind phase 3 added (events, set pieces, roamers, THE AMBUSH). */
 export const xKinds = (): string[] => Object.keys(XROWS)
 // The props and the band geometry, for theboys-show.ts.
-export const KIT = { feet, GROUND, gaugeOf, bustAt, coverBust, dim, poof, censor, knight, octo, tentacle, dolphin, beaver, critter, dog, pig, can, flashbulb, cone, glass, vial, crowd, ribbon, vhs, tv, palm, frostEdge, runner, streak, heart, note }
+export const KIT = { poses, padPose, intertitle, actor, stillPose, arc, PH, runFrame, feet, GROUND, gaugeOf, bustAt, coverBust, dim, poof, censor, knight, octo, tentacle, dolphin, beaver, critter, dog, pig, can, flashbulb, cone, glass, vial, crowd, ribbon, vhs, tv, palm, frostEdge, runner, streak, heart, note }
 void M
