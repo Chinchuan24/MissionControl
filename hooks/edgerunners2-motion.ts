@@ -153,7 +153,9 @@ const placed = (layer: string, x: number, y: number, w: number, h: number, id: s
   `<g transform="translate(${r1(x)} ${r1(y)})"><defs><clipPath id="${id}"><rect width="${r1(w)}" height="${r1(h)}"/></clipPath></defs><g clip-path="url(#${id})">${layer}</g></g>`
 /** The band's act region: from the figure box to just left of the percent and the readouts (64% of the width, never past the
  *  band's clear span, stage/keep.ts), the title rows. */
-export const bandRegion = (W: number, H: number, stage?: BandStage): { x: number; y: number; w: number; h: number } => ({ x: 8, y: 34, w: Math.round(Math.min(W * 0.64, W - 300, stage ? stage.x1 - 8 : W)), h: Math.max(60, Math.min(74, H - 95)) })
+// At most 700 wide: the fighters never grow with the region (its height sets them), only its floor and trails do, so a very wide
+// band (a short slot on a wide window) kept adding chars: 32,049 at 1600 px, over the 32 k fight budget.
+export const bandRegion = (W: number, H: number, stage?: BandStage): { x: number; y: number; w: number; h: number } => ({ x: 8, y: 34, w: Math.round(Math.min(W * 0.64, W - 300, 700, stage ? stage.x1 - 8 : W)), h: Math.max(60, Math.min(74, H - 95)) })
 
 // ---------------------------------------------------------------- FIGHT 1: D vs a cyberpsycho, cut like a film (D mode)
 /**
