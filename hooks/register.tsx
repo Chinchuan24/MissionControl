@@ -3169,10 +3169,10 @@ const textWidth = (s: string, size: number): number => [...s].reduce((w, ch) => 
 
 // Cuts `s` to fit `maxW` pixels, with an ellipsis when it had to cut.
 /** `fitText` with a theme's own widths (its sans is wider than the shared guess). */
-const sansClipTo = (w: (s: string, size: number, ls?: number, bold?: boolean) => number, s: string, size: number, max: number): string => {
-  if (w(s, size) <= max) return s
+const sansClipTo = (w: (s: string, size: number, ls?: number, bold?: boolean) => number, s: string, size: number, max: number, bold = false): string => {
+  if (w(s, size, 0, bold) <= max) return s
   const a = [...s]
-  while (a.length && w(`${a.join('')}…`, size) > max) a.pop()
+  while (a.length && w(`${a.join('')}…`, size, 0, bold) > max) a.pop()
   return a.length ? `${a.join('').trimEnd()}…` : ''
 }
 const fitText = (s: string, size: number, maxW: number): string => {
@@ -6266,7 +6266,7 @@ const slimBandSvg = (OW: number, d: HudData): string => {
   const sw = sl?.sw ?? serifW
   // A theme with its own sans measures it itself, in bold where the design says so; the Mentalist's call is unchanged.
   const bold = Boolean(sl)
-  const fitW = (text: string, size: number, max: number): string => (sl ? sansClipTo(sw, text, size, max) : fitText(text, size, max))
+  const fitW = (text: string, size: number, max: number, isBold = false): string => (sl ? sansClipTo(sw, text, size, max, isBold) : fitText(text, size, max))
   const RJ = '#E0261F'
   const edge = d.isParty ? c.done : d.isWorking ? c.accent : c.line
   // Text in a skin colour (the title, the role pills) is lifted toward white until it reads at 4.5:1 on the tile.
@@ -6291,43 +6291,60 @@ const slimBandSvg = (OW: number, d: HudData): string => {
   const lead = sl ? sl.head(x0, y, c, FONT) : { svg: '', w: 0 }
   if (lead.svg) s.push(lead.svg)
   const nx = lead.w ? x0 + lead.w + 10 : x0
-  // A theme may draw the name in its own hand (a paper label, a patch, a line of identity).
-  const own = sl?.name?.(x0, y, W, c, FONT, tctx)
-  s.push(own ? own.svg : Lb(nx, y, 'MISSION CONTROL', 'start', c.accent2).replace('letter-spacing=".8"', 'letter-spacing="1.6"'))
-  let hx = own ? x0 + own.w + 14 : nx + sw('MISSION CONTROL', 9.5, 1.6, true) + 16
-  const chip = th.chip(hx, y, d.ctxPct, c, FONT, W)
-  s.push(chip.svg)
-  const chipX = hx
-  if (chip.w) hx += chip.w + 16
-  const smallChip = (x: number, label: string, tip: string, live: boolean) => {
-    const w = Math.round(sw(label, 9.5, 0.8, true) + 14)
-    s.push(`<rect${live ? ' class="live"' : ''} x="${x}" y="${y - 10.5}" width="${w}" height="14" rx="3" fill="none" stroke="${c.subtext}" stroke-opacity=".4"/><text x="${x + w / 2}" y="${y}" text-anchor="middle" font-family="${FONT}" font-size="9.5" font-weight="700" letter-spacing=".8" fill="${c.subtext}"><title>${xml(tip)}</title>${xml(label)}</text>`)
-    return w + 10
-  }
-  if (d.crewMode) hx += smallChip(hx, 'CREW MODE', d.crewMode, true)
-  if (d.bg) hx += smallChip(hx, `${d.bg} BACKGROUND`, `${d.bg} ${tr().bgBand}`, false)
+  // The header row's rule: the name, the theme's chip, CREW MODE, the background count and the model run left to right; the
+  // clock is pinned right, the episode and the theme's gauge beside it. Each is measured before any is drawn, and while the row
+  // is short (under 24 px between the two sides) they give way in a set order, a shorter form first (HEADER_ORDER). The clock,
+  // a working number, stays: nothing overlaps it or runs past the edge.
+  // A theme may draw the name in its own hand (a paper label, a patch, a line of identity); a narrower W gives its shorter form.
+  const nameAt = (w: number) => sl?.name?.(x0, y, w, c, FONT, tctx)
+  let own = nameAt(W)
+  const nameEnd = (): number => (own ? x0 + own.w + 14 : nx + sw('MISSION CONTROL', 9.5, 1.6, true) + 16)
+  const chipW = th.chip(0, y, d.ctxPct, c, FONT, W).w
+  const tagW = (label: string) => Math.round(sw(label, 9.5, 0.8, true) + 14)
+  const crewTags = d.crewMode ? ['CREW MODE', 'CREW'] : []
+  const bgTags = d.bg ? [`${d.bg} BACKGROUND`, `${d.bg} BG`] : []
+  let showChip = chipW > 0
+  let crewForm = 0
+  let bgForm = 0
+  const tagsW = (): number => (showChip ? chipW + 16 : 0) + (crewTags[crewForm] ? tagW(crewTags[crewForm] as string) + 10 : 0) + (bgTags[bgForm] ? tagW(bgTags[bgForm] as string) + 10 : 0)
   const model = [PROVIDER, d.model, d.effort].filter(Boolean).join(' · ')
   const modelW = sw(model, 11.5)
   const clockTxt = d.budget ? `${fmtTime(d.budget.usedMs)} / ${d.budget.min}m` : d.taskMs > 0 ? fmtTime(d.taskMs) : ''
   const clockW = clockTxt ? sw(clockTxt, 11.5) + 4 : 0
   const epm = /^(?:\S+\s+)?(S\d+E\d+|EP \d+)\s+(.*)$/.exec(th.ticker(d.at))
   const ep: [string, string] = epm ? [epm[1] as string, epm[2] as string] : ['', '']
-  // The episode shrinks to its code (S1E4) before it goes, and goes last of the header's extras.
+  // The episode shrinks to its code (S1E4) before it goes.
   const epWFull = ep[0] ? (sl?.ep ? sl.ep.w(ep[0], ep[1], true) : sw(ep[0], 9.5, 0.8, true) + sw(ep[1], 11.5) + 12) : 0
   const epWCode = ep[0] ? (sl?.ep ? sl.ep.w(ep[0], ep[1], false) : sw(ep[0], 9.5, 0.8, true) + 2) : 0
   let epMode: 0 | 1 | 2 = epWFull > 0 ? 0 : 2
   const epWof = (): number => (epMode === 0 ? epWFull : epMode === 1 ? epWCode : 0)
   const rightEdge = (withEp: boolean) => xr - clockW - (withEp && epWof() ? epWof() + (clockW ? 28 : 0) : 0)
   let showModel = Boolean(model)
-  // A theme's own gauge goes first when the room runs out, then the model, then the episode.
   const pg0 = sl?.gauge(0, y, d.isWorking, d.steps.filter(st => st === 'done').length, d.steps.length, c, FONT, tctx)
   const gW = pg0 ? pg0.w + 26 : 0
   let showGauge = Boolean(pg0)
-  if (showGauge && rightEdge(true) - gW - (hx + (showModel ? modelW + 24 : 0)) < 24) showGauge = false
-  if (showModel && rightEdge(true) - (showGauge ? gW : 0) - (hx + modelW + 24) < 24) showModel = false
-  if (epMode === 0 && rightEdge(true) - (showGauge ? gW : 0) - hx < 24) epMode = 1
-  if (epMode === 1 && rightEdge(true) - (showGauge ? gW : 0) - hx < 24) epMode = 2
+  const shorterName = (w: number) => () => { if (own) own = nameAt(Math.min(W, w)) }
+  // HEADER_ORDER: the gauge, the model, the episode (its code, then gone), "2 BG" and CREW for the two state chips, the name's
+  // shorter forms, the theme's chip, then the background count and crew mode themselves.
+  const order: (() => void)[] = [() => { showGauge = false }, () => { showModel = false }, () => { if (epMode === 0) epMode = 1 }, () => { epMode = 2 }, () => { bgForm = Math.min(bgForm + 1, 1) }, () => { crewForm = Math.min(crewForm + 1, 1) }, shorterName(1099), shorterName(899), shorterName(699), shorterName(499), () => { showChip = false }, () => { bgForm = 2 }, () => { crewForm = 2 }]
+  for (const give of order) {
+    if (rightEdge(true) - (showGauge ? gW : 0) - (nameEnd() + tagsW() + (showModel ? modelW + 24 : 0)) >= 24) break
+    give()
+  }
   const showEp = epMode < 2
+  s.push(own ? own.svg : Lb(nx, y, 'MISSION CONTROL', 'start', c.accent2).replace('letter-spacing=".8"', 'letter-spacing="1.6"'))
+  let hx = nameEnd()
+  const chipX = hx
+  const chip = showChip ? th.chip(hx, y, d.ctxPct, c, FONT, W) : { svg: '', w: 0 }
+  s.push(chip.svg)
+  if (chip.w) hx += chip.w + 16
+  const smallChip = (x: number, label: string, tip: string, live: boolean) => {
+    const w = tagW(label)
+    s.push(`<rect${live ? ' class="live"' : ''} x="${x}" y="${y - 10.5}" width="${w}" height="14" rx="3" fill="none" stroke="${c.subtext}" stroke-opacity=".4"/><text x="${x + w / 2}" y="${y}" text-anchor="middle" font-family="${FONT}" font-size="9.5" font-weight="700" letter-spacing=".8" fill="${c.subtext}"><title>${xml(tip)}</title>${xml(label)}</text>`)
+    return w + 10
+  }
+  if (crewTags[crewForm]) hx += smallChip(hx, crewTags[crewForm] as string, d.crewMode, true)
+  if (bgTags[bgForm]) hx += smallChip(hx, bgTags[bgForm] as string, `${d.bg} ${tr().bgBand}`, false)
   const baseEnd = showModel ? hx + modelW + 24 : hx
   if (showModel) s.push(Bd(hx, y, model, c.muted))
   const tone = d.budget ? budgetTone(d.budget.usedMs, d.budget.min, c.subtext) : c.subtext
@@ -6364,7 +6381,7 @@ const slimBandSvg = (OW: number, d: HudData): string => {
   const leftRoom = (hasReadouts ? r0 - 18 : W - 14) - 20 - tx
   const titleW = Math.min(300, natTitle, Math.max(90, Math.floor((leftRoom - pillW - 24) * (compact ? 0.55 : 1))))
   // The plain title, always: a glitch on the band once hid it (a ☺ stayed, the title never came back).
-  s.push(`<text x="${tx}" y="54" font-family="${FONT}" font-size="15" font-weight="700" fill="${th.face ? c.text : lift(c.accent)}">${xml(fitW(d.title, 15, titleW))}</text>`)
+  s.push(`<text x="${tx}" y="54" font-family="${FONT}" font-size="15" font-weight="700" fill="${th.face ? c.text : lift(c.accent)}">${xml(fitW(d.title, 15, titleW, bold))}</text>`)
   const px = tx + titleW + 12
   const statusOn = d.isWorking || d.isParty
   const pillFill = d.isParty ? c.done : d.isWorking ? c.accent : c.muted
@@ -6660,22 +6677,35 @@ const hudHead = (W: number, d: HudData): string => {
   const tiles = themeOf()?.tiles?.(24 + nameW + 8, y, c, FONT)
   const hasTiles = Boolean(tiles) && W >= 24 + nameW + 8 + (tiles?.w ?? 0) + skinW + 220
   const sx = 24 + nameW + 8 + (hasTiles && tiles ? tiles.w + 8 : 0)
-  const crewLabel = d.crewMode ? '⚑ CREW MODE' : ''
-  const crewW = crewLabel ? Math.round(textWidth(crewLabel, 9.5) + 16) : 0
+  // The header row's rule: the chips (the skin, crew mode, the background count, the theme's) run left to right and the clock is
+  // pinned right. All are measured first; while the chips would reach within 16 px of the clock they give way in a set order:
+  // the skin's chip, the theme's chip, CREW MODE to CREW, the background count, then crew mode. The clock stays.
+  const crewTags = d.crewMode ? ['⚑ CREW MODE', '⚑ CREW'] : []
+  let crewForm = 0
+  const crewLabel = (): string => crewTags[crewForm] ?? ''
+  const crewW = (): number => (crewLabel() ? Math.round(textWidth(crewLabel(), 9.5) + 16) : 0)
   // The skin's chip only when it fits the band.
-  const hasSkinChip = sx + skinW <= W - 14
-  const cx = hasSkinChip ? sx + skinW + 8 : sx
+  let hasSkinChip = sx + skinW <= W - 14
+  const cx = (): number => (hasSkinChip ? sx + skinW + 8 : sx)
   // The background count sits in the band's own drawing, so it never moves the buttons beside it.
   const bgLabel = d.bg ? `⧗\uFE0E ${d.bg}` : ''
-  const bgW = bgLabel ? Math.round(textWidth(bgLabel, 9.5) + 14) : 0
-  const bx = cx + (crewW ? crewW + 8 : 0)
-  const mx = bgW ? bx + bgW + 12 : cx + (crewW ? crewW + 12 : 4)
+  let bgW = bgLabel ? Math.round(textWidth(bgLabel, 9.5) + 14) : 0
+  const bx = (): number => cx() + (crewW() ? crewW() + 8 : 0)
+  const mxOf = (): number => (bgW ? bx() + bgW + 12 : cx() + (crewW() ? crewW() + 12 : 4))
   const egg = cyberOf()
   const th = themeOf()
-  const psy = egg ? psychoChip(mx, y, d.ctxPct, FONT) : th ? th.chip(mx, y, d.ctxPct, c, FONT) : { svg: '', w: 0 }
-  const mx2 = mx + (psy.w ? psy.w + 10 : 0)
+  const chipOf = (x: number) => (egg ? psychoChip(x, y, d.ctxPct, FONT) : th ? th.chip(x, y, d.ctxPct, c, FONT) : { svg: '', w: 0 })
+  let psyW = chipOf(0).w
   const model = [PROVIDER, d.model, d.effort].filter(Boolean).join(' · ')
   const clock = d.budget ? `⏱\uFE0E ${budgetLabel(d.budget.usedMs, d.budget.min)}` : d.taskMs > 0 ? `⏱\uFE0E ${fmtTime(d.taskMs)}` : ''
+  const clockW = clock ? textWidth(clock, 11) + 8 : 0
+  for (const give of [() => { hasSkinChip = false }, () => { psyW = 0 }, () => { crewForm = 1 }, () => { bgW = 0 }, () => { crewForm = 2 }]) {
+    if (mxOf() + (psyW ? psyW + 10 : 0) + 16 <= W - 14 - clockW) break
+    give()
+  }
+  const mx = mxOf()
+  const psy = psyW ? chipOf(mx) : { svg: '', w: 0 }
+  const mx2 = mx + (psy.w ? psy.w + 10 : 0)
   const parts = [egg ? `♪ ${radio(d.at)}` : th ? th.ticker(d.at) : '', d.folder ? `▤ ${d.folder}` : '', clock].filter(Boolean)
   const widthOf = (xs: string[]) => (xs.length ? textWidth(xs.join('   '), 11) + 8 : 0)
   while (parts.length > (clock ? 1 : 0) && W - 14 - widthOf(parts) < mx2 + 60) parts.shift()
@@ -6696,8 +6726,8 @@ ${hasCold && th ? th.readout.draw(coldX, y, d.isWorking, done, d.steps.length, c
 ${psy.svg}
 ${hasSkinChip ? `<rect x="${sx}" y="${y - 10}" width="${skinW}" height="13" rx="2" fill="none" stroke="${c.accent2}" stroke-opacity=".55"/>
 <text x="${sx + skinW / 2}" y="${y - 0.5}" text-anchor="middle" font-family="${FONT}" font-size="9.5" font-weight="700" letter-spacing=".4" fill="${c.accent2}">${xml(skin)}</text>` : ''}
-${crewW ? `<rect class="live" x="${cx}" y="${y - 10}" width="${crewW}" height="13" rx="2" fill="${c.accent}"/><text x="${cx + crewW / 2}" y="${y - 0.5}" text-anchor="middle" font-family="${FONT}" font-size="9.5" font-weight="800" letter-spacing=".4" fill="${inkOn(c.accent)}"><title>${xml(d.crewMode)}</title>${crewLabel}</text>` : ''}
-${bgW ? `<rect x="${bx}" y="${y - 10}" width="${bgW}" height="13" rx="2" fill="none" stroke="${c.accent}" stroke-opacity=".8"/><text x="${bx + bgW / 2}" y="${y - 0.5}" text-anchor="middle" font-family="${FONT}" font-size="9.5" font-weight="800" letter-spacing=".4" fill="${c.accent}"><title>${d.bg} ${xml(tr().bgBand)}</title>${bgLabel}</text>` : ''}
+${crewW() ? `<rect class="live" x="${cx()}" y="${y - 10}" width="${crewW()}" height="13" rx="2" fill="${c.accent}"/><text x="${cx() + crewW() / 2}" y="${y - 0.5}" text-anchor="middle" font-family="${FONT}" font-size="9.5" font-weight="800" letter-spacing=".4" fill="${inkOn(c.accent)}"><title>${xml(d.crewMode)}</title>${crewLabel()}</text>` : ''}
+${bgW ? `<rect x="${bx()}" y="${y - 10}" width="${bgW}" height="13" rx="2" fill="none" stroke="${c.accent}" stroke-opacity=".8"/><text x="${bx() + bgW / 2}" y="${y - 0.5}" text-anchor="middle" font-family="${FONT}" font-size="9.5" font-weight="800" letter-spacing=".4" fill="${c.accent}"><title>${d.bg} ${xml(tr().bgBand)}</title>${bgLabel}</text>` : ''}
 <text class="s" x="${mx2}" y="${y}" font-family="${FONT}" font-size="11">${xml(fitText(model, 11, Math.max(0, (hasBreach ? breachX : hasCold ? coldX : W - rightW - 14) - mx2 - 16)))}</text>
 ${!d.budget && clock && d.taskFrom
   ? // The seconds tick inside the image: the band is not drawn again for them.
