@@ -31,6 +31,8 @@ export const r3 = (n: number): number => Math.round(n * 1000) / 1000
  * Keyframe rows without the redundant ones: a row whose value equals both neighbours' sits inside a hold (whatever the
  * timing function, the value between equal rows is constant), and a repeat of the same percent and value says nothing.
  */
+/** Two key values equal to float noise (both unset, or within 0.005). */
+const same = (a: number | undefined, b: number | undefined): boolean => a === b || (a !== undefined && b !== undefined && Math.abs(a - b) < 0.005)
 /**
  * Path keys with no two at the same time: a key at (or before) the time of the one before it moves 10 ms after it. Two keys
  * on one percent collapse (the later wins), so a teleport written as two keys at one time became a slow glide from the key
@@ -38,12 +40,19 @@ export const r3 = (n: number): number => Math.round(n * 1000) / 1000
  */
 export const apart = <K extends (number | undefined)[]>(keys: K[]): K[] => {
   let last = -Infinity
-  return [...keys].sort((a, b) => (a[0] as number) - (b[0] as number)).map(k => {
+  let prev: K | undefined
+  const out: K[] = []
+  for (const k of [...keys].sort((a, b) => (a[0] as number) - (b[0] as number))) {
     const t0 = k[0] as number
+    // A repeat (same time, same values to float noise: one move's end written again as the next one's start, 628 then
+    // 627.9999999999999) says nothing: drop it rather than push it 10 ms on, where it would cost a keyframe row (The Boys' walks).
+    if (prev && Math.abs(t0 - (prev[0] as number)) < 1e-6 && k.length === prev.length && k.every((v, i) => i === 0 || same(v, prev?.[i]))) continue
     const t = t0 > last ? t0 : r3(last + 0.01)
     last = t
-    return (t === t0 ? k : [t, ...k.slice(1)]) as K
-  })
+    prev = k
+    out.push((t === t0 ? k : [t, ...k.slice(1)]) as K)
+  }
+  return out
 }
 export const slim = (rows: [number, string][]): [number, string][] =>
   rows.filter((r, i) => {

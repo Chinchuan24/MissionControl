@@ -194,6 +194,13 @@ test('timeline: two path keys at one time are a cut 10 ms apart, never a glide f
   expect(act.css).toContain('50%{transform:translate(10px,0px)}')
   expect(act.css).toContain('50.5%{transform:translate(50px,20px)}')
 })
+test('timeline: an exact repeat of a path key (same time, same values) is dropped, not pushed 10 ms on (no extra row)', () => {
+  expect(apart([[0, 0, 0], [1, 10, 0], [1, 10, 0], [2, 50, 20]] as [number, number, number][])).toEqual([[0, 0, 0], [1, 10, 0], [2, 50, 20]])
+  // A teleport after a repeat is still a cut.
+  expect(apart([[1, 10, 0], [1, 10, 0], [1, 50, 20]] as [number, number, number][])).toEqual([[1, 10, 0], [1.01, 50, 20]])
+  // Float noise is a repeat too.
+  expect(apart([[1.7, 628, 103.3], [1.7, 627.9999999999999, 103.3]] as [number, number, number][])).toEqual([[1.7, 628, 103.3]])
+})
 test('timeline: a move whose keys end early holds its last key to the end (it never drifts back)', () => {
   const act = new Act({ id: 'hd', ms: 4000, at: T0, W: 100, H: 50 })
   act.mv('<rect/>', [[0, 0, 0, 1], [1, 80, -40, 0]])
