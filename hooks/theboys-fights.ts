@@ -120,10 +120,29 @@ const mosaicSvg = (x: number, y: number, w: Win, seed: string, big = true): stri
   const x0 = r1(x - (nx * c) / 2)
   const y0 = r1(y - (ny * c) / 2)
   const cols = MOSAIC[w.m]
-  const paths = new Map<string, string>()
+  const cells = new Map<string, [number, number][]>()
   for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) {
     const col = cols[Math.floor(unit(`${seed}|${i}|${j}`) * cols.length)] as string
-    paths.set(col, `${paths.get(col) ?? ''}M${r1(x0 + i * c)} ${r1(y0 + j * c)}h${c}v${c}h-${c}z`)
+    cells.set(col, [...(cells.get(col) ?? []), [i, j]])
+  }
+  // One path a colour, the same squares as before in fewer chars: a run of one colour along a row is one rectangle, and each
+  // rectangle after the first starts with a relative move from the last one's corner (a closed subpath leaves the pen there).
+  const paths = new Map<string, string>()
+  for (const [col, l] of cells) {
+    l.sort((p, q) => p[1] - q[1] || p[0] - q[0])
+    let d = ''
+    let px: number | undefined
+    let py = 0
+    for (let k = 0; k < l.length;) {
+      const [i, j] = l[k] as [number, number]
+      let n = 1
+      while (k + n < l.length && (l[k + n] as [number, number])[1] === j && (l[k + n] as [number, number])[0] === i + n) n++
+      d += `${px === undefined ? `M${r1(x0 + i * c)} ${r1(y0 + j * c)}` : `m${(i - px) * c} ${(j - py) * c}`}h${n * c}v${c}h-${n * c}z`
+      px = i
+      py = j
+      k += n
+    }
+    paths.set(col, d)
   }
   const bw = Math.max(nx * c + 8, 46)
   const by = r1(y0 + ny * c - 3)
@@ -438,7 +457,8 @@ const race = (a: Act, g: Geo): string => {
   const f = new Fight(a.sg, { sc, ink: INK, lines: k.go, smear: k.go, ghosts: !w.band }, cam)
   f.fighter('a', 'aS', x0, y, 1)
   let over = bug(a, w, 3.3)
-  let fight = ''
+  // On the CRISIS DESK the race runs over the card's talking points: a veil inside the window keeps both readable.
+  let fight = w.band ? '' : a.sg.on(`<rect x="${w.x0}" y="${w.y0}" width="${ww}" height="${w.gy - w.y0}" fill="${k.well}"/>`, 0, a.sg.T - 0.05, { fade: 0.2, op: 0.86 })
   // The track: a lane line, the finish (a chequered strip), and the rival: a progress bar racing along the lane.
   const lane = w.gy - 2
   let chk = ''
