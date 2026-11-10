@@ -74,6 +74,9 @@ export type ActOpts = {
   H: number
   /** Seconds into the timeline where THIS surface's piece starts (a pane card after the band cut). Default 0. */
   off?: number
+  /** Decimals of every keyframe percent (and of a cue's start, in s). Default 3; 2 saves a char a key (0.01 % of an 18 s
+   *  timeline is 2 ms; a cue starts within 5 ms) for a band that is full. */
+  dp?: 2 | 3
   /** Colours kept per pose (frames.ts quantise). Default 6. */
   K?: number
 }
@@ -141,7 +144,8 @@ export class Act {
   /** Act time to timeline time on this surface, freezes included. */
   warp(t: number): number { let w = t; for (const [tf, s] of this.freezes) if (t > tf) w += s; return w }
   /** Percent of the whole timeline at act time `t` (clamped). */
-  pc(t: number): number { return r3(Math.min(100, Math.max(0, ((this.off + this.warp(t)) / this.T) * 100))) }
+  pc(t: number): number { return this.rp(Math.min(100, Math.max(0, ((this.off + this.warp(t)) / this.T) * 100))) }
+  private rp(n: number): number { return this.o.dp === 2 ? Math.round(n * 100) / 100 : r3(n) }
   /** The pinned delay of act time `t` (calc keeps `phased` from shifting it). */
   delay(t = 0): string { return `calc(${pin(this.o.at)} + ${r3(this.off + this.warp(t))}s)` }
   /** A fresh keyframes name under this act's prefix. */
@@ -173,7 +177,7 @@ export class Act {
     return out.sort((x, y) => (x[0] as number) - (y[0] as number))
   }
   /** Percent of an already-warped time. */
-  pcw(w: number): number { return r3(Math.min(100, Math.max(0, ((this.off + w) / this.T) * 100))) }
+  pcw(w: number): number { return this.rp(Math.min(100, Math.max(0, ((this.off + w) / this.T) * 100))) }
 
   // ---------------------------------------------------------------- tracks (whole-act keyframes)
   /** Any keyframes ([t s, declarations]) on a wrapper. `c` turns/scales about its own centre; `origin` sets one. */
@@ -215,7 +219,7 @@ export class Act {
   cue(kind: Cue, t: number, inner: string, o: { d?: number; x?: number; y?: number } = {}): string {
     this.cues.add(kind)
     const scaled = kind === 'pop' || kind === 'burst' || kind === 'ring' || kind === 'rise'
-    const g = `<g class="sg-${kind}${scaled ? ' sg-c' : ''}" style="--t:${r3(this.warp(t))}s${o.d !== undefined ? `;--d:${r3(o.d)}s` : ''}">${inner}</g>`
+    const g = `<g class="sg-${kind}${scaled ? ' sg-c' : ''}" style="--t:${this.o.dp === 2 ? Math.round(this.warp(t) * 100) / 100 : r3(this.warp(t))}s${o.d !== undefined ? `;--d:${r3(o.d)}s` : ''}">${inner}</g>`
     return o.x !== undefined || o.y !== undefined ? `<g transform="translate(${r1(o.x ?? 0)} ${r1(o.y ?? 0)})">${g}</g>` : g
   }
   /** Shown from t0 to t1 (a cut both ways). */
