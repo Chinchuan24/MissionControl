@@ -12,6 +12,8 @@
 // The band plays the fight inside a camera window that never reaches the working numbers (the window ends left of the bar's
 // percent, the cost line and the readouts, and below the top row); the CRISIS DESK plays the monitor cut (the night tower arena in
 // parallax, the other close-up).
+import { keepClip } from './stage/keep'
+import type { Rect } from './stage/keep'
 import type { Sprite } from './cast'
 import { COND, PROPS, SP, esc, r1, unit } from './theboys'
 import type { Mode } from './theboys'
@@ -32,18 +34,20 @@ const C = (x: number, y: number, text: string, size: number, fill: string, extra
 
 // ---------------------------------------------------------------- the camera window
 /** Where a fight plays: the window (x0..x1, y0..gy), the feet line, the sprite scale, and which surface. */
-export type Win = { x0: number; x1: number; y0: number; gy: number; sc: number; band: boolean; W: number; H: number; m: Mode }
+export type Win = { x0: number; x1: number; y0: number; gy: number; sc: number; band: boolean; W: number; H: number; m: Mode; /** Readouts inside the window (holes in its clip). */ keep?: Rect[] }
 /** The band's window: right of the bust and the step count, left of the bar's percent and the cost line, under the top row. */
 export const winOf = (g: Geo): Win => {
   if (g.on === 'band') {
     const q = gaugeOf(g.W)
     const right = g.W >= 520 ? q.r0 - 24 : g.W
-    return { x0: 120, x1: Math.round(Math.min(g.W * 0.6 - 6, right - 6)), y0: 47, gy: GROUND, sc: 1.1, band: true, W: g.W, H: g.H, m: g.m }
+    // On the real band: never past the band's clear span (the crew, the percent, TODAY), the Tasks chip a hole in the clip.
+    const x1 = Math.round(Math.min(g.W * 0.6 - 6, right - 6, g.stage ? g.stage.x1 - 4 : g.W))
+    return { x0: 120, x1, y0: 47, gy: GROUND, sc: 1.1, band: true, W: g.W, H: g.H, m: g.m, ...(g.stage ? { keep: g.stage.keep } : {}) }
   }
   return { x0: 8, x1: g.W - 8, y0: 8, gy: g.H - 10, sc: Math.max(1, Math.min(1.6, (g.H - 34) / 58)), band: false, W: g.W, H: g.H, m: g.m }
 }
 /** The window's clip (static: the camera moves inside it); `clipDef` once per layer, `clipped` for each group in it. */
-const clipDef = (a: Act, w: Win): string => `<defs><clipPath id="${a.sg.p}w"><rect x="${w.x0}" y="${w.y0}" width="${w.x1 - w.x0}" height="${w.gy + 1 - w.y0}"/></clipPath></defs>`
+const clipDef = (a: Act, w: Win): string => `<defs>${w.keep ? keepClip(`${a.sg.p}w`, [w.x0, w.y0, w.x1 - w.x0, w.gy + 1 - w.y0], w.keep) : `<clipPath id="${a.sg.p}w"><rect x="${w.x0}" y="${w.y0}" width="${w.x1 - w.x0}" height="${w.gy + 1 - w.y0}"/></clipPath>`}</defs>`
 const clipped = (a: Act, inner: string): string => `<g clip-path="url(#${a.sg.p}w)">${inner}</g>`
 /** A fighter's centre y (every pose is padded to PH rows, feet on the window's ground). */
 const cy = (w: Win): number => r1(w.gy - (PH * w.sc) / 2)

@@ -1,4 +1,5 @@
 // Themed (non-cyberpunk) easter eggs, one table per skin family.
+import type { BandStage } from './stage/keep'
 //
 // A themed skin is a `ThemeEggs` entry in THEMES, keyed by its cast. register.tsx asks
 // `themeOf()` and draws whatever the entry gives; nothing there is named after a show.
@@ -54,7 +55,7 @@ export type ThemeKey = 'mentalist' | 'redjohn' | 'breakingbad' | 'heisenberg' | 
 /** The pane cards a roaming act can belong to: the level card, the task card, the log. */
 export type PaneCard = 'cred' | 'task' | 'log'
 /** What a theme's rare scheduled eggs know (all from the clock, so an idle draw still shows them). */
-export type ExtraArgs = { W: number; H: number; surface: 'band' | 'pane'; at: number; ctxPct: number; party?: boolean; card?: PaneCard; unplugAt?: number; fx?: { kind: string; at: number }; /** A job is running (a theme's fights only play then). */ working?: boolean; /** When the last era swap started (Invincible's title-card slam transition). */ swapAt?: number; /** The band only: the task title and the width it is drawn in (The Boys' title SPIN). */ task?: string; titleW?: number }
+export type ExtraArgs = { W: number; H: number; surface: 'band' | 'pane'; at: number; ctxPct: number; party?: boolean; card?: PaneCard; unplugAt?: number; fx?: { kind: string; at: number }; /** A job is running (a theme's fights only play then). */ working?: boolean; /** When the last era swap started (Invincible's title-card slam transition). */ swapAt?: number; /** The band only: the task title and the width it is drawn in (The Boys' title SPIN). */ task?: string; titleW?: number; /** The band only: where a band act may play, and the readouts it must keep clear (stage/keep.ts). */ stage?: BandStage }
 /** One node of the hierarchy as a theme's `org` drawer sees it (a structural copy of the engine's). */
 export type ThemeOrg = { label: string; color: string; kind: string; status?: string; isQuiet?: boolean; children: ThemeOrg[] }
 /** The skin colours a theme's drawers read. */

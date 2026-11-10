@@ -308,7 +308,7 @@ export const invExtras = (era: Era, tile: string) => (o: ExtraArgs): string => {
     const f = fightOf(o.at, era, o.working, o.fx, o.swapAt)
     if (f !== undefined) {
       out.push(fightHole(era, f.startAt, tile, f.v))
-      if (o.at < f.startAt + timing(f.v).band * 1000 + 600) out.push(fightBand({ W: o.W, H: o.H, era, startAt: f.startAt, v: f.v }).svg)
+      if (o.at < f.startAt + timing(f.v).band * 1000 + 600) out.push(fightBand({ W: o.W, H: o.H, era, startAt: f.startAt, v: f.v, ...(o.stage ? { stage: o.stage } : {}) }).svg)
     }
   } else {
     const sd = showdownDue(o.at, era, o.fx)

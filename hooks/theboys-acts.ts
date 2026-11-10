@@ -4,6 +4,7 @@
 // Reduced motion: the movers stop at their still pose, flashes are hidden, and the act still ends on time. PG-13: no hit lands,
 // the only "impacts" are scorch dots, a grey-pink splat and stamps. All words are ours, or a short attributed quote.
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import type { BandStage } from './stage/keep'
 import { BUST, C, CRAWL_Y, M, PROPS, SP, T, clip, condW, crew, esc, faceIcon, pal, pin, px, r1, sansW, spH, spW, stamp, star, tape, unit } from './theboys'
 import type { Mode } from './theboys'
 import type { PaneCard } from './themes'
@@ -17,7 +18,7 @@ import type { Sprite } from './cast'
 
 export type ActSurface = PaneCard | 'band' | 'table'
 /** Where an act is drawn: the panel's size, the mode, the clock it started at, and (band only) the task title and its width. */
-export type Geo = { W: number; H: number; m: Mode; at: number; on: ActSurface; task?: string; titleW?: number }
+export type Geo = { W: number; H: number; m: Mode; at: number; on: ActSurface; task?: string; titleW?: number; /** The band only: the clear span and the readouts to keep clear (stage/keep.ts). */ stage?: BandStage }
 
 // ---------------------------------------------------------------- the act builder
 type Fr = [number, number, number, number?, string?]

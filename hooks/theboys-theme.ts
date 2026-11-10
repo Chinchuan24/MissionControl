@@ -131,7 +131,7 @@ export const boysExtras = (m: Mode) => (o: ExtraArgs): string => {
   if (st) {
     if (o.surface === 'band' && AMBUSH_KINDS.includes(st.kind) && act) noteAmbush(st.startAt)
     const on = o.surface === 'band' ? 'band' : (o.card ?? 'cred')
-    let s = actOn(st.kind, { W: o.W, H: o.H, m, at: st.startAt, on, ...(o.task ? { task: o.task } : {}), ...(o.titleW ? { titleW: o.titleW } : {}) })
+    let s = actOn(st.kind, { W: o.W, H: o.H, m, at: st.startAt, on, ...(o.task ? { task: o.task } : {}), ...(o.titleW ? { titleW: o.titleW } : {}), ...(o.stage && on === 'band' ? { stage: o.stage } : {}) })
     // Scheduled pieces are marked `show-` (typed and event acts `act-`), and stay hidden until their start.
     if (s && st.src !== 'fx') s = ahead(s.replace('data-egg="act-', 'data-egg="show-'), st.startAt)
     if (s) out.push(on === 'band' ? s : `<!--dl-->${s}<!--/dl-->`)

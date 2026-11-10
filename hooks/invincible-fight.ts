@@ -25,6 +25,8 @@ import type { FightLook } from './stage/choreo'
 import { curve } from './stage/ease'
 import * as fx from './stage/fx'
 import { rectPaths } from './stage/frames'
+import { keepClip } from './stage/keep'
+import type { BandStage } from './stage/keep'
 import { Act, r1, r3 } from './stage/timeline'
 import { COND, PROPS, SP, pal, pin } from './invincible'
 import type { Era } from './invincible'
@@ -162,10 +164,18 @@ class Cut {
   /** Where each fighter is (kept by the cut's own moves), for impact frames and stills. */
   readonly at: Record<string, { x: number; y: number; pose: string; face: 1 | -1 }> = {}
   private filters = false
+  /** The band's readouts inside the window (stage/keep.ts): a word that would sit on one drops under it. */
+  keep: [number, number, number, number][] = []
+  /** A word's baseline clear of the readouts (a word under a hole would be cut in half). */
+  wordY(x: number, y: number, size: number, text = 'WHAM!'): number {
+    const w = text.length * size * 0.7
+    for (const [kx, ky, kw, kh] of this.keep) if (x + w / 2 > kx && x - w / 2 < kx + kw && y > ky && y - size < ky + kh) return ky + kh + size + 2
+    return y
+  }
   /** The highest a word's baseline may sit (the band keeps its header row clear). */
   get top(): number { return this.box[2] < this.W ? 54 : 30 }
-  constructor(id: string, readonly start: number, off: number, readonly era: Era, readonly sc: number, readonly W: number, readonly H: number, readonly box: [number, number, number, number], K = 4, ms = FIGHT_MS, cq = false) {
-    this.act = new Act({ id, ms, at: start, W, H, off, K })
+  constructor(id: string, readonly start: number, off: number, readonly era: Era, readonly sc: number, readonly W: number, readonly H: number, readonly box: [number, number, number, number], K = 4, ms = FIGHT_MS, cq = false, dp?: 2) {
+    this.act = new Act({ id, ms, at: start, W, H, off, K, ...(dp ? { dp } : {}) })
     for (const k of FRAME_KEYS) this.act.cast(k, frameSprite(k, era), info(k).ax)
     if (cq) for (const k of CQ_KEYS) this.act.cast(k, frameSprite(k, era), info(k).ax, /^C\d/.test(k) ? CQ_K : /^CI/.test(k) ? 5 : undefined)
     this.act.extraCss.add(FIGHT_CSS)
@@ -207,7 +217,7 @@ class Cut {
     const hy = o.y ?? (p ? p.y - 4 * this.sc : 0)
     if (o.impact) this.impact(t, hx, hy, o.impact[0], o.impact[1])
     this.f.hit(target, { ...(o.pose ? { pose: o.pose } : {}), ...(o.r !== undefined ? { r: o.r } : {}), x: hx, y: hy, flash: false, shake: false, freeze: o.stop, sparks: o.sparks ?? o.shake > 2 })
-    if (o.word) this.f.sfx(o.word, o.wx ?? hx + 6 * this.sc, Math.max(this.top, o.wy ?? hy - 14 * this.sc), { size: o.shake > 2 ? 19 : 15, tilt: o.shake % 2 ? -6 : 7 })
+    if (o.word) { const size = o.shake > 2 ? 19 : 15; const wx = o.wx ?? hx + 6 * this.sc; this.f.sfx(o.word, wx, this.wordY(wx, Math.max(this.top, o.wy ?? hy - 14 * this.sc), size, o.word), { size, tilt: o.shake % 2 ? -6 : 7 }) }
     if (o.flash) this.flash(t + (o.impact ? 0.08 : 0), o.flash, hx, hy)
     this.cam.shake(t + 0.001, o.shake, o.shake > 2 ? 0.22 : 0.12)
     if (o.push) this.cam.push(t + 0.001, t + 0.12, o.push, hx, hy, 'snap').reset(t + 0.13, t + 0.5, 'settle')
@@ -216,7 +226,7 @@ class Cut {
   jab(x: number, y: number, word?: string, wx = x, wy = y - 20): void {
     const t = this.f.t
     this.set += this.act.cue('blink', t, `<polygon points="${Array.from({ length: 12 }, (_, i) => { const a = (Math.PI * i) / 6; const r = i % 2 ? 2.5 : 7; return `${Math.round(x + Math.cos(a) * r)},${Math.round(y + Math.sin(a) * r)}` }).join(' ')}" fill="#FFE066" stroke="${PROPS.ink}"/>`)
-    if (word) this.f.sfx(word, wx, Math.max(this.top, wy), { size: 14, tilt: x % 2 > 1 ? 8 : -8, d: 0.3 })
+    if (word) this.f.sfx(word, wx, this.wordY(wx, Math.max(this.top, wy), 14, word), { size: 14, tilt: x % 2 > 1 ? 8 : -8, d: 0.3 })
     this.f.freeze(STOP.jab)
     this.cam.shake(t + 0.001, 1, 0.08)
   }
@@ -229,7 +239,7 @@ class Cut {
     if (this.sc > 1.5) this.set += a.win(t, t + 0.12, `<rect x="${r1(bx - 9)}" y="${r1(top + 3)}" width="2" height="5" fill="#9FE8FF"/><rect x="${r1(bx + 7)}" y="${r1(top + 10)}" width="2" height="4" fill="#FFFFFF"/>`)
     this.set += fx.puff(a, t, bx, gy - 8, { s: 1.1, fill: PROPS.paperDark, ink: PROPS.ink })
     this.f.at(t)
-    if (word) this.f.sfx('KRAK!', bx, Math.max(this.top, top - 6), { size: 15, tilt: bx % 2 > 1 ? 7 : -7 })
+    if (word) this.f.sfx('KRAK!', bx, this.wordY(bx, Math.max(this.top, top - 6), 15, 'KRAK!'), { size: 15, tilt: bx % 2 > 1 ? 7 : -7 })
     this.f.freeze(0.04)
     this.cam.shake(t + 0.001, 2, 0.12)
   }
@@ -588,7 +598,7 @@ const conquestBand = (c: Cut): void => {
   c.set += fx.star3(c.act, 0, slot[0], slot[1], 22, STAR)
   laugh(c, 'c', 0.5, 2)
   // His laugh as a word beside him (the band keeps its header row clear: no bubble above his head).
-  f.at(0.55).sfx('HA HA!', ox - Math.round(46 * sc), Math.max(c.top, yc - 6), { size: 13, tilt: -6, d: 0.6 })
+  f.at(0.55).sfx('HA HA!', ox - Math.round(46 * sc), c.wordY(ox - Math.round(46 * sc), Math.max(c.top, yc - 6), 13, 'HA HA!'), { size: 13, tilt: -6, d: 0.6 })
   // The charge: caught. His open hand stops the fist dead (TAK), Mark hangs there for a beat.
   f.at(1.2)
   pull(c, 'm', 6, 0.1)
@@ -738,24 +748,32 @@ const conquestAct = (c: Cut, act: ActIndex): void => {
 }
 
 // ---------------------------------------------------------------- surfaces
-export type FightArgs = { W: number; H: number; era: Era; startAt: number; /** Colours kept per frame. */ K?: number; big?: boolean; /** Which version (default 0). */ v?: Version }
+export type FightArgs = { W: number; H: number; era: Era; startAt: number; /** Colours kept per frame. */ K?: number; big?: boolean; /** Which version (default 0). */ v?: Version; /** The band only: the clear span and the readouts to keep clear (stage/keep.ts). */ stage?: BandStage }
 type Built = { svg: string; chain: string[]; frames: number; shake: string; cut: Cut }
 const CACHE = new Map<string, Built>()
 const build = (a: FightArgs, surface: 'band' | ActIndex): Built => {
   const v = a.v ?? 0
   const T = timing(v)
-  const key = `${surface}|${v}|${a.era}|${a.W}|${a.H}|${a.startAt}|${a.K ?? 4}`
+  const st = surface === 'band' ? a.stage : undefined
+  const key = `${surface}|${v}|${a.era}|${a.W}|${a.H}|${a.startAt}|${a.K ?? 4}|${st ? `${st.x1}:${st.keep.join(';')}` : ''}`
   const hit = CACHE.get(key)
   if (hit) return hit
   const band = surface === 'band'
   const off = band ? 0 : (T.off[surface] as number)
-  const box: [number, number, number, number] = band ? [0, 0, Math.round(a.W * 0.67), a.H] : [0, 0, a.W, a.H]
+  // On the real band the cut is laid out on a virtual width whose action box (0.67 of it) ends at the band's clear span, so
+  // it never reaches the crew, the percent, TODAY or the readouts; a narrow span plays it smaller.
+  const W = st ? Math.max(360, Math.min(a.W, Math.round((st.x1 - 4) / 0.67))) : a.W
+  const box: [number, number, number, number] = band ? [0, 0, Math.round(W * 0.67), a.H] : [0, 0, a.W, a.H]
   const cq = v === CONQUEST
-  const c = new Cut(`invf-${band ? 'b' : `p${surface}`}-${v}-${a.era}-${a.W}x${a.H}`, a.startAt, off, a.era, band ? 1.45 : 1.9, a.W, a.H, box, a.K ?? 4, T.ms, cq)
+  const sc = band ? (W < 620 ? 1.15 : W < 800 ? 1.3 : 1.45) : 1.9
+  const c = new Cut(`invf-${band ? 'b' : `p${surface}`}-${v}-${a.era}-${a.W}x${a.H}`, a.startAt, off, a.era, sc, W, a.H, box, a.K ?? 4, T.ms, cq, st ? 2 : undefined)
+  if (st) c.keep = st.keep
   if (band) { if (cq) conquestBand(c); else bandCut(c, v as 0 | 1 | 2) }
   else if (cq) conquestAct(c, surface)
   else actCut(c, surface)
-  const svg = c.done(band ? T.band : (T.len[surface] as number))
+  const done = c.done(band ? T.band : (T.len[surface] as number))
+  // The keep-out: the window under the header rule, left of the clear span, minus the Tasks chip and the step count.
+  const svg = st ? `${keepClip(`${c.act.p}kc`, [0, 34, st.x1, a.H - 34], st.keep)}<g clip-path="url(#${c.act.p}kc)">${done}</g>` : done
   const chain = c.act.chainKeys()
   const out: Built = { svg, chain, frames: c.act.bank.count(), shake: c.shake(), cut: c }
   if (CACHE.size > 24) CACHE.delete(CACHE.keys().next().value as string)
