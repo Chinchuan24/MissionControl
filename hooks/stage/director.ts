@@ -49,6 +49,12 @@ export const cadence = (g: Rarity | Gap): { slotMs: number; jitterMs: number } =
 /** The chance per window (a roamer's 30 s window by default) that gives about one hit every `everyMin` minutes. */
 export const perWindow = (everyMin: number, windowMs = 30_000): number => Math.round(Math.min(1, Math.max(0, windowMs / (everyMin * MIN))) * 1e4) / 1e4
 
+/**
+ * The local time zone's offset from UTC at `at`, in ms, east positive: what `new Director(seed, { dayOffsetMs })` wants so a
+ * daily lane's hours are the person's hours. (JS `getTimezoneOffset()` is in minutes and WEST positive: do not pass it raw.)
+ */
+export const localOffsetMs = (at: number): number => -new Date(at).getTimezoneOffset() * MIN
+
 /** A stable number in [0, 1) for a text (FNV-1a, then a murmur-style mix). */
 export const u01 = (s: string): number => {
   let h = hash(s)

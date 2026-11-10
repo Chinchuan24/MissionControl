@@ -7,7 +7,7 @@ import { expect, test } from 'claude-code/testing'
 import { BUDGET, audit, chars, doc } from './budget'
 import { Camera } from './camera'
 import { Fight, fightLane } from './choreo'
-import { DAY, Director, MIN, RARITY, cadence, perWindow } from './director'
+import { DAY, Director, MIN, RARITY, cadence, localOffsetMs, perWindow } from './director'
 import { FrameBank } from './frames'
 import { parallax } from './parallax'
 import { Act } from './timeline'
@@ -270,4 +270,15 @@ test('choreo: an unknown fighter or pose fails loudly', () => {
   const f = new Fight(act).fighter('a', 'A', 10, 10)
   expect(() => f.approach('zz', 50)).toThrow()
   expect(() => f.pose('a', 'NOPE')).toThrow()
+})
+
+test('director: localOffsetMs is east positive (the opposite sign of getTimezoneOffset)', () => {
+  const at = Date.parse('2026-07-01T12:00:00Z')
+  expect(localOffsetMs(at)).toBe(-new Date(at).getTimezoneOffset() * 60_000)
+  // A daily lane at 9-18 local starts inside those local hours.
+  const d = new Director('tz', { dayOffsetMs: localOffsetMs(at) }).lane('p', { daily: [9, 18] }).add('p', { id: 'x', ms: 1000 })
+  const s = d.next(at - 86_400_000, {}, 'p')
+  expect(s).toBeDefined()
+  const h = new Date(s?.startAt ?? 0).getHours()
+  expect(h >= 9 && h < 18).toBe(true)
 })

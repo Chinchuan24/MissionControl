@@ -90,7 +90,7 @@ const near = (a: { startAt: number; endAt: number }, b: { startAt: number; endAt
 const pieceNear = (s: { startAt: number; endAt: number }): boolean => [s.startAt, s.endAt].some(t => dayPlan(t).some(q => near(s, q, PIECE_GAP_MS)))
 
 // THE AMBUSH v2: rare, through the stage director's `rare` cadence (30-45 min): slots of 37.5 min, each AMBUSH at a seeded
-// moment in its slot's first 15 min, so one fires about every 37 min while a job works (never closer than ~22 min). It was
+// moment in its slot's first 7.5 min, so two in a row are 30-45 min apart while a job works (about 37 min on average). It was
 // every 15-20 min, a 12 s takeover with the scrim over the working numbers: tens a day.
 export const AMBUSH_MS = 12_000
 export const AMB_SLOT_MS = cadence('rare').slotMs
