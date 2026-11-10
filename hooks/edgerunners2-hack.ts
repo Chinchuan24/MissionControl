@@ -30,13 +30,14 @@ export type HackLine = { /** Seconds after the event starts. */ t: number; on: H
 export type HackPlan = { on: boolean; seed: string; bucket: number; startAt: number; endAt: number; burst: boolean; paneCard: HackCard; lines: HackLine[] }
 
 /**
- * The chance that a 30 s window holds an event. In D mode rare at a normal context (about one window in twelve; with her
- * walks and the duets about one Capri event in five windows), more from 85%, most windows from 95%. CAPRI mode (she is in
- * control) keeps its busier pace. Her takeover always has one, and a walk, peek or sit makes it likelier.
+ * The chance that a 30 s window holds an event. In D mode rare at a normal context (her lines alone about once in 12 min; with
+ * her walks and the duets one Capri event every 6-7 min), more from 85%, most windows from 95%. CAPRI mode (she is in control)
+ * is busier but still a surprise. Her takeover always has one, and a walk, peek or sit makes it likelier.
  */
 export const hackChance = (ctxPct: number, sec: boolean, roam: RoamPlan['kind']): number => {
   if (roam === 'takeover') return 1
-  const base = sec ? (ctxPct >= 95 ? 0.9 : ctxPct >= 85 ? 0.65 : 0.45) : ctxPct >= 95 ? perWindow(0.8) : ctxPct >= 85 ? perWindow(1.5) : perWindow(6)
+  // CAPRI mode: about one event every 5 min at rest, 2.5 from 85%, every window or two from 95% (her glitches yield to them).
+  const base = sec ? (ctxPct >= 95 ? perWindow(0.8) : ctxPct >= 85 ? perWindow(2.5) : perWindow(5)) : ctxPct >= 95 ? perWindow(0.8) : ctxPct >= 85 ? perWindow(3) : perWindow(25)
   return roam ? Math.min(1, base + 0.3) : base
 }
 
@@ -219,6 +220,8 @@ export type HackArgs = {
   roam: RoamPlan | null
   /** Her plan for the window starting at a given time, for the events a draw schedules ahead (absent: not out). */
   roamFor?: (windowStart: number) => RoamPlan | null
+  /** A window another of her events owns (a duet): her lines alone never share it (one Capri event per window). */
+  taken?: (windowStart: number) => boolean
 }
 
 /**
@@ -238,7 +241,9 @@ export const er2Hack = (seed: string, a: HackArgs, sec: boolean): string => {
   let body = ''
   for (let b = here; b <= Math.floor((a.at + HACK_AHEAD_MS) / HACK_WINDOW_MS); b++) {
     const w0 = b * HACK_WINDOW_MS
-    const plan = hackPlan(`${seed}|hack`, w0, a.ctxPct, sec, b === here ? a.roam : (a.roamFor?.(w0) ?? null))
+    const roam = b === here ? a.roam : (a.roamFor?.(w0) ?? null)
+    if (!roam?.on && a.taken?.(w0)) continue
+    const plan = hackPlan(`${seed}|hack`, w0, a.ctxPct, sec, roam)
     if (!plan.on || plan.endAt <= a.at || plan.startAt > a.at + HACK_AHEAD_MS) continue
     if (a.surface === 'pane' && (a.card ?? 'cred') !== plan.paneCard) continue
     if (plan.startAt > a.at && ++ahead > MAX_AHEAD) break

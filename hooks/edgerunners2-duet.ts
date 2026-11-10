@@ -48,8 +48,8 @@ export const DUET_DUR: Record<DuetKind, number> = { ride: 5000, link: 4000, poss
 export const RIDE_LINES = ['relax, choom.', 'eyes up, D.', 'you need me.']
 export const DUET_SEED = 'er2duet'
 
-/** The chance of a duet in a free 30 s window: rare at the start (one free window in 25), more from 85%, much more from 95%. */
-export const duetChance = (ctxPct: number): number => (ctxPct >= 95 ? perWindow(1.25) : ctxPct >= 85 ? perWindow(4) : perWindow(12.5))
+/** The chance of a duet in a free 30 s window: rare at the start (about once in 25 min), more from 85%, much more from 95%. */
+export const duetChance = (ctxPct: number): number => (ctxPct >= 95 ? perWindow(1.25) : ctxPct >= 85 ? perWindow(8) : perWindow(25))
 
 /**
  * What the pair does in the window containing `at`. Deterministic in (seed, window, context).
@@ -323,14 +323,18 @@ export const GLITCH_SEED = 'capri'
 export const GLITCH_AHEAD_MS = 75_000
 const GLITCH_MAX_AHEAD = 3
 
-/** The window's glitch events, each at most 400 ms: chance 0.5 (< 85%), 0.8 (85 - 94), 1.0 (95+, and half the time a second event 9 s later). */
-export const glitchPlan = (seed: string, at: number, ctxPct: number): GlitchPlan => {
+/**
+ * The window's glitch events, each at most 400 ms, so she stays a surprise: about one every 4 min (< 85%), every 1.5 min
+ * (85 - 94), most windows from 95% (and a third of those a second event 9 s later). `taken(windowStart)`: a window her hack
+ * lines own gets no glitch (one Capri event per window).
+ */
+export const glitchPlan = (seed: string, at: number, ctxPct: number, taken?: (windowStart: number) => boolean): GlitchPlan => {
   const bucket = Math.floor(at / ROAM_WINDOW_MS)
   const start = bucket * ROAM_WINDOW_MS
   const rnd = (salt: string) => unit(`${seed}|glitch|${bucket}|${salt}`)
-  const chance = ctxPct >= 95 ? 1 : ctxPct >= 85 ? 0.8 : 0.5
+  const chance = ctxPct >= 95 ? perWindow(0.6) : ctxPct >= 85 ? perWindow(1.5) : perWindow(4)
   const events: GlitchEvent[] = []
-  const n = rnd('on') < chance ? (ctxPct >= 95 && rnd('two') < 0.5 ? 2 : 1) : 0
+  const n = rnd('on') < chance && !taken?.(start) ? (ctxPct >= 95 && rnd('two') < 0.33 ? 2 : 1) : 0
   for (let i = 0; i < n; i++) {
     const kind = GLITCH_KINDS[Math.floor(rnd(`k${i}`) * GLITCH_KINDS.length)] as GlitchKind
     const startAt = start + 800 + Math.floor(rnd('t0') * (ROAM_WINDOW_MS - 2000 - 9000)) + i * 9000
@@ -339,10 +343,10 @@ export const glitchPlan = (seed: string, at: number, ctxPct: number): GlitchPlan
   return { bucket, events }
 }
 /** Every glitch of the windows around `at` that has not finished and starts within the look-ahead, soonest first (at most 3 not yet begun). */
-export const glitchEvents = (seed: string, at: number, ctxPct: number, ahead = GLITCH_AHEAD_MS): GlitchEvent[] => {
+export const glitchEvents = (seed: string, at: number, ctxPct: number, ahead = GLITCH_AHEAD_MS, taken?: (windowStart: number) => boolean): GlitchEvent[] => {
   const out: GlitchEvent[] = []
   for (let b = Math.floor(at / ROAM_WINDOW_MS); b <= Math.floor((at + ahead) / ROAM_WINDOW_MS); b++) {
-    for (const ev of glitchPlan(seed, b * ROAM_WINDOW_MS, ctxPct).events) {
+    for (const ev of glitchPlan(seed, b * ROAM_WINDOW_MS, ctxPct, taken).events) {
       if (ev.startAt + ev.durMs + 60 * 24 <= at || ev.startAt > at + ahead) continue
       if (ev.startAt > at && out.filter(e => e.startAt > at).length >= GLITCH_MAX_AHEAD) continue
       out.push(ev)

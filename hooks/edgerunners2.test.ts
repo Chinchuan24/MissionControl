@@ -11,6 +11,7 @@ import { HACK_AHEAD_MS, HACK_CSS, HACK_MIN_GAP_S, LINE_MAX_S, er2Hack, hackChanc
 import type { HackCard, HackSurface } from './edgerunners2-hack'
 import { roamOptsOf, roamOverlay } from './overlay'
 import { roamPlan } from './roamer'
+import { DUET_SEED, duetPlan } from './edgerunners2-duet'
 import { THEMES } from './themes'
 
 const pane = { title: '', isFocused: false, bodyColumns: 100, placement: 'dock', scroll: { offset: 0, bodyRows: 60 }, view: {} } as const
@@ -228,7 +229,8 @@ test('card sizes: each ER2 card is lean (25 kB), and the whole pane with a takeo
   const full = { ...BLANK_CRED, xp: 10500, jobs: 60, longJobs: 12, agents: 120, badges: ER2_BADGES.slice(0, 6).map(b => b.id) }
   for (const sec of [false, true]) {
     for (const W of [360, 480, 560]) {
-      for (const c of [BLANK_CRED, full]) expect(syncCard(W, c, sec).length).toBeLessThan(CARD_BUDGET)
+      // CAPRI mode's capsule carries her turning head (a turnaround, its own 20 k budget).
+      for (const c of [BLANK_CRED, full]) expect(syncCard(W, c, sec).length).toBeLessThan(CARD_BUDGET + (sec ? 20_000 : 0))
       expect(traceCard(W, beatsOf(40), -1, sec).length).toBeLessThan(CARD_BUDGET)
       expect(traceCard(W, beatsOf(12), 3, sec).length).toBeLessThan(CARD_BUDGET)
       expect(gigsCard(W, Array.from({ length: 5 }, (_, i) => ({ task: `Gig number ${i}`, costUsd: i, at: 0, ms: i * 400_000 })), sec).length).toBeLessThan(CARD_BUDGET)
@@ -258,18 +260,18 @@ test('capricorn: hidden until worn; "0+2=1" unlocks it and again takes it off; t
   await $.prompt.submit({ text: 'again: 0+2=1', cursor: 0 } as never)
   expect((await svgs($, 'AbovePrompt')).join('')).toContain('SNAKE NATION')
 })
-test('modes: the whole word "capri" (any case) in a prompt lets her in; "capricorn" or a longer word does not; the prompt is unchanged', async ($, on) => {
+test('modes: "hi capri" (any case) in a prompt lets her in; the bare word, "capricorn" or a longer word does not; the prompt is unchanged', async ($, on) => {
   base(on, findAt(null, 10))
   await start($, 'edgerunners-2')
-  for (const word of ['please capricorn the module', 'capriccio in C', 'scapring along']) {
+  for (const word of ['please capricorn the module', 'capriccio in C', 'scapring along', 'capri pants', 'Say HI to CAPRI!']) {
     const back = (await $.prompt.submit({ text: word, cursor: 0 } as never)) as { text?: string }
     expect(back.text).toBe(word)
     expect((await svgs($, 'AbovePrompt')).join('')).not.toContain('CAPRI IN CONTROL')
   }
   expect(CAPRI_WORD_RE.test('Hi, Capri!')).toBe(true)
   expect(CAPRI_WORD_RE.test('capricorn')).toBe(false)
-  const back = (await $.prompt.submit({ text: 'Say HI to CAPRI!', cursor: 0 } as never)) as { text?: string }
-  expect(back.text).toBe('Say HI to CAPRI!')
+  const back = (await $.prompt.submit({ text: 'Hi, CAPRI!', cursor: 0 } as never)) as { text?: string }
+  expect(back.text).toBe('Hi, CAPRI!')
   expect((await svgs($, 'AbovePrompt')).join('')).toContain('CAPRI IN CONTROL')
 })
 
@@ -367,9 +369,13 @@ test('sizes: the band with a walking Capri stays under the limit', async ($, on)
 
 // --- Capri's red hack lines ----------------------------------------------------------------------------------
 const roamerOf = (sec: boolean) => (sec ? THEMES.capricorn : th).roamer as NonNullable<typeof th.roamer>
+// As the panels draw it: CAPRI mode has no roamer (she is the HUD); in D mode her lines alone yield to a duet's window.
 const hackPlanAt = (t: number, ctx: number, sec = false) => {
   const r = roamerOf(sec)
-  return hackPlan(`${r.seed}|hack`, t, ctx, sec, roamPlan(r.seed, t, roamOptsOf(r, ctx)))
+  const roam = sec ? null : roamPlan(r.seed, t, roamOptsOf(r, ctx))
+  const p = hackPlan(`${r.seed}|hack`, t, ctx, sec, roam)
+  const taken = !sec && !roam?.on && duetPlan(DUET_SEED, Math.floor(t / 30_000) * 30_000, ctx, w => roamPlan(r.seed, w, roamOptsOf(r, ctx))).on
+  return taken ? { ...p, on: false } : p
 }
 /** A moment when the first line for `surface` (on `card`, for a pane) is mid-draw; with `none`, a moment with no event and no roamer. */
 const hackAt = (ctx: number, o: { surface?: HackSurface; card?: HackCard; sec?: boolean; none?: boolean; from?: number; alone?: boolean } = {}): number => {
@@ -477,8 +483,9 @@ test('hack lines: a draw carries at most three events that have not begun, and s
 })
 
 test('hack lines: drawn on both panels while wearing edgerunners-2, on one pane card only, and none at a quiet moment', async ($, on) => {
-  const t = hackAt(96, { surface: 'pane', card: 'cred' })
-  base(on, t, { ctx: 96 })
+  // 94%: D mode (from 95% she takes the HUD and these are CAPRI's lines; her hack-line rate there is a surprise now, not a constant)
+  const t = hackAt(94, { surface: 'pane', card: 'cred' })
+  base(on, t, { ctx: 94 })
   await start($, 'edgerunners-2')
   await job($)
   const band = (await svgs($, 'AbovePrompt')).join('')
@@ -550,11 +557,12 @@ test('hack lines: rare at a normal context, more often from 85%, most at 95%, in
   expect(n96.events).toBeGreaterThan(n30.events)
   expect(n96.events).toBeGreaterThan(n88.events)
   expect(n88.events).toBeGreaterThan(n30.events)
-  // D mode is calm: about one window in ten at a normal context (was about one a minute), escalating at 85% and 95%.
-  expect(n30.events).toBeGreaterThanOrEqual(6)
-  expect(n30.events).toBeLessThanOrEqual(20)
-  expect(n88.events).toBeGreaterThanOrEqual(35)
-  expect(n96.events).toBeGreaterThanOrEqual(70) // most windows
+  // D mode is calm, so she is a surprise: her lines alone a few times an hour at a normal context (was about one a minute,
+  // then one window in ten), escalating at 85% and 95% (where the duets take many of the windows).
+  expect(n30.events).toBeGreaterThanOrEqual(1.5)
+  expect(n30.events).toBeLessThanOrEqual(6)
+  expect(n88.events).toBeGreaterThanOrEqual(15)
+  expect(n96.events).toBeGreaterThanOrEqual(35)
   expect(hour(96, true).events).toBeGreaterThan(hour(30, true).events)
   expect(hour(30, true).events).toBeGreaterThan(hour(30, false).events) // she owns the secret skin
   // 2 to 5 lines; a burst of five from 95%.
@@ -654,7 +662,7 @@ test('hack lines: a draw (the live event and up to three ahead) is under 16 kB o
   expect(max).toBeGreaterThan(1500) // the sweep really drew fragments
 })
 
-for (const ctx of [30, 96]) {
+for (const ctx of [30, 94]) {
   test(`hack lines: add little at ${ctx}%: the band and every pane Svg stay well under the limit, the pane total under the budget (4 agents)`, async ($, on) => {
     const t = hackAt(ctx, { surface: 'pane', card: 'cred', alone: true })
     base(on, t, { ctx })
@@ -672,7 +680,8 @@ for (const ctx of [30, 96]) {
     expect(bandAdded).toBeGreaterThan(0)
     expect(bandAdded).toBeLessThan(16_384)
     for (const a of added) expect(a).toBeLessThan(16_384)
-    expect(band.length).toBeLessThan(70_000)
+    // A rare fight in the band may coincide (one big act): then the band's cut is the lite one.
+    expect(band.length).toBeLessThan(band.includes('<!--dl-->') ? 120_000 : 70_000)
     for (const s of panes) expect(s.length).toBeLessThan(60_000)
     expect(total).toBeLessThan(260_000)
   })

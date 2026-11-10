@@ -55,6 +55,7 @@ export const EGG_CSS = `.rg{animation:rgx 4.2s steps(1) infinite}.rg2{animation:
 .heat{animation:heat .5s steps(1) infinite}@keyframes heat{50%{fill:#2F6BFF}}
 .psy{animation:psy 1.3s steps(1) infinite}@keyframes psy{0%,100%{opacity:1;transform:translateX(0)}20%{opacity:.4;transform:translateX(1px)}24%{opacity:1;transform:translateX(-1px)}60%{opacity:.85}}
 .sandy{animation:sandy 1.2s ease-in-out infinite}@keyframes sandy{50%{opacity:.08}}
+.sbob{animation:sbob .5s steps(1) infinite}@keyframes sbob{50%{transform:translateY(-2px)}}
 .win{animation:win 3.4s steps(1) infinite}@keyframes win{50%{opacity:.25}}
 .av{animation:av 14s linear infinite}@keyframes av{from{transform:translateX(-60px)}to{transform:translateX(var(--sw))}}
 .beacon{animation:led 1.4s steps(1) infinite}@keyframes led{50%{opacity:.2}}
@@ -62,7 +63,7 @@ export const EGG_CSS = `.rg{animation:rgx 4.2s steps(1) infinite}.rg2{animation:
 .rise{animation:rise 2.4s cubic-bezier(.2,.8,.2,1) both}@keyframes rise{from{transform:translateY(40px);opacity:0}}
 .flash{animation:flash .9s steps(1) 3}@keyframes flash{33%{opacity:.15}66%{opacity:.9}}
 .tick{animation:tick 1.6s ease-in-out infinite}
-@media (prefers-reduced-motion: reduce){.rg,.rg2,.rgs,.bx,.bslot,.heat,.psy,.sandy,.win,.av,.beacon,.moon,.rise,.flash,.tick{animation:none}}`
+@media (prefers-reduced-motion: reduce){.rg,.rg2,.rgs,.bx,.bslot,.heat,.psy,.sandy,.sbob,.win,.av,.beacon,.moon,.rise,.flash,.tick{animation:none}}`
 
 // The Relic's malfunction on a line of text: a red and a cyan copy that tear
 // sideways for a moment every few seconds, over a white core that jumps a slice.
@@ -125,14 +126,14 @@ export const sandevistan = (figure: string, egg: Egg): { defs: string; svg: stri
   return {
     defs: `<filter id="${f}"><feColorMatrix type="matrix" values="${tint}  0 0 0 1 0"/></filter>`,
     svg: [9, 6, 3]
-      .map((dx, i) => `<g class="sandy" style="animation-delay:${-i * 0.2}s" opacity="${(0.12 + i * 0.1).toFixed(2)}" filter="url(#${f})" transform="translate(${-dx} 0)">${figure}</g>`)
+      .map((dx, i) => `<g class="sandy" style="animation-delay:${-i * 0.2}s" opacity="${(0.12 + i * 0.1).toFixed(2)}" filter="url(#${f})" transform="translate(${-dx} 0)">${egg === 'runners' ? `<g class="sbob" style="animation-delay:${-i * 0.125}s">${figure}</g>` : figure}</g>`)
       .join(''),
   }
 }
 
 // Night City along the bottom of a card: towers with blinking windows and an AV
 // crossing; Arasaka's tower over the corpo skin, Lucy's moon over hers.
-export const skyline = (W: number, y0: number, h: number, egg: Egg): string => {
+export const skyline = (W: number, y0: number, h: number, egg: Egg, bare = false): string => {
   const c = COLORS[egg]
   let seed = 7
   const rnd = () => ((seed = (seed * 9301 + 49297) % 233280) / 233280)
@@ -149,7 +150,8 @@ export const skyline = (W: number, y0: number, h: number, egg: Egg): string => {
     x += w
   }
   let extra = ''
-  if (egg === 'corpo') {
+  if (bare) extra = ''
+  else if (egg === 'corpo') {
     // The tower: tall, stepped, a red beacon on top.
     const tx = Math.round(W * 0.72)
     extra = `<path d="M${tx} ${y0 + h}V${y0 + 6}l6 -6l6 6V${y0 + h}Z"/><rect class="beacon" x="${tx + 5}" y="${y0 - 2}" width="2" height="2" fill="#FF1E3C"/>`
@@ -165,7 +167,7 @@ export const skyline = (W: number, y0: number, h: number, egg: Egg): string => {
     extra = `<g class="moon"><circle cx="${mx}" cy="${my.toFixed(1)}" r="${r.toFixed(1)}" fill="#FFD6F2" fill-opacity=".55"/><circle cx="${(mx - r * 0.3).toFixed(1)}" cy="${(my - r * 0.25).toFixed(1)}" r="${(r * 0.3).toFixed(1)}" fill="#E6A8D8" fill-opacity=".5"/></g>`
   }
   const av = `<g class="av" style="--sw:${W + 60}px"><rect x="0" y="${y0 + 3}" width="9" height="2" rx="1" fill="${c.dim}"/><rect x="8" y="${y0 + 3}" width="2" height="2" fill="${c.c}"/></g>`
-  return `<g opacity=".22" fill="${egg === 'corpo' ? '#2A0A0F' : egg === 'samurai' ? '#2A0C0C' : egg === 'netrun' ? '#2A1A3A' : '#1A2230'}">${extra}${towers.join('')}</g><g opacity=".5">${windows.join('')}</g>${av}`
+  return `<g opacity="${bare ? 0.42 : 0.22}" fill="${egg === 'corpo' ? '#2A0A0F' : egg === 'samurai' ? '#2A0C0C' : egg === 'netrun' ? '#2A1A3A' : '#1A2230'}">${extra}${towers.join('')}</g><g opacity=".55">${windows.join('')}</g>${av}`
 }
 
 // The cheer when a job is done: Night City's "preem", the moon, the corporation's stamp.

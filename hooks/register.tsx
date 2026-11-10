@@ -38,6 +38,8 @@ import { extrasInto, glitchPanel, hackInto, overlayInto, roamOnBand, roamOverlay
 import type { ThemeCtx, ThemeEggs } from './themes'
 import { canNudge, nudge, pickQuiet, prBadge, quietOf, rememberTask, repoAndBranch, rescueText, retryOnHaiku, whatIf, whatIfText, whatIfTip } from './coach'
 import { flatSmiley, serifClip, serifW } from './mentalist-cards'
+import { CYBER_SWITCH, cyberFightBand, cyberFightEcho, maxtacClimb } from './cyber-fights'
+import { IDLE_CSS, ACT_MS, WAKE_SAMURAI_RE, bossIdle, cheerAt, cheerOf, city, cyberPlay, diveAct, gigAct, gigAt, idScan, moon, netGrid, playing, relic, sandevistanAct, stage, tower } from './cyber-motion'
 import { BADGES, BEATS_KEPT, BLANK_CRED, BOOT_H, SECRET_BADGE, award, credFor, foundOf, secretFoundFor, withFound, rockerRankOf, bdHeight, bootStrip, braindanceCard, cleanCred, credCard, credHeight, levelOf, rankOf, shiftPick, stepPick } from './extras'
 import type { Beat, Cred } from './extras'
 import { ONESHOT_KEY, ULTRA_BY_KEY, ULTRA_BY_OPTIONS, ULTRA_KEY, ULTRA_TASK_HINT, cleanUltraBy, managerPicks, parseUltraBy, ultraBySaid, ultraBySection, ultraPlanToast, type UltraBy, pillChip, oneShotChipWord, cleanOneShot, cleanUltraRules, isUltraAgent, matchUltra, nextOneShot, oneShotChip, oneShotSaid, oneShotSection, oneShotWord, parseOneShot, resolveEffort, ultraCommand, ultraLine, withUltraBrief } from './crewcontrol'
@@ -2170,8 +2172,13 @@ const switchLookOf = (k: Skin): SwitchLook => ({ bg: k.backdrop.fill || k.colors
 /** The band takes the switch only with room for it (the band's 70 k motion budget, less the wipe's 8 k) and never over another act. */
 const SWITCH_BAND_ROOM = 60_000
 const switchLive = (at: number): { at: number; from: SwitchLook; to: SwitchLook; id?: string } | undefined => (SKIN_SWAP && at >= SKIN_SWAP.at - 1000 && at < SKIN_SWAP.at + SWITCH_MS + 600 ? SKIN_SWAP : undefined)
-/** A skin's own flavour of the switch (switch-flavours.ts: Invincible, The Boys, SOLID GOLD, NOIR), as skinSwitch's option. */
-const flavourOf = (id: string | undefined): { flavour?: SwitchFlavour } => { const f = id ? switchFlavour(id) : undefined; return f ? { flavour: f } : {} }
+/** The skin's own flavour of the switch, as skinSwitch's option: by the skin switched to (switch-flavours.ts: Invincible, The Boys,
+ *  SOLID GOLD, NOIR), else the worn theme's own (Edgerunners 2's D / CAPRI), else a classic Cyberpunk skin's (cyber-fights.ts),
+ *  else the generic one. */
+const flavourOf = (id: string | undefined): { flavour?: SwitchFlavour } => {
+  const f = (id ? switchFlavour(id) : undefined) ?? themeOf()?.switchFlavour ?? (cyberOf() ? CYBER_SWITCH[cyberOf() as CyberEgg] : undefined)
+  return f ? { flavour: f } : {}
+}
 /** The switch over a drawn band source (its viewBox gives the size). */
 const switchBand = (src: string, at: number): string => {
   const sw = switchLive(at)
@@ -3876,7 +3883,7 @@ const figureDefsMarkup = (figures: Map<string, string>): string => {
 // Body and props nest inside `bd` so a prop rides the bob and adds its own motion;
 // legs stay outside it and step on their own. `mirror` flips the crab inside its
 // own box (x .. x + CRAB_BOX * scale) so it faces left.
-const crab = (x: number, y: number, costume: string, dim = false, isWalking = false, scale = CRAB_SCALE, mirror = false): string => {
+const crab = (x: number, y: number, costume: string, dim = false, isWalking = false, scale = CRAB_SCALE, mirror = false, overlay = ''): string => {
   const place = mirror ? `translate(${r2(x + CRAB_BOX * scale)},${r2(y)}) scale(${-scale},${scale})` : `translate(${r2(x)},${r2(y)}) scale(${scale})`
   const cast = SKIN.cast ? CASTS[SKIN.cast] : undefined
   if (cast) {
@@ -3893,7 +3900,7 @@ const crab = (x: number, y: number, costume: string, dim = false, isWalking = fa
     const gy = r2(y - 27 * (k - scale))
     const grown = mirror ? `translate(${r2(gx + CRAB_BOX * k)},${gy}) scale(${-k},${k})` : `translate(${gx},${gy}) scale(${k})`
     // The tint rides in as the inherited `color`: one drawing serves every tint.
-    return `<g transform="${grown}" color="${tint}"${dim ? ' opacity="0.45"' : ''} shape-rendering="crispEdges">${placeFigure(`<g class="ch${isWalking ? ' run' : ''}${sprite.float ? ' fl' : ''}">${spriteMarkup(sprite, 'currentColor', CRAB_BOX)}</g>`)}</g>`
+    return `<g transform="${grown}" color="${tint}"${dim ? ' opacity="0.45"' : ''} shape-rendering="crispEdges">${placeFigure(`<g class="ch${isWalking ? ' run' : ''}${sprite.float ? ' fl' : ''}">${spriteMarkup(sprite, 'currentColor', CRAB_BOX)}${overlay}</g>`)}</g>`
   }
   if (costume === 'boss') costume = 'other'
   else if (costume.startsWith('role:')) costume = costume.slice(5)
@@ -5217,6 +5224,16 @@ const orgMarks = (): string =>
 <g id="bok"><circle r="6" fill="${DONE}"/><path d="M-3 0l2 2 4-4.5" fill="none" stroke="${inkOn(DONE)}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></g>
 <g id="bno"><circle r="6" fill="#D0453F"/><path d="M-2.5 -2.5l5 5M2.5 -2.5l-5 5" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/></g>`
 
+// The pane's crew view stands in each Cyberpunk skin's own place, behind the crew: Night City in the rain (2077), the
+// tower turning (Arasaka), the moon turning (Lucy), the stage (SAMURAI). Stepped loops, no filters, under every label.
+const cyberPane = (egg: CyberEgg, W: number, H: number, working: boolean): string => {
+  const one = (x: { svg: string; css: string }) => `<style>${x.css}</style>${x.svg}`
+  if (egg === 'runners') return one(city({ id: 'cpps', W, y: H - 44, h: 44, sc: 2, rain: 0.2, rainH: H }))
+  if (egg === 'corpo') return `<g opacity=".85">${one(tower({ id: 'arpt', x: W - 34, y: H - 6, sc: 1.4, period: 20 }))}</g>`
+  if (egg === 'netrun') return one(moon({ id: 'lupm', x: W - 46, y: 42, sc: 1.1, views: [0, 1, 2, 3, 4, 5, 6, 7], period: 32 }))
+  return `${one(stage({ id: 'smps', W, y: H - 62, h: 60, working, lamps: [Math.round(W * 0.28), Math.round(W * 0.72)], sc: 1.8 }))}${one(relic({ id: 'smpr', x: W - 30, y: 26, sc: 0.8 }))}`
+}
+
 const orgSvg = (W: number, root: OrgNode, isLight = false): string => {
   // A theme may draw the hierarchy in its own hand (Caliper: pins and a spine).
   const own = themeOf()?.org
@@ -5271,10 +5288,11 @@ const orgSvg = (W: number, root: OrgNode, isLight = false): string => {
       nodes.push(`<circle class="aura" cx="${x}" cy="${y + h / 2 + 2}" r="${w * 0.78}" fill="url(#aura)"/>
 <circle class="still" cx="${x}" cy="${y + h / 2 + 2}" r="${w * 0.62}" fill="none" stroke="url(#ring)" stroke-width="2"/><circle class="smil" cx="${x}" cy="${y + h / 2 + 2}" r="${w * 0.62}" fill="none" stroke="url(#ring)" stroke-width="2"><animateTransform attributeName="transform" type="rotate" from="0 ${x} ${y + h / 2 + 2}" to="360 ${x} ${y + h / 2 + 2}" dur="${isWorking ? 3 : 8}s" repeatCount="indefinite"/></circle>
 ${(() => {
-  const figure = `${crab(left, y, 'boss', false, isWorking, sc)}${crown(left, y, sc)}`
   const egg = cyberOf()
   const th = themeOf()
-  if ((!egg && !th?.afterimages) || !isWorking) return dancing(figure, isParty)
+  // The Cyberpunk bosses' idle frames ride inside the figure (a blink, lit optics, a rim, a strum); Saburo never trails.
+  const figure = `${crab(left, y, 'boss', false, isWorking, sc, false, egg && !isLight ? bossIdle(egg, isWorking) : '')}${crown(left, y, sc)}`
+  if ((!egg && !th?.afterimages) || !isWorking || egg === 'corpo') return dancing(figure, isParty)
   // David's Sandevistan (the themed skins' own trails): the boss leaves afterimages while the job runs.
   const sv = egg ? sandevistan(figure, egg) : (th as ThemeEggs).afterimages?.(figure, { x: left, y, w, h })
   return sv ? `<defs>${sv.defs}</defs>${sv.svg}${dancing(figure, isParty)}` : dancing(figure, isParty)
@@ -5329,7 +5347,7 @@ ${slot >= 46 ? `<text${isWorking ? ' class="t"' : ' class="s"'} x="${x}" y="${y 
     castGrow = 1
     figureDefs = null
   }
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="${FONT}">${PANE_CSS}${CRAB_CSS}${cyberOf() ? `<style>${EGG_CSS}</style>` : themeOf() ? `<style>${themeOf()?.css}</style>` : ''}
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="${FONT}">${PANE_CSS}${CRAB_CSS}${cyberOf() ? `<style>${EGG_CSS}${IDLE_CSS}</style>` : themeOf() ? `<style>${themeOf()?.css}</style>` : ''}
 <defs>${figureDefsMarkup(figures)}${isLight ? '' : orgMarks()}
 <radialGradient id="aura"><stop offset="0" stop-color="${SKIN.boss[0]}" stop-opacity=".45"/><stop offset=".6" stop-color="${SKIN.boss[0]}" stop-opacity=".12"/><stop offset="1" stop-color="${SKIN.boss[0]}" stop-opacity="0"/></radialGradient>
 <linearGradient id="ring" x1="0" x2="1"><stop offset="0" stop-color="${SKIN.boss[0]}"/><stop offset=".5" stop-color="${SKIN.boss[2]}" stop-opacity=".2"/><stop offset="1" stop-color="${SKIN.boss[3]}"/></linearGradient>
@@ -5342,6 +5360,7 @@ ${slot >= 46 ? `<text${isWorking ? ' class="t"' : ' class="s"'} x="${x}" y="${y 
 @keyframes spark{0%{opacity:1;transform:translateY(0)}100%{opacity:0;transform:translateY(-12px)}}
 @media (prefers-reduced-motion: reduce){.flow,.aura,.spark{animation:none}.spark{opacity:0}}</style>
 ${themeOf()?.pane && !isLight ? themeOf()?.pane?.backdrop(W, H, 0, SKIN.colors) : ''}
+${cyberOf() && !isLight ? cyberPane(cyberOf() as CyberEgg, W, H, isParty || Boolean(root.status === 'running')) : ''}
 ${edges.join('\n')}
 ${nodes.join('\n')}${SKIN.effects.scanlines && !isLight ? scanlines(W, H) : ''}</svg>`
 }
@@ -6573,9 +6592,70 @@ const slimBandSvg = (OW: number, d: HudData): string => {
     x1: Math.round(Math.min(crewLeft - 6, pctX - 6, rx - 2, hasReadouts ? r0 - 24 : W)),
     keep: [[px - 3, 39, pillW + 6, 22], [x0 - 8, 88, stepEnd - x0 + 8, 21]],
   }
-  const extras = th.extras ? th.extras({ W, H, surface: 'band', stage, at: d.at, ctxPct: d.ctxPct, ...(d.isParty ? { party: true } : {}), ...(BCS_UNPLUG_AT !== undefined ? { unplugAt: BCS_UNPLUG_AT } : {}), ...(activeFx() ? { fx: activeFx() as { kind: string; at: number } } : {}), working: d.isWorking, ...(swapAtNow() !== undefined ? { swapAt: swapAtNow() } : {}), task: d.title, titleW }) : ''
+  const extras = th.extras ? th.extras({ W, H, surface: 'band', stage, at: d.at, ctxPct: d.ctxPct, ...(d.isWorking && d.taskFrom ? { job: { at: d.taskFrom, n: d.today.tasks } } : {}), ...(d.isParty ? { party: true } : {}), ...(BCS_UNPLUG_AT !== undefined ? { unplugAt: BCS_UNPLUG_AT } : {}), ...(activeFx() ? { fx: activeFx() as { kind: string; at: number } } : {}), working: d.isWorking, ...(swapAtNow() !== undefined ? { swapAt: swapAtNow() } : {}), task: d.title, titleW }) : ''
   const body = `${s.join('\n')}${extras}${d.isParty ? th.cheer(W, H, FONT, c, d.partyAt) : ''}${d.isParty && th.roamer?.hushParty ? '' : roam}${trLayer}`
   return shakeInto(glitchPanel(svg(W, H, body), th, { at: d.at, ctxPct: d.ctxPct, party: d.isParty }), th, { W, H, surface: 'band', at: d.at, working: d.isWorking, party: d.isParty, fx: activeFx(), ...(swapAtNow() !== undefined ? { swapAt: swapAtNow() } : {}) })
+}
+
+// The four Cyberpunk skins' ground, each its own (cyber-motion.ts), under every readout: 2077's Night City in depth with
+// rain; Arasaka's turning tower and its laser ID scan; Lucy's 3D moon and, while a job works, the faint Net floor she
+// dived into; SAMURAI's stage (sweeping lights, the crowd on the beat, the Relic). The job-start acts' grounds and the
+// daily "2023" gig ride here too, pinned (a redraw resumes them).
+const CB_STRIP = 26
+const cyberGround = (egg: CyberEgg, OW: number, OH: number, d: HudData): string => {
+  const y = OH - CB_STRIP
+  let css = IDLE_CSS
+  const out: string[] = []
+  const add = (x: { svg: string; css: string }) => { out.push(x.svg); css += x.css }
+  if (egg === 'runners') add(city({ id: 'cpsk', W: OW, y: y + 4, h: CB_STRIP - 4 }))
+  else out.push(skyline(OW, OH - 16, 14, egg, true))
+  if (egg === 'corpo') {
+    add(tower({ id: 'artw', x: Math.round(OW * 0.72), y: OH - 2, sc: 0.75 }))
+    add(idScan({ W: OW, H: OH, tick: { x: OW - 18, y: OH - 7 }, font: FONT }))
+  }
+  if (egg === 'netrun') {
+    if (d.isWorking) out.push(netGrid({ W: OW, y: OH * 0.42, h: OH * 0.58, color: '#FF5CF0', op: 0.08 }))
+    add(moon({ id: 'lumn', x: Math.round(OW * 0.55), y: OH - 14, sc: 0.5, glow: true }))
+  }
+  if (egg === 'samurai') {
+    add(stage({ id: 'smst', W: OW, y: y - 4, h: CB_STRIP + 2, working: d.isWorking, lamps: [Math.round(OW * 0.6), Math.round(OW * 0.76)] }))
+    add(relic({ id: 'smrc', x: OW - 44, y: OH - 14, sc: 0.55 }))
+  }
+  const start = jobStart(egg, d)
+  if (egg === 'runners' && start !== undefined) out.push(sandevistanAct({ at: start, W: OW, H: OH, fig: 'cbfig', fx: 0, fy: 0 }).bg)
+  if (egg === 'netrun' && start !== undefined) out.push(diveAct({ at: start, W: OW, H: OH, y: OH * 0.42, h: OH * 0.58 }))
+  if (egg === 'samurai') {
+    const gig = gigAt(d.at, d.isWorking)
+    if (gig && d.at < gig.endAt) out.push(gigAct({ at: gig.startAt, W: OW, H: OH, font: FONT, ...gigSpots(OH), strip: { y, h: CB_STRIP } }).bg)
+  }
+  return `<style>${css}</style>${out.join('')}`
+}
+// Johnny's place on the band (the boss figure's middle, in the band's and in the inner group's coordinates).
+const gigSpots = (OH: number) => ({ john: { x: HUD_PAD + 26, y: HUD_PAD + HUD_HEAD - 2 + 22 }, fig: { x: 26, y: 22 }, OH })
+// A job's start as an act's pin: the job's own start (drawn on the redraw the start makes), else a replay of the act.
+const jobStart = (egg: CyberEgg, d: HudData): number | undefined => {
+  const kind = egg === 'runners' ? 'sandevistan' : egg === 'netrun' ? 'dive' : ''
+  if (!kind) return undefined
+  const replay = playing(kind, d.at)
+  if (replay !== undefined) return replay
+  const ms = (ACT_MS as Record<string, number>)[kind] ?? 0
+  return d.isWorking && d.taskFrom && d.at < d.taskFrom + ms ? d.taskFrom : undefined
+}
+// The front pieces of the acts (over the boss figure, in the inner group): the Sandevistan's afterimages, the gig's scanlines.
+const cyberFront = (egg: CyberEgg, OW: number, OH: number, d: HudData): string => {
+  if (d.lite) return ''
+  const start = egg === 'runners' ? jobStart(egg, d) : undefined
+  if (start !== undefined) return sandevistanAct({ at: start, W: OW, H: OH, fig: 'cbfig', fx: 0, fy: 0 }).fg
+  if (egg === 'samurai') {
+    const gig = gigAt(d.at, d.isWorking)
+    if (gig && d.at < gig.endAt) return gigAct({ at: gig.startAt, W: OW, H: OH, font: FONT, ...gigSpots(OH), strip: { y: OH - CB_STRIP, h: CB_STRIP } }).fg
+  }
+  return ''
+}
+// The cheer, each skin its own: 2077's neon PREEM, Arasaka's hanko, Lucy's moon, SAMURAI's shockwave (or a replay of it).
+const cyberCheer = (egg: CyberEgg, OW: number, OH: number, d: HudData): string => {
+  const at = cheerAt(egg, d.at, d.isParty ? d.partyAt ?? d.at : undefined)
+  return at === undefined ? '' : cheerOf(egg, { at, W: OW, H: OH, font: FONT })
 }
 
 const hudBandSvg = (OW: number, d: HudData): string => {
@@ -6662,7 +6742,7 @@ ${egg ? EGG_CSS : th ? th.css : ''}
     `${css}
 ${cardShape(0.5, 0.5, OW - 1, OH - 1, `class="tile"`, 10)}
 ${cardShape(0.5, 0.5, OW - 1, OH - 1, `fill="none" stroke="${edge}" stroke-opacity="${d.isWorking ? 0.45 : 0.6}" stroke-width="1.2"${d.isWorking ? ' class="hedge"' : ''}`, 10)}
-${egg && !d.lite ? `<g clip-path="url(#hudclip)">${skyline(OW, OH - 16, 14, egg).replace('<g opacity=".5">', '<g opacity=".25">')}</g>` : th?.skyline && !d.lite ? `<g clip-path="url(#hudclip)">${th.skyline(OW, OH - 16, 14, c)}</g>` : ''}
+${egg && !d.lite ? `<g clip-path="url(#hudclip)">${cyberGround(egg, OW, OH, d)}</g>` : th?.skyline && !d.lite ? `<g clip-path="url(#hudclip)">${th.skyline(OW, OH - 16, 14, c)}</g>` : ''}
 ${beam}
 ${brackets}
 <rect x="0.5" y="12" width="3" height="${OH - 24}" rx="1.5" fill="${edge}"/>
@@ -6671,13 +6751,15 @@ ${hudHead(W, d)}
 <g transform="translate(0 ${HUD_HEAD - 2})">
 <line x1="12" y1="${HUD_TOP + 0.5}" x2="${W - 12}" y2="${HUD_TOP + 0.5}" stroke="${c.line}"/>
 ${(() => {
-  const figure = `${crab(10, 9, 'boss', false, d.isWorking, 1.05)}${crown(10, 9, 1.05)}`
-  // (a themed skin's afterimages trail the figure in the pane; the band keeps to the cyberpunk ones)
-  if (!egg || !d.isWorking || d.lite) return dancing(figure, d.isParty)
-  const sv = sandevistan(figure, egg)
-  return `<defs>${sv.defs}</defs>${sv.svg}${dancing(figure, d.isParty)}`
+  if (!egg) return dancing(`${crab(10, 9, 'boss', false, d.isWorking, 1.05)}${crown(10, 9, 1.05)}`, d.isParty)
+  // The four Cyberpunk skins: the boss drawn once (a def) with its idle frames, every trail and afterimage a <use> of it.
+  // David's Sandevistan (trails while he works, the time-slow when a job starts); never on Saburo: Arasaka has no noise.
+  const figure = `<defs><g id="cbfig">${crab(10, 9, 'boss', false, d.isWorking, 1.05, false, d.lite ? '' : bossIdle(egg, d.isWorking))}${crown(10, 9, 1.05)}</g></defs>`
+  const one = '<use href="#cbfig"/>'
+  const trail = egg !== 'corpo' && d.isWorking && !d.lite ? sandevistan(one, egg) : undefined
+  return `${figure}${trail ? `<defs>${trail.defs}</defs>${trail.svg}` : ''}${cyberFront(egg, OW, OH, d)}${dancing(one, d.isParty)}`
 })()}
-${egg ? relicText(left, 20, fitText(d.title, 13, titleW), `font-family="${FONT}" font-size="13" font-weight="800" fill="${c.accent}"`, egg) : th?.glitch ? th.glitch(left, 20, fitText(d.title, 13, titleW), `font-family="${FONT}" font-size="13" font-weight="800" fill="${c.accent}"`, titleW) : `<text x="${left}" y="20" font-family="${FONT}" font-size="13" font-weight="800" class="ac gl">${xml(fitText(d.title, 13, titleW))}</text>`}
+${egg && SKIN.effects.glitch !== false ? relicText(left, 20, fitText(d.title, 13, titleW), `font-family="${FONT}" font-size="13" font-weight="800" fill="${c.accent}"`, egg) : th?.glitch ? th.glitch(left, 20, fitText(d.title, 13, titleW), `font-family="${FONT}" font-size="13" font-weight="800" fill="${c.accent}"`, titleW) : `<text x="${left}" y="20" font-family="${FONT}" font-size="13" font-weight="800" class="ac gl">${xml(fitText(d.title, 13, titleW))}</text>`}
 ${th?.mark ? th.mark(left - 15, 7) : ''}
 <rect x="${left + titleW + 8}" y="9" width="${pillW}" height="15" rx="7.5" fill="${statusTone}" fill-opacity="${d.isWorking || d.isParty ? 0.95 : 0.25}"/>
 <text x="${left + titleW + 8 + pillW / 2}" y="20" text-anchor="middle" font-family="${FONT}" font-size="10.5" font-weight="800" fill="${d.isWorking || d.isParty ? inkOn(statusTone) : c.text}">${xml(d.status)}</text>
@@ -6694,7 +6776,8 @@ ${hudLines(W, d)}
 </g>
 ${hudSpare(W)}
 </g>
-${egg && d.isParty ? celebration(OW, OH, egg, FONT, d.partyAt) : ''}
+${egg && !d.lite ? cyberCheer(egg, OW, OH, d) : egg && d.isParty ? celebration(OW, OH, egg, FONT, d.partyAt) : ''}
+${egg && !d.lite && !d.isParty ? cyberFightBand(egg, OW, d.at, d.isWorking, d.ctxPct) : ''}
 ${th && d.isParty ? th.cheer(OW, OH, FONT, c, d.partyAt) : ''}
 ${th?.corner ? th.corner(OW, OH, { ctxPct: d.ctxPct, overBudget: Boolean(d.budget && d.budget.usedMs > d.budget.min * 60_000) }) : ''}`,
   )
@@ -8199,6 +8282,11 @@ export const register: Register = (on, options) => {
       else if (cyberOf() && ctx >= 95 && !sirenPlayed) {
         sirenPlayed = true
         void play($, `${ADDON}/assets/maxtac.wav`)
+        // On 2077 the raid itself rolls in with the siren (at most once per 30 min; cyber-fights.ts).
+        if (cyberOf() === 'runners') {
+          const now = await $.clock.now().catch(() => Date.now())
+          if (maxtacClimb(now)) await update($, bandTick, () => now)
+        }
       }
       if (ctx < 80) psyWarned = false
       else if (egg && ctx >= 85 && !psyWarned) {
@@ -8622,7 +8710,7 @@ export const register: Register = (on, options) => {
             {egg && !drop.has('breach') ? (
               <Box key="breach" marginBottom={1}>
                 <Svg
-                  source={th ? paneCard(th.card.draw(W, boss.task, boss.isWorking, steps.filter(st => st.state === 'done').length, steps.length, SKIN.colors, FONT, cardShape, legends, steps.map(st => ({ title: st.title, state: st.state, note: st.note }))), th, 'task', clockNow, info.contextPct, (boss.celebrateUntil ?? 0) > clockNow, boss.isWorking) : breachCard(W, steps.filter(st => st.state === 'done').length, steps.length, boss.isWorking, egg, FONT, cardShape)}
+                  source={th ? paneCard(th.card.draw(W, boss.task, boss.isWorking, steps.filter(st => st.state === 'done').length, steps.length, SKIN.colors, FONT, cardShape, legends, steps.map(st => ({ title: st.title, state: st.state, note: st.note }))), th, 'task', clockNow, info.contextPct, (boss.celebrateUntil ?? 0) > clockNow, boss.isWorking) : breachCard(W, steps.filter(st => st.state === 'done').length, steps.length, boss.isWorking, egg, FONT, cardShape).replace(/<\/svg>\s*$/, `${cyberFightEcho(egg as CyberEgg, clockNow, boss.isWorking)}</svg>`)}
                   alt={th ? th.card.alt(boss.isWorking, steps.filter(st => st.state === 'done').length, steps.length) : `Breach Protocol: ${steps.filter(st => st.state === 'done').length} of ${steps.length} steps`}
                 />
               </Box>
@@ -8638,7 +8726,7 @@ export const register: Register = (on, options) => {
             {egg && !drop.has('log') ? (
               <Box key="bd" flexDirection="column" marginBottom={1}>
                 <Svg
-                  source={th ? paneCard(hackInto(th.log.draw(W, beats, pick, SKIN.colors, FONT, cardShape), th, { at: clockNow, ctxPct: info.contextPct, card: 'log', party: (boss.celebrateUntil ?? 0) > clockNow }), th, 'log', clockNow, info.contextPct, (boss.celebrateUntil ?? 0) > clockNow, boss.isWorking) : braindanceCard(W, beats, pick, SKIN.colors, FONT, cardShape, egg === 'samurai' ? 'SETLIST' : 'BRAINDANCE')}
+                  source={th ? paneCard(hackInto(th.log.draw(W, beats, pick, SKIN.colors, FONT, cardShape, { at: clockNow, working: boss.isWorking, ...((boss.celebrateUntil ?? 0) > clockNow && boss.doneAt ? { doneAt: boss.doneAt } : {}) }), th, { at: clockNow, ctxPct: info.contextPct, card: 'log', party: (boss.celebrateUntil ?? 0) > clockNow }), th, 'log', clockNow, info.contextPct, (boss.celebrateUntil ?? 0) > clockNow, boss.isWorking) : braindanceCard(W, beats, pick, SKIN.colors, FONT, cardShape, egg === 'samurai' ? 'SETLIST' : 'BRAINDANCE', undefined, undefined, undefined, egg === 'runners' ? { at: clockNow } : undefined)}
                   alt={th?.log.alt ? th.log.alt(beats, pick) : th && !th.log.hasControls ? `Lab log: ${beats.length} tool calls` : braindanceAlt(beats, pick)}
                 />
                 {th && !th.log.hasControls ? null : <Box flexDirection="row" gap={2}>
@@ -9004,6 +9092,18 @@ export const register: Register = (on, options) => {
     // The hidden skin: "tyger tyger" typed while wearing The Mentalist. The prompt goes on unchanged.
     if (asked && SKIN.id === 'mentalist' && TYGER_RE.test(asked)) {
       const found = SKINS.get('red-john')
+      if (found) {
+        applySkin(found)
+        await $.store.set('skin', found.id).catch(() => undefined)
+        await update($, skin, () => found.id)
+        await retitle($).catch(() => undefined)
+        await foundSecret($, found).catch(() => undefined)
+      }
+    }
+    // SAMURAI, the hidden Cyberpunk skin: "wake up, samurai" typed while wearing 2077, Arasaka or Lucy (2077's own greeting
+    // says it, so the line a fan types back now does something). The prompt goes on unchanged.
+    if (asked && cyberOf() && SKIN.id !== 'samurai' && WAKE_SAMURAI_RE.test(asked)) {
+      const found = SKINS.get('samurai')
       if (found) {
         applySkin(found)
         await $.store.set('skin', found.id).catch(() => undefined)

@@ -7,6 +7,7 @@ import { levelOf, nextOf, veil, xpFor } from './extras'
 import type { Badge, Beat, Cred } from './extras'
 import type { Legend } from './eggs'
 import { ER_CAPRI_BUST } from './cast'
+import { capsuleTurn, tapeLayer } from './edgerunners2-motion'
 import { CJK, D_TRACE, ER2_FONT, ER2_TOOLS, HEX_CODES, K, M, MONO, T, brackets, beam, cardDefs, cham, clamp, er2Clip, er2W, er2Wrap, esc, kOf, mw, palOf, pane, pixels, r1, rng, streaks } from './edgerunners2'
 
 /** What one card may weigh, in characters of SVG (the pane has a total budget too). */
@@ -116,7 +117,9 @@ export const syncCard = (W: number, c: Cred, sec: boolean): string => {
   const half = earned === 0 ? 0 : Math.round(3 + (earned / 9) * 26)
   const from = clamp(EYE - half, 0, 48)
   const to = clamp(EYE + half + 1, 0, 48)
-  if (earned === 0) {
+  // CAPRI mode: she is whole, and she turns (capsuleTurn below draws her head going round with the glass).
+  if (sec) void 0
+  else if (earned === 0) {
     s.push(pixels(ER_CAPRI_BUST, bx, by, bs, { mono: P.a, op: 0.16 }))
     s.push(M(mx, by + 76, 'NO ENGRAM', 9, P.aT, 'text-anchor="middle" letter-spacing="1.4"'))
     s.push(streaks(bx, by + 20, 126, 100, 'noeng', 6, { colors: [P.a, P.ice], max: 40 }))
@@ -130,6 +133,8 @@ export const syncCard = (W: number, c: Cred, sec: boolean): string => {
     }
   }
   s.push(`<rect x="${bx}" y="${by}" width="${42 * bs}" height="${48 * bs}" fill="url(#${sid})"/>`)
+  // CAPRI mode: the capsule turns (glass ribs going round, a light pass across her, a scan ring climbing).
+  if (sec) s.push(capsuleTurn({ id: `${sid}t`, mx, top: cy0 + 26, floor: fy, R: 54, bx, by, bs, head: true }))
   s.push(T(cx0 + 12, cy0 + 205, `SYNC ${sync}%`, 15, 800, P.text))
   s.push(M(cx0 + cw - 12, cy0 + 205, `${c.xp} / ${next} XP`, 8.5, P.muted, 'text-anchor="end"'))
   s.push(beam(cx0 + 12, cy0 + 210, cw - 24, 4, sync, { sec, near }))
@@ -206,7 +211,7 @@ export const TRACE_CAP = 12
 const selOf = (n: number, pick: number): number => (n ? (pick < 0 ? n - 1 : Math.min(pick, n - 1)) : -1)
 const timecode = (ms: number): string => [3_600_000, 60_000, 1000].map(u => String(Math.floor((Math.max(0, ms) / u) % (u === 3_600_000 ? 100 : 60))).padStart(2, '0')).join(':')
 
-export const traceCard = (W: number, beats: Beat[], pick: number, sec: boolean): string => {
+export const traceCard = (W: number, beats: Beat[], pick: number, sec: boolean, now?: { at: number; working?: boolean; doneAt?: number }): string => {
   const P = palOf(sec)
   const H = TRACE_H
   const sid = `tc${W}${sec ? 's' : ''}`
@@ -276,6 +281,8 @@ export const traceCard = (W: number, beats: Beat[], pick: number, sec: boolean):
       }
     })
   }
+  // D mode: Roman's tape runs (sprockets, a scrubbing playhead), rewinds on a new beat and calls CUT! when the job is done.
+  if (!sec && now) s.push(tapeLayer({ vx, vy, vw, vh, gx, gr, axY, live, working: now.working ?? false, at: now.at, ...(n ? { beatAt: (beats[n - 1] as Beat).at } : {}), ...(now.doneAt !== undefined ? { doneAt: now.doneAt } : {}), color: P.ice, dim: P.muted }))
   return `${s.join('')}</svg>`
 }
 export const traceAlt = (beats: Beat[], pick: number): string => {

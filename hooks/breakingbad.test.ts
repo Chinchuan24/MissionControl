@@ -454,11 +454,11 @@ test('jesse: the five lines are clean and the cameo shows at most once per 30 mi
   }
 })
 
-test('jesse: rare (about one visit every 8 min), rarer than Capri, still walks, peeks and sits', () => {
+test('jesse: rare (about one visit every 8 min), still walks, peeks and sits; Capri (one walk in about 12 min) is rarer still', () => {
   const capri = THEMES.edgerunners2.roamer as NonNullable<(typeof THEMES.edgerunners2)['roamer']>
   expect(roamerOf('breakingbad').chance(10)).toBe(0.0625)
   expect(roamerOf('breakingbad').chance(96)).toBe(0.1)
-  expect(roamerOf('breakingbad').chance(10)).toBeLessThan(capri.chance(10) + 1e-9)
+  expect(capri.chance(10)).toBeLessThan(roamerOf('breakingbad').chance(10))
   const kinds = new Set<string>()
   let on = 0
   for (let t = NOW; t < NOW + 86_400_000; t += 30_000) {
