@@ -4,7 +4,7 @@ import type { Engine } from 'claude-code/testing'
 import { CASTS } from './cast'
 import type { Sprite } from './cast'
 import { BADGES, RANKS, VERBS, coverCard, coverHeight, pageCard, rankOf, tierOf, wallCard } from './invincible-cards'
-import { ACT_LEN, ACT_OFF, BAND_CUT, CONQUEST, CONQUEST_PLAY, CQ_K, CQ_LEN, CQ_MS, CQ_OFF, FIGHT_CSS, FIGHT_MS, FIGHT_PANE_RESERVE, FRAME_KEYS, STOP, VERSIONS, chainOfAct, fightAct, fightBand, fightCut, fightShake, frameSprite, suit2, timing } from './invincible-fight'
+import { cqFrame, ACT_LEN, ACT_OFF, BAND_CUT, CONQUEST, CONQUEST_PLAY, CQ_K, CQ_LEN, CQ_MS, CQ_OFF, FIGHT_CSS, FIGHT_MS, FIGHT_PANE_RESERVE, FRAME_KEYS, STOP, VERSIONS, chainOfAct, fightAct, fightBand, fightCut, fightShake, frameSprite, suit2, timing } from './invincible-fight'
 import { CAMEO_CSS, CAM_JITTER_MS, CAM_SLOT_MS, CECIL_LINES, DUR_MS, EVE_LINE, OLIVER_LINE, camBlocked, camDue, camExtras, camPlanOfSlot, camReplay } from './invincible-cameos'
 import type { CamPlan } from './invincible-cameos'
 import { AHEAD_MS, CLASSIC_RE, CQ_DUEL_MS, DUEL_MS, GUARDIANS_RE, TURN, swap, versionOf, NEW_SUIT_RE, SHOWDOWN_MS, SWAP_MS, THINK_RE, VARIANTS_MS, VARIANTS_RE, VARIANTS_SOLO_RE, duelPlan, fightDirector, fightDue, fightOf, isVariantsAsk, opOnly, showdown, showdownDue, showdownPlan, slotPlan, variantsDue, variantsPlan } from './invincible-eggs'
@@ -1596,7 +1596,7 @@ test('conquest: the elder warrior reads as himself: his folded palette keeps the
   expect(defs).toContain('fill="#A3262A"')
   expect(defs).toContain('fill="#C88A4E"')
 })
-test('conquest: sizes: band cut under 32 k, each act under 44 k, both acts inside the pane reserve THE FIGHT already keeps (one fight at a time)', () => {
+test('conquest: sizes: band cut under 32 k, each act under 46 k (GDA WALL carries the arena), both acts inside the pane reserve THE FIGHT already keeps (one fight at a time)', () => {
   for (const W of [750, 900, 1250]) {
     const b = fightBand({ W, H: 134, era: 2, startAt: NOW, v: CONQUEST })
     expect(b.svg.length).toBeLessThan(32_000)
@@ -1605,9 +1605,10 @@ test('conquest: sizes: band cut under 32 k, each act under 44 k, both acts insid
   let omni = 0
   let cq = 0
   for (const [act, H] of [[0, 434], [1, 296], [2, 236]] as const) omni += fightAct({ W: 600, H, era: 2, startAt: NOW }, act).svg.length
-  for (const [sf, W, H] of [[0, 600, 434], [1, 600, 296], [0, 480, 434], [1, 480, 260], [1, 480, 236]] as const) {
+  for (const [sf, W, H] of [[0, 600, 434], [1, 600, 296], [0, 480, 434], [1, 480, 260], [1, 480, 236], [0, 992, 384], [1, 992, 200]] as const) {
     const a = fightAct({ W, H, era: 2, startAt: NOW, v: CONQUEST }, sf)
-    expect(a.svg.length).toBeLessThan(44_000)
+    // 46 k: the two acts together stay ~85 k of the 100 k reserve, and the real cards stay under 60 k (the real-panel test).
+    expect(a.svg.length).toBeLessThan(46_000)
     expect(a.frames).toBeLessThanOrEqual(10)
     if (W === 600) cq += a.svg.length
     const au = audit(doc(W, H, a.svg))
@@ -1656,6 +1657,28 @@ test('conquest: replayed as `/missioncontrol play conquest` in the new suit only
   for (const s of p2) expect(s.length).toBeLessThan(60_000)
   await clock.advance(6_000)
   expect((await svgs($, 'Pane')).join('')).not.toContain('class="dl-anim"')
+})
+test('conquest: the pane acts fill their card: a push-in on a tall card, centred on a wide short one, a veil, the arena in GDA WALL', () => {
+  // COVER STORY on the real dock (992 x 384): drawn at about its design size and scaled up 1.5x under the title row.
+  const cover = cqFrame(992, 384)
+  expect(cover.k).toBeGreaterThan(1.4)
+  expect(cover.Wv * cover.k).toBeLessThanOrEqual(992)
+  expect(cover.Hv * cover.k + cover.top).toBeLessThanOrEqual(384.5)
+  const a0 = fightAct({ W: 992, H: 384, era: 2, startAt: NOW, v: CONQUEST }, 0).svg
+  expect(a0).toContain(`<g transform="translate(${cover.x} 24) scale(${cover.k})">`)
+  expect(a0).toMatch(/opacity="0\.8"\/>/)
+  // GDA WALL (992 x 200): no shrink, the action centred in 700 px, the downtown arena drifting behind it (two layers).
+  const wall = cqFrame(992, 200)
+  expect(wall.k).toBe(1)
+  expect(wall.Wv).toBe(700)
+  expect(wall.x).toBe(146)
+  const a1 = fightAct({ W: 992, H: 200, era: 2, startAt: NOW, v: CONQUEST }, 1).svg
+  expect((a1.match(/<pattern id="\w+ar\dp"/g) ?? []).length).toBe(2)
+  expect(a1).toContain('fill="#F2DA74"')
+  // The arena stops under reduced motion; the act's still keeps both fighters.
+  expect(a1).toMatch(/@media \(prefers-reduced-motion: reduce\)\{\.\w+ar0,\.\w+ar1\{animation:none!important\}\}/)
+  // A small card keeps the old framing (no push-in): the mock sizes of phase B.
+  expect(cqFrame(480, 236).k).toBe(1)
 })
 // --- the head turns (phase B): the suit swap and the done cheer -------------------------------------------------------------
 test('head turn: the suit swap turns the bust away in one suit and round in the other (9 views, stepped), none under reduced motion', () => {

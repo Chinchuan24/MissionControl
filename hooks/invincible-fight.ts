@@ -23,6 +23,7 @@ import { Camera, SHAKE_CSS } from './stage/camera'
 import { Fight } from './stage/choreo'
 import type { FightLook } from './stage/choreo'
 import { curve } from './stage/ease'
+import { parallax } from './stage/parallax'
 import * as fx from './stage/fx'
 import { rectPaths } from './stage/frames'
 import { keepClip } from './stage/keep'
@@ -747,6 +748,32 @@ const conquestAct = (c: Cut, act: ActIndex): void => {
   }
 }
 
+// ---------------------------------------------------------------- MARK VS CONQUEST's pane framing and arena
+/**
+ * The downtown arena (the art set's FXC_ARENA_FAR and _MID, 160 px tiles) cut to stepped silhouettes in code: the far towers,
+ * the near block with its few lit windows. Two parallax layers for ~1.1 k (the full-colour cut was 6.6 k a layer).
+ */
+const ARENA_FAR = 'M0 18V9H2V8H5V7H6V8H8V14H9V12H15V17H17V7H22V17H23V15H24V6H25V5H26V4H27V3H28V4H29V5H30V17H31V13H35V12H39V14H40V11H44V12H45V17H47V6H55V17H56V16H57V13H64V14H65V10H66V9H68V10H72V13H73V9H76V6H78V4H83V5H84V17H85V11H89V9H90V10H91V11H92V17H93V14H96V12H102V4H105V2H106V4H108V17H110V7H116V17H118V10H122V9H124V7H125V9H128V17H129V5H130V4H131V3H132V4H133V13H135V12H138V11H139V12H142V13H143V14H144V17H145V9H147V6H148V9H150V10H153V14H154V15H155V17H156V12H160V18z'
+const ARENA_MID = 'M0 18V10H4V9H5V8H6V9H8V10H10V9H18V12H21V15H23V14H25V6H26V5H27V3H28V5H37V6H38V5H39V9H40V10H42V6H43V11H44V17H46V13H47V12H49V11H53V13H57V7H59V6H60V7H65V8H68V9H69V10H70V12H73V11H75V10H76V14H77V16H80V6H81V4H82V5H83V3H84V5H86V3H88V2H90V1H91V0H93V17H96V11H97V10H100V9H101V8H103V9H104V10H105V9H107V10H108V12H110V13H112V17H115V15H116V9H118V7H119V6H122V5H123V9H129V14H132V15H133V14H135V13H136V16H137V17H139V8H142V7H144V8H147V6H150V4H151V6H154V5H155V6H156V11H160V18z'
+const ARENA_LIT = 'M88 7h1v1h-1zM146 11h4v1h-4zM2 12h2v1h-2zM39 13h1v1h-1zM90 13h2v1h-2zM39 14h1v1h-1zM8 15h2v1h-2zM69 15h4v1h-4zM104 15h4v1h-4zM129 15h1v1h-1zM129 16h1v1h-1z'
+/** The arena behind a pane act: two drifting layers along the act's floor, `rows` tall (the tile is 18). */
+const arena = (c: Cut, rows: number): string => {
+  const s = r3(rows / 18)
+  const sky = parallax({ id: `${c.act.p}ar`, W: Math.ceil(c.W / s), H: 18, fps: 6, layers: [{ tile: `<path d="${ARENA_FAR}" fill="#5E6E8A"/>`, w: 160, speed: 1.5, op: 0.5 }, { tile: `<path d="${ARENA_MID}" fill="#1D2A41"/><path d="${ARENA_LIT}" fill="#F2DA74"/>`, w: 160, speed: 4 }] })
+  return `<style>${sky.css}</style><g transform="translate(0 ${r1(c.H - rows)}) scale(${s})">${sky.svg}</g>`
+}
+/**
+ * How a Conquest pane act fills its card: drawn on a virtual card of about the act's design size (620 x 236) under the card's
+ * title row, then scaled up to the card (a static push-in: the fighters, the words and the cut-in all grow), centred when the
+ * card is wider. `k` 1 on a short card (GDA WALL keeps its size; its action is centred instead of spread).
+ */
+export const cqFrame = (W: number, H: number): { k: number; Wv: number; Hv: number; x: number; top: number } => {
+  const top = 24
+  const k = r3(Math.max(1, Math.min(1.8, W / 620, (H - top) / 236)))
+  const Wv = Math.round(Math.min(W / k, 700))
+  return { k, Wv, Hv: Math.round((H - top) / k), x: r1((W - Wv * k) / 2), top }
+}
+
 // ---------------------------------------------------------------- surfaces
 export type FightArgs = { W: number; H: number; era: Era; startAt: number; /** Colours kept per frame. */ K?: number; big?: boolean; /** Which version (default 0). */ v?: Version; /** The band only: the clear span and the readouts to keep clear (stage/keep.ts). */ stage?: BandStage }
 type Built = { svg: string; chain: string[]; frames: number; shake: string; cut: Cut }
@@ -766,12 +793,19 @@ const build = (a: FightArgs, surface: 'band' | ActIndex): Built => {
   const box: [number, number, number, number] = band ? [0, 0, Math.round(W * 0.67), a.H] : [0, 0, a.W, a.H]
   const cq = v === CONQUEST
   const sc = band ? (W < 620 ? 1.15 : W < 800 ? 1.3 : 1.45) : 1.9
-  const c = new Cut(`invf-${band ? 'b' : `p${surface}`}-${v}-${a.era}-${a.W}x${a.H}`, a.startAt, off, a.era, sc, W, a.H, box, a.K ?? 4, T.ms, cq, st ? 2 : undefined)
+  const fr = cq && !band ? cqFrame(a.W, a.H) : undefined
+  const c = fr
+    ? new Cut(`invf-p${surface}-${v}-${a.era}-${a.W}x${a.H}`, a.startAt, off, a.era, sc, fr.Wv, fr.Hv, [0, 0, fr.Wv, fr.Hv], a.K ?? 4, T.ms, cq)
+    : new Cut(`invf-${band ? 'b' : `p${surface}`}-${v}-${a.era}-${a.W}x${a.H}`, a.startAt, off, a.era, sc, W, a.H, box, a.K ?? 4, T.ms, cq, st ? 2 : undefined)
+  // The card under the fight: a veil (COVER STORY is the fight's own panel; GDA WALL's live feed stays readable through it),
+  // and the downtown arena where the card has the room for it (GDA WALL; COVER STORY's card is at its 60 k).
+  if (fr) c.set += `<rect x="${r1(-fr.x / fr.k)}" width="${r1(a.W / fr.k)}" height="${fr.Hv}" fill="${PROPS.ink}" opacity="${surface === 0 ? 0.8 : 0.5}"/>${surface === 1 ? arena(c, Math.round(fr.Hv * 0.32)) : ''}`
   if (st) c.keep = st.keep
   if (band) { if (cq) conquestBand(c); else bandCut(c, v as 0 | 1 | 2) }
   else if (cq) conquestAct(c, surface)
   else actCut(c, surface)
-  const done = c.done(band ? T.band : (T.len[surface] as number))
+  const done0 = c.done(band ? T.band : (T.len[surface] as number))
+  const done = fr ? `<g transform="translate(${fr.x} ${fr.top}) scale(${fr.k})">${done0}</g>` : done0
   // The keep-out: the window under the header rule, left of the clear span, minus the Tasks chip and the step count.
   const svg = st ? `${keepClip(`${c.act.p}kc`, [0, 34, st.x1, a.H - 34], st.keep)}<g clip-path="url(#${c.act.p}kc)">${done}</g>` : done
   const chain = c.act.chainKeys()
