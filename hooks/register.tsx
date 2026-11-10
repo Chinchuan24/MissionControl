@@ -10,8 +10,8 @@ import { BB_REVEAL_MS, BB_RIGHT, BB_SKIN_WORDS, BB_TOOLS, SAY_MY_NAME_RE } from 
 import { bbRightLine } from './breakingbad-cards'
 import { THEMES, themeKeyOf } from './themes'
 import { SWITCH_CARDS, SWITCH_MS, into as switchInto, sizeOf as svgSizeOf, skinSwitch } from './stage/wipe'
-import { playsOf, runPlay } from './stage/replay'
-import type { SwitchLook } from './stage/wipe'
+import { playsFrom, playsOf, registerPlay, runPlay } from './stage/replay'
+import type { SwitchFlavour, SwitchLook } from './stage/wipe'
 import { ramStatus, settingsTagline, settingsTones } from './settingslook'
 import type { SettingsSection } from './settingslook'
 import { GROUP_TAGLINE, GROUP_TITLE, SKIN_GROUPS, groupOf, skinTagline, skinsSummary } from './skinslook'
@@ -22,13 +22,14 @@ import { BCS_SKIN_WORDS, BCS_TOOLS, SAUL_GOODMAN_RE, TAKAVIC_RE } from './better
 import { TOASTS, bashToast, cmdKind, fxOf, mcgillNow, resultFailed, toastDue } from './bettercallsaul-fx'
 import type { BashState, Fx, ToastKey } from './bettercallsaul-fx'
 import { UNPLUG_GAP_MS, shouldUnplug } from './bettercallsaul-extra'
-import { CLASSIC_RE, GUARDIANS_RE, NEW_SUIT_RE, SWAP_MS, THINK_RE, isVariantsAsk } from './invincible-eggs'
+import { CLASSIC_RE, GUARDIANS_RE, NEW_SUIT_RE, SWAP_MS, THINK_RE, fightDirector, isVariantsAsk, versionOf } from './invincible-eggs'
+import { CONQUEST, CONQUEST_PLAY } from './invincible-fight'
 import { ERA1, ERA2, TITLE_WORDS as INV_WORDS } from './invincible'
 import { BOOK as TB_BOOK, BRAND as TB_BRAND, GOLD as TB_GOLD, NOIR as TB_NOIR } from './theboys'
 import type { Mode as BoysMode } from './theboys'
-import { GREETINGS as TB_GREETINGS } from './theboys-theme'
-import { COST_STEPS as TB_COST_STEPS, CURTAIN_RE as TB_CURTAIN_RE, IDLE_NAP_MS as TB_IDLE_MS, idleFor as tbIdleFor, isCompaction as tbIsCompaction, isNight as tbIsNight, localDay as tbDay, noteBusy as tbNoteBusy, quiet as tbQuiet, resetEvents as tbResetEvents, resetShow as tbResetShow, toolEnd as tbToolEnd, toolStart as tbToolStart } from './theboys-show'
-import { REPLAYS as TB_REPLAYS, SPIN_BOOK, SPIN_BRAND, SPIN_GOLD, SPIN_NOIR, TOOLS_BRAND as TB_TOOLS, TOOLS_GOLD as TB_TOOLS_GOLD, boysEvent, errRun as tbErrRun, inFlight as tbInFlight, toolOk as tbToolOk, fireTyped as tbFire, parseCounts, prToast, resetBoys, scoreEnd, scoreStop as tbScoreStop, boysState, setBoysFx, setInFlight, toastOk as tbToastOk, typed as tbTyped } from './theboys-eggs'
+import { GREETINGS as TB_GREETINGS, noteTurn as tbNoteTurn } from './theboys-theme'
+import { COST_STEPS as TB_COST_STEPS, CURTAIN_RE as TB_CURTAIN_RE, CURTAIN_UP_RE as TB_CURTAIN_UP_RE, IDLE_NAP_MS as TB_IDLE_MS, idleFor as tbIdleFor, isCompaction as tbIsCompaction, isNight as tbIsNight, localDay as tbDay, noteBusy as tbNoteBusy, quiet as tbQuiet, resetEvents as tbResetEvents, resetShow as tbResetShow, toolEnd as tbToolEnd, toolStart as tbToolStart } from './theboys-show'
+import { REPLAYS as TB_REPLAYS, comebackDue as tbComebackDue, markComeback as tbMarkComeback, SPIN_BOOK, SPIN_BRAND, SPIN_GOLD, SPIN_NOIR, TOOLS_BRAND as TB_TOOLS, TOOLS_GOLD as TB_TOOLS_GOLD, boysEvent, errRun as tbErrRun, inFlight as tbInFlight, toolOk as tbToolOk, fireTyped as tbFire, parseCounts, prToast, resetBoys, scoreEnd, scoreStop as tbScoreStop, boysState, setBoysFx, setInFlight, toastOk as tbToastOk, typed as tbTyped } from './theboys-eggs'
 import { VERBS as INV_VERBS } from './invincible-cards'
 import { BYE_CAPRI_RE, CAPRICORN_RE, CAPRI_WORD_RE, ER2_FONT, ER2_TOOLS, ER2_WORDS } from './edgerunners2'
 import { CAPRI_MODE, ER2_MODE_DEFAULT } from './edgerunners2-duet'
@@ -37,6 +38,8 @@ import { extrasInto, glitchPanel, hackInto, overlayInto, roamOnBand, roamOverlay
 import type { ThemeCtx, ThemeEggs } from './themes'
 import { canNudge, nudge, pickQuiet, prBadge, quietOf, rememberTask, repoAndBranch, rescueText, retryOnHaiku, whatIf, whatIfText, whatIfTip } from './coach'
 import { flatSmiley, serifClip, serifW } from './mentalist-cards'
+import { CYBER_SWITCH, cyberFightBand, cyberFightEcho, maxtacClimb } from './cyber-fights'
+import { IDLE_CSS, ACT_MS, WAKE_SAMURAI_RE, bossIdle, cheerAt, cheerOf, city, cyberPlay, diveAct, gigAct, gigAt, idScan, moon, netGrid, playing, relic, sandevistanAct, stage, tower } from './cyber-motion'
 import { BADGES, BEATS_KEPT, BLANK_CRED, BOOT_H, SECRET_BADGE, award, credFor, foundOf, secretFoundFor, withFound, rockerRankOf, bdHeight, bootStrip, braindanceCard, cleanCred, credCard, credHeight, levelOf, rankOf, shiftPick, stepPick } from './extras'
 import type { Beat, Cred } from './extras'
 import { ONESHOT_KEY, ULTRA_BY_KEY, ULTRA_BY_OPTIONS, ULTRA_KEY, ULTRA_TASK_HINT, cleanUltraBy, managerPicks, parseUltraBy, ultraBySaid, ultraBySection, ultraPlanToast, type UltraBy, pillChip, oneShotChipWord, cleanOneShot, cleanUltraRules, isUltraAgent, matchUltra, nextOneShot, oneShotChip, oneShotSaid, oneShotSection, oneShotWord, parseOneShot, resolveEffort, ultraCommand, ultraLine, withUltraBrief } from './crewcontrol'
@@ -46,6 +49,8 @@ import { hasInlineMath, inlineMath, mermaidChart, splitBlocks, texToUnicode, uni
 import { LIVE_N, glide, isNewReading, isSame, liveText, liveWidth, pin, sentLength, steady, steadyTree, wallMinute } from './smooth'
 import { COLOR_RE, FONT_BAD_RE, ID_RE, TOOL_KEY_RE, contrast, skinCheck, skinNew } from './skinkit'
 import { WARM_PROMPT, WARM_TAG, isWarmDue, isWarmed, warmCall, warmLimitHit } from './warm'
+import type { BandStage } from './stage/keep'
+import { switchFlavour } from './switch-flavours'
 import { BLANK_PICK, BLANK_SPEND, SPEND_KINDS, TODAY_PERIOD, exportSpend, isRescanDue, loadSpend, logSpendDay, monthLabel, monthOf, cleanDays, combineDays, monthsWithData, parseSpendArgs, pickSpendKind, pickSpendMonth, readSpend, setSpendPeriod, shiftMonth, spendCard, typeSpendDay } from './spend'
 import type { SpendDirs, SpendIo, SpendKind, SpendRecord } from './spend'
 import { minMove, noteSample, planProgress as stepProgress, stopSignal, stopText } from './stopsignal'
@@ -816,7 +821,7 @@ async function bumpToday($: EngineInterface, change: Partial<Omit<Today, 'date'>
     const was = capWarned.date === date ? capWarned.level : 0
     if (level > was) {
       capWarned = { date, level }
-      $.ui.toast(level === 2 ? `‼ Daily cap hit: ≈${fmtCost(todayCostUsd)} of ${fmtCost(dailyCapUsd)} today` : `! ${Math.round(pct)}% of today's ${fmtCost(dailyCapUsd)} cap used`)
+      appToast($, level === 2 ? `‼ Daily cap hit: ≈${fmtCost(todayCostUsd)} of ${fmtCost(dailyCapUsd)} today` : `! ${Math.round(pct)}% of today's ${fmtCost(dailyCapUsd)} cap used`, undefined, true)
       if (level === 2 && isBoys()) for (const t of boysEvent('cap', { at: await $.clock.now().catch(() => Date.now()), mode: boysWorn() })) tbToast($, t)
     }
   }
@@ -1035,11 +1040,11 @@ async function keepTime($: EngineInterface, at: number): Promise<void> {
       const task = `"${clip(boss.task.replace(/\s+/g, ' '), 40)}"`
       if (share > 1 && tk.overFor !== job) {
         if (await claimAlert($, 'overFor', job)) {
-          $.ui.toast(tkStr().over(task, jobMin), { timeoutMs: 30000 })
+          appToast($, tkStr().over(task, jobMin), { timeoutMs: 30000 }, true)
           void playAlert($)
         }
       } else if (share >= TK_WARN && tk.warnedFor !== job && tk.overFor !== job) {
-        if (await claimAlert($, 'warnedFor', job)) $.ui.toast(tkStr().warn(task, jobMin), { timeoutMs: 30000 })
+        if (await claimAlert($, 'warnedFor', job)) appToast($, tkStr().warn(task, jobMin), { timeoutMs: 30000 }, true)
       }
     }
     const isDue = (a: AgentRun) => {
@@ -1061,8 +1066,8 @@ async function keepTime($: EngineInterface, at: number): Promise<void> {
     if (!fresh.length) return
     // Several over in one tick share one toast and one sound: a big crew never makes a din.
     const [one] = fresh
-    if (one && fresh.length === 1) $.ui.toast(tkStr().agentOver(clip(one.description || one.type, 40), one.budgetMin ?? tk.agentMin), { timeoutMs: 30000 })
-    else $.ui.toast(tkStr().agentsOver(fresh.length, clip(fresh.map(a => a.description || a.type).join(', '), 120)), { timeoutMs: 30000 })
+    if (one && fresh.length === 1) appToast($, tkStr().agentOver(clip(one.description || one.type, 40), one.budgetMin ?? tk.agentMin), { timeoutMs: 30000 }, true)
+    else appToast($, tkStr().agentsOver(fresh.length, clip(fresh.map(a => a.description || a.type).join(', '), 120)), { timeoutMs: 30000 }, true)
     void playAlert($)
   } catch {
     // A nudge: never in the way of the tick.
@@ -2109,6 +2114,16 @@ const isBoys = (): boolean => SKIN.id === 'the-boys' || SKIN.id === 'solidgold' 
 const boysWorn = (): BoysMode => (SKIN.id === 'solidgold' ? 'gold' : SKIN.id === 'noir' ? 'noir' : BOYS_MODE.mode)
 // The Boys' own toasts, quieted to `…` while THIS MEANS NOIR is worn.
 const tbToast = ($: EngineInterface, text: string): void => { $.ui.toast(tbQuiet(text, SKIN.id === 'noir')) }
+// The app's OWN toasts while THIS MEANS NOIR is worn (bug: only the skin's were quiet). Chatter (cache, big job, done, badges,
+// staffing notes) is just `… 👍`; a toast that asks for action (stuck agents, a job that needs you or failed, a cap or a time
+// budget) keeps its words behind a quiet `…`. Safety (Machine Guard, the stop warning) and replies to a command are untouched.
+const noirSay = (text: string, need = false): string => (SKIN.id !== 'noir' ? text : need ? `… ${text.replace(/^[^\p{L}\p{N}"“‘'(]+/u, '')}` : '… 👍')
+const appToast = ($: EngineInterface, text: string, o?: { timeoutMs?: number }, need = false): void => { $.ui.toast(noirSay(text, need), o) }
+// TURBO RUSH (4+ agents in flight): the spinner itself runs at double speed, not only its word. The engine's ellipsis becomes
+// a chevron that races along a 4-step track at 8 steps a second (the words still turn every 0.5 s, so the line moves twice as
+// fast as its words). Plain text: no OS motion setting reaches a spinner row, so it stays a small, steady pattern.
+const TURBO_STEP_MS = 125
+const turboSuffix = (at: number): string => ` ${'·'.repeat(Math.floor(at / TURBO_STEP_MS) % 4)}»`
 // Phase 3's memory: the context last seen (85 / 95 / compaction), the night already announced, the cost steps passed, the idle
 // stretch's eggs, a lint that failed.
 let TB_CTX = 0
@@ -2139,6 +2154,11 @@ const calNext = (): CalMode => (CAL_MODE.mode === 'dark' ? 'light' : CAL_MODE.mo
 let INV_FX: { kind: string; at: number } | undefined
 let INV_CTX = 0
 const isInv = (): boolean => SKIN.id === 'invincible'
+// THE FIGHT's three cuts in the shared replay registry (`/missioncontrol play the-catch | jet-flick | every-angle`); `play fight`
+// (the older list below) still plays the classic cut. Each is stored as the typed act `fight:<version>`, pinned to now.
+playsFrom('invincible', fightDirector(1), s => { INV_FX = { kind: `fight:${versionOf(s.id)}`, at: s.startAt } }, n => `THE FIGHT: ${n}`)
+// MARK VS CONQUEST (`/missioncontrol play conquest`): the new suit's fight, so only in the new suit.
+registerPlay('invincible', { name: CONQUEST_PLAY, what: 'MARK VS CONQUEST (new suit)', run: at => { if (INV_ERA.era !== 2) return 'Conquest fights the new suit: say "new suit" first.'; INV_FX = { kind: `fight:${CONQUEST}`, at } } })
 const activeFx = (): { kind: string; at: number } | undefined => (isInv() ? INV_FX : isBoys() ? boysState().fx : BCS_FX)
 // When the phrase turned Breaking Bad into Heisenberg (0: it did not): the band's "You're goddamn right!" is drawn from it for
 // BB_REVEAL_MS, pinned to this time, so a redraw keeps it and it ends on its own. Also kept in the store as bbRevealAt.
@@ -2147,16 +2167,23 @@ let BB_REVEAL_AT = 0
 // band and the top pane cards play a short wipe from the old skin's ground to the new one (well under a second; a 2 px rule under
 // reduced motion). Typed unlocks with a transition of their own (CAPRI, SOLID GOLD, NOIR, the Heisenberg reveal, the era swap) never
 // set it.
-let SKIN_SWAP: { at: number; from: SwitchLook; to: SwitchLook } | undefined
+let SKIN_SWAP: { at: number; from: SwitchLook; to: SwitchLook; id?: string } | undefined
 const switchLookOf = (k: Skin): SwitchLook => ({ bg: k.backdrop.fill || k.colors.tile, accent: k.colors.accent, ink: k.colors.text })
 /** The band takes the switch only with room for it (the band's 70 k motion budget, less the wipe's 8 k) and never over another act. */
 const SWITCH_BAND_ROOM = 60_000
-const switchLive = (at: number): { at: number; from: SwitchLook; to: SwitchLook } | undefined => (SKIN_SWAP && at >= SKIN_SWAP.at - 1000 && at < SKIN_SWAP.at + SWITCH_MS + 600 ? SKIN_SWAP : undefined)
+const switchLive = (at: number): { at: number; from: SwitchLook; to: SwitchLook; id?: string } | undefined => (SKIN_SWAP && at >= SKIN_SWAP.at - 1000 && at < SKIN_SWAP.at + SWITCH_MS + 600 ? SKIN_SWAP : undefined)
+/** The skin's own flavour of the switch, as skinSwitch's option: by the skin switched to (switch-flavours.ts: Invincible, The Boys,
+ *  SOLID GOLD, NOIR), else the worn theme's own (Edgerunners 2's D / CAPRI), else a classic Cyberpunk skin's (cyber-fights.ts),
+ *  else the generic one. */
+const flavourOf = (id: string | undefined): { flavour?: SwitchFlavour } => {
+  const f = (id ? switchFlavour(id) : undefined) ?? themeOf()?.switchFlavour ?? (cyberOf() ? CYBER_SWITCH[cyberOf() as CyberEgg] : undefined)
+  return f ? { flavour: f } : {}
+}
 /** The switch over a drawn band source (its viewBox gives the size). */
 const switchBand = (src: string, at: number): string => {
   const sw = switchLive(at)
   const box = sw && src.length <= SWITCH_BAND_ROOM && !src.includes('<!--dl-->') ? svgSizeOf(src) : undefined
-  return sw && box ? switchInto(src, skinSwitch({ W: box.W, H: box.H, at: sw.at, surface: 'band', from: sw.from, to: sw.to })) : src
+  return sw && box ? switchInto(src, skinSwitch({ W: box.W, H: box.H, at: sw.at, surface: 'band', from: sw.from, to: sw.to, ...flavourOf(sw.id) })) : src
 }
 /** The switch over the pane's first cards (chips with a fixed width are left alone), cascading down. `room`: false while the theme keeps
  *  a fight's reserve (a job works), so the reserve stays free. */
@@ -2174,7 +2201,7 @@ const switchTree = <T,>(tree: T, at: number, room: boolean): T => {
       const box = svgSizeOf(n.props.source)
       if (!box) return n
       const idx = i++
-      return { ...n, props: { ...n.props, source: switchInto(n.props.source, skinSwitch({ W: box.W, H: box.H, at: sw.at, surface: 'pane', from: sw.from, to: sw.to, i: idx })) } }
+      return { ...n, props: { ...n.props, source: switchInto(n.props.source, skinSwitch({ W: box.W, H: box.H, at: sw.at, surface: 'pane', from: sw.from, to: sw.to, i: idx, ...flavourOf(sw.id) })) } }
     }
     return Array.isArray(n.children) ? { ...n, children: n.children.map(walk) } : n
   }
@@ -2184,7 +2211,7 @@ const switchTree = <T,>(tree: T, at: number, room: boolean): T => {
 async function noteSwitch($: EngineInterface, from: Skin): Promise<void> {
   if (from.id === SKIN.id && from.cast === SKIN.cast) return
   const at = await $.clock.now().catch(() => Date.now())
-  SKIN_SWAP = { at, from: switchLookOf(from), to: switchLookOf(SKIN) }
+  SKIN_SWAP = { at, from: switchLookOf(from), to: switchLookOf(SKIN), id: SKIN.id }
   await update($, bandTick, () => at)
   await update($, paneTick, () => at)
 }
@@ -2437,21 +2464,21 @@ async function bumpCredNow($: EngineInterface, change: (c: Cred) => Cred, quiet:
   // Street Cred is a cyberpunk add-on (CBI Cred, Empire Cred on the themed skins): other skins keep counting quietly, with no cheer.
   if (!eggOf()) return false
   const th = themeOf()
-  if (now > was) $.ui.toast(th ? th.cred.toast(now) : `${eggOf() === 'samurai' ? 'ROCKERBOY CRED' : 'STREET CRED'} ↑ ${now} · ${eggOf() === 'samurai' ? rockerRankOf(now) : rankOf(now)}`)
+  if (now > was) appToast($, th ? th.cred.toast(now) : `${eggOf() === 'samurai' ? 'ROCKERBOY CRED' : 'STREET CRED'} ↑ ${now} · ${eggOf() === 'samurai' ? rockerRankOf(now) : rankOf(now)}`)
   // The secret badge is per skin (credFor): cheered when THIS skin's own secret is newly found, never for another skin's.
   const secretNow = secretFoundFor(next, SKIN.cast) && !secretFoundFor(before, SKIN.cast)
   for (const b0 of fresh) {
     if (b0.id === SECRET_BADGE && !secretNow) continue
     const b = th ? (th.cred.badges.find(x => x.id === b0.id) ?? b0) : b0
-    $.ui.toast(`${b.icon} Badge unlocked: ${b.name}`)
+    appToast($, `${b.icon} Badge unlocked: ${b.name}`)
   }
   if (secretNow && !fresh.some(b => b.id === SECRET_BADGE)) {
     const b = (th ? th.cred.badges : BADGES).find(x => x.id === SECRET_BADGE)
-    if (b) $.ui.toast(`${b.icon} Badge unlocked: ${b.name}`)
+    if (b) appToast($, `${b.icon} Badge unlocked: ${b.name}`)
   }
   // A badge only one skin lists (The Boys' LATE EDITION, SOLID GOLD) is earned anywhere and announced only there.
   const ownFresh = freshSkin.filter(b => th?.cred.badges.some(x => x.id === b.id))
-  for (const b of ownFresh) $.ui.toast(`${b.icon} Badge unlocked: ${b.name}`)
+  for (const b of ownFresh) appToast($, `${b.icon} Badge unlocked: ${b.name}`)
   const isCheer = now > was || fresh.some(b => b.id !== SECRET_BADGE) || secretNow || ownFresh.length > 0
   if (!quiet && isCheer) void play($, cyberOf() ? `${ADDON}/assets/levelup.wav` : 'assets/done.wav')
   return isCheer
@@ -2592,11 +2619,17 @@ async function wearBoys($: EngineInterface, id: 'the-boys' | 'solidgold' | 'noir
   if (!k) return
   // The skin being left, read before the switch: NOIR may have been put on by `/skin noir` or kept across a restart.
   const from = SKIN.id
-  BOYS_GOLD_SINCE = id === 'noir' ? 0 : await $.clock.now().catch(() => Date.now())
+  const switchAt = await $.clock.now().catch(() => Date.now())
+  BOYS_GOLD_SINCE = id === 'noir' ? 0 : switchAt
+  // The hidden looks' own turns (theboys-theme turnLayer): back on ice out of SOLID GOLD, The End out of NOIR, the iris into NOIR.
+  if (id === 'the-boys' && (from === 'solidgold' || from === 'noir')) tbNoteTurn(from === 'noir' ? 'noir' : 'gold', 'brand', switchAt)
+  else if (id === 'noir' && from !== 'noir') tbNoteTurn(from === 'solidgold' ? 'gold' : 'brand', 'noir', switchAt)
   applySkin(k)
   await $.store.set('skin', k.id).catch(() => undefined)
   await update($, skin, () => k.id)
   await retitle($).catch(() => undefined)
+  // F1 FAMILY REUNION is the FIRST unlock of SOLID GOLD (theboys-fights.ts); later it plays in the fight slot or by its play name.
+  if (id === 'solidgold' && from !== 'solidgold' && !foundOf(await read($, cred).catch(() => BLANK_CRED), 'solidgold')) setBoysFx('reunion', switchAt + 300)
   if (id === 'solidgold' || id === 'noir') await foundSecret($, k).catch(() => undefined)
   else if (from === 'noir') {
     setBoysFx('curtain', BOYS_GOLD_SINCE + 2_300)
@@ -2651,8 +2684,9 @@ async function boysSpin($: EngineInterface, tool: string, res: unknown): Promise
 async function boysReplay($: EngineInterface, name: string): Promise<string> {
   const r = TB_REPLAYS.find(x => x.name === name)
   if (!r) {
-    // The curtain call is NOIR's own; the count matches the names listed.
-    const names = [...TB_REPLAYS.filter(x => SKIN.id === 'noir' || x.name !== 'curtain').map(x => x.name), ...playsOf(SKIN.id).map(p => p.name)]
+    // The curtain call is NOIR's own; the count matches the names listed. The Boys' acts are in the shared registry too
+    // (stage/replay.ts): each name once, in the order first seen.
+    const names = [...new Set([...TB_REPLAYS.map(x => x.name), ...playsOf(SKIN.id).map(p => p.name)])].filter(n => SKIN.id === 'noir' || n !== 'curtain')
     return `Play which? The Boys has ${names.length}: ${names.join(', ')}`
   }
   const at = await $.clock.now().catch(() => Date.now())
@@ -3849,7 +3883,7 @@ const figureDefsMarkup = (figures: Map<string, string>): string => {
 // Body and props nest inside `bd` so a prop rides the bob and adds its own motion;
 // legs stay outside it and step on their own. `mirror` flips the crab inside its
 // own box (x .. x + CRAB_BOX * scale) so it faces left.
-const crab = (x: number, y: number, costume: string, dim = false, isWalking = false, scale = CRAB_SCALE, mirror = false): string => {
+const crab = (x: number, y: number, costume: string, dim = false, isWalking = false, scale = CRAB_SCALE, mirror = false, overlay = ''): string => {
   const place = mirror ? `translate(${r2(x + CRAB_BOX * scale)},${r2(y)}) scale(${-scale},${scale})` : `translate(${r2(x)},${r2(y)}) scale(${scale})`
   const cast = SKIN.cast ? CASTS[SKIN.cast] : undefined
   if (cast) {
@@ -3866,7 +3900,7 @@ const crab = (x: number, y: number, costume: string, dim = false, isWalking = fa
     const gy = r2(y - 27 * (k - scale))
     const grown = mirror ? `translate(${r2(gx + CRAB_BOX * k)},${gy}) scale(${-k},${k})` : `translate(${gx},${gy}) scale(${k})`
     // The tint rides in as the inherited `color`: one drawing serves every tint.
-    return `<g transform="${grown}" color="${tint}"${dim ? ' opacity="0.45"' : ''} shape-rendering="crispEdges">${placeFigure(`<g class="ch${isWalking ? ' run' : ''}${sprite.float ? ' fl' : ''}">${spriteMarkup(sprite, 'currentColor', CRAB_BOX)}</g>`)}</g>`
+    return `<g transform="${grown}" color="${tint}"${dim ? ' opacity="0.45"' : ''} shape-rendering="crispEdges">${placeFigure(`<g class="ch${isWalking ? ' run' : ''}${sprite.float ? ' fl' : ''}">${spriteMarkup(sprite, 'currentColor', CRAB_BOX)}${overlay}</g>`)}</g>`
   }
   if (costume === 'boss') costume = 'other'
   else if (costume.startsWith('role:')) costume = costume.slice(5)
@@ -5190,6 +5224,16 @@ const orgMarks = (): string =>
 <g id="bok"><circle r="6" fill="${DONE}"/><path d="M-3 0l2 2 4-4.5" fill="none" stroke="${inkOn(DONE)}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></g>
 <g id="bno"><circle r="6" fill="#D0453F"/><path d="M-2.5 -2.5l5 5M2.5 -2.5l-5 5" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/></g>`
 
+// The pane's crew view stands in each Cyberpunk skin's own place, behind the crew: Night City in the rain (2077), the
+// tower turning (Arasaka), the moon turning (Lucy), the stage (SAMURAI). Stepped loops, no filters, under every label.
+const cyberPane = (egg: CyberEgg, W: number, H: number, working: boolean): string => {
+  const one = (x: { svg: string; css: string }) => `<style>${x.css}</style>${x.svg}`
+  if (egg === 'runners') return one(city({ id: 'cpps', W, y: H - 44, h: 44, sc: 2, rain: 0.2, rainH: H }))
+  if (egg === 'corpo') return `<g opacity=".85">${one(tower({ id: 'arpt', x: W - 34, y: H - 6, sc: 1.4, period: 20 }))}</g>`
+  if (egg === 'netrun') return one(moon({ id: 'lupm', x: W - 46, y: 42, sc: 1.1, views: [0, 1, 2, 3, 4, 5, 6, 7], period: 32 }))
+  return `${one(stage({ id: 'smps', W, y: H - 62, h: 60, working, lamps: [Math.round(W * 0.28), Math.round(W * 0.72)], sc: 1.8 }))}${one(relic({ id: 'smpr', x: W - 30, y: 26, sc: 0.8 }))}`
+}
+
 const orgSvg = (W: number, root: OrgNode, isLight = false): string => {
   // A theme may draw the hierarchy in its own hand (Caliper: pins and a spine).
   const own = themeOf()?.org
@@ -5244,10 +5288,11 @@ const orgSvg = (W: number, root: OrgNode, isLight = false): string => {
       nodes.push(`<circle class="aura" cx="${x}" cy="${y + h / 2 + 2}" r="${w * 0.78}" fill="url(#aura)"/>
 <circle class="still" cx="${x}" cy="${y + h / 2 + 2}" r="${w * 0.62}" fill="none" stroke="url(#ring)" stroke-width="2"/><circle class="smil" cx="${x}" cy="${y + h / 2 + 2}" r="${w * 0.62}" fill="none" stroke="url(#ring)" stroke-width="2"><animateTransform attributeName="transform" type="rotate" from="0 ${x} ${y + h / 2 + 2}" to="360 ${x} ${y + h / 2 + 2}" dur="${isWorking ? 3 : 8}s" repeatCount="indefinite"/></circle>
 ${(() => {
-  const figure = `${crab(left, y, 'boss', false, isWorking, sc)}${crown(left, y, sc)}`
   const egg = cyberOf()
   const th = themeOf()
-  if ((!egg && !th?.afterimages) || !isWorking) return dancing(figure, isParty)
+  // The Cyberpunk bosses' idle frames ride inside the figure (a blink, lit optics, a rim, a strum); Saburo never trails.
+  const figure = `${crab(left, y, 'boss', false, isWorking, sc, false, egg && !isLight ? bossIdle(egg, isWorking) : '')}${crown(left, y, sc)}`
+  if ((!egg && !th?.afterimages) || !isWorking || egg === 'corpo') return dancing(figure, isParty)
   // David's Sandevistan (the themed skins' own trails): the boss leaves afterimages while the job runs.
   const sv = egg ? sandevistan(figure, egg) : (th as ThemeEggs).afterimages?.(figure, { x: left, y, w, h })
   return sv ? `<defs>${sv.defs}</defs>${sv.svg}${dancing(figure, isParty)}` : dancing(figure, isParty)
@@ -5302,7 +5347,7 @@ ${slot >= 46 ? `<text${isWorking ? ' class="t"' : ' class="s"'} x="${x}" y="${y 
     castGrow = 1
     figureDefs = null
   }
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="${FONT}">${PANE_CSS}${CRAB_CSS}${cyberOf() ? `<style>${EGG_CSS}</style>` : themeOf() ? `<style>${themeOf()?.css}</style>` : ''}
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="${FONT}">${PANE_CSS}${CRAB_CSS}${cyberOf() ? `<style>${EGG_CSS}${IDLE_CSS}</style>` : themeOf() ? `<style>${themeOf()?.css}</style>` : ''}
 <defs>${figureDefsMarkup(figures)}${isLight ? '' : orgMarks()}
 <radialGradient id="aura"><stop offset="0" stop-color="${SKIN.boss[0]}" stop-opacity=".45"/><stop offset=".6" stop-color="${SKIN.boss[0]}" stop-opacity=".12"/><stop offset="1" stop-color="${SKIN.boss[0]}" stop-opacity="0"/></radialGradient>
 <linearGradient id="ring" x1="0" x2="1"><stop offset="0" stop-color="${SKIN.boss[0]}"/><stop offset=".5" stop-color="${SKIN.boss[2]}" stop-opacity=".2"/><stop offset="1" stop-color="${SKIN.boss[3]}"/></linearGradient>
@@ -5315,6 +5360,7 @@ ${slot >= 46 ? `<text${isWorking ? ' class="t"' : ' class="s"'} x="${x}" y="${y 
 @keyframes spark{0%{opacity:1;transform:translateY(0)}100%{opacity:0;transform:translateY(-12px)}}
 @media (prefers-reduced-motion: reduce){.flow,.aura,.spark{animation:none}.spark{opacity:0}}</style>
 ${themeOf()?.pane && !isLight ? themeOf()?.pane?.backdrop(W, H, 0, SKIN.colors) : ''}
+${cyberOf() && !isLight ? cyberPane(cyberOf() as CyberEgg, W, H, isParty || Boolean(root.status === 'running')) : ''}
 ${edges.join('\n')}
 ${nodes.join('\n')}${SKIN.effects.scanlines && !isLight ? scanlines(W, H) : ''}</svg>`
 }
@@ -5447,7 +5493,7 @@ async function keepWarm($: EngineInterface): Promise<void> {
     if (!call.isWarm) {
       await halt(call.reason ?? 'does not pay')
       // Keep-Warm explains itself: the one time it decides not to, it says why in money.
-      $.ui.toast(`🧊 Keep-warm ${call.reason ?? 'skipped: it would not pay'}`, { timeoutMs: 15000 })
+      appToast($, `🧊 Keep-warm ${call.reason ?? 'skipped: it would not pay'}`, { timeoutMs: 15000 })
       return
     }
     const reply = await $.model.fork({ prompt: WARM_PROMPT }).catch((err: unknown) => (err instanceof Error ? err : new Error(String(err))))
@@ -5460,7 +5506,7 @@ async function keepWarm($: EngineInterface): Promise<void> {
       // The cache went before its hour: the earlier refreshes kept nothing for the next prompt.
       warmPendingUsd = 0
       await halt(reply.isAnswered ? 'the cache had already lapsed' : `refresh failed (${reply.reason})`, cost)
-      $.ui.toast(`🧊 Keep-warm: the cache had lapsed · ${fmtCost(cost)}`, { timeoutMs: 15000 })
+      appToast($, `🧊 Keep-warm: the cache had lapsed · ${fmtCost(cost)}`, { timeoutMs: 15000 })
       return
     }
     const saved = call.missUsd - cost
@@ -5470,7 +5516,7 @@ async function keepWarm($: EngineInterface): Promise<void> {
       return { ...prev, warm: { ...p, idle: p.idle + (isLikely ? 0 : 1), busy: p.busy + (isLikely ? 1 : 0), count: p.count + 1, spentUsd: p.spentUsd + cost, savedUsd: p.savedUsd - cost } }
     })
     warmPendingUsd = call.missUsd
-    $.ui.toast(`🧊 Cache kept warm · ${fmtCost(cost)} · saves ≈${fmtCost(Math.max(0, saved))} on your next prompt`, { timeoutMs: 15000 })
+    appToast($, `🧊 Cache kept warm · ${fmtCost(cost)} · saves ≈${fmtCost(Math.max(0, saved))} on your next prompt`, { timeoutMs: 15000 })
   } finally {
     isRefreshing = false
   }
@@ -6327,8 +6373,11 @@ const slimBandSvg = (OW: number, d: HudData): string => {
   let showGauge = Boolean(pg0)
   const shorterName = (w: number) => () => { if (own) own = nameAt(Math.min(W, w)) }
   // HEADER_ORDER: the gauge, the model, the episode (its code, then gone), "2 BG" and CREW for the two state chips, the name's
-  // shorter forms, the theme's chip, then the background count and crew mode themselves.
-  const order: (() => void)[] = [() => { showGauge = false }, () => { showModel = false }, () => { if (epMode === 0) epMode = 1 }, () => { epMode = 2 }, () => { bgForm = Math.min(bgForm + 1, 1) }, () => { crewForm = Math.min(crewForm + 1, 1) }, shorterName(1099), shorterName(899), shorterName(699), shorterName(499), () => { showChip = false }, () => { bgForm = 2 }, () => { crewForm = 2 }]
+  // shorter forms, the theme's chip, then the background count and crew mode themselves. A theme whose chip stays (`chipStays`:
+  // CAPRI IN CONTROL) lets the background count and crew mode go before its chip.
+  const dropChip = () => { showChip = false }
+  const tail: (() => void)[] = th.chipStays ? [() => { bgForm = 2 }, () => { crewForm = 2 }, dropChip] : [dropChip, () => { bgForm = 2 }, () => { crewForm = 2 }]
+  const order: (() => void)[] = [() => { showGauge = false }, () => { showModel = false }, () => { if (epMode === 0) epMode = 1 }, () => { epMode = 2 }, () => { bgForm = Math.min(bgForm + 1, 1) }, () => { crewForm = Math.min(crewForm + 1, 1) }, shorterName(1099), shorterName(899), shorterName(699), shorterName(499), ...tail]
   for (const give of order) {
     if (rightEdge(true) - (showGauge ? gW : 0) - (nameEnd() + tagsW() + (showModel ? modelW + 24 : 0)) >= 24) break
     give()
@@ -6538,9 +6587,80 @@ const slimBandSvg = (OW: number, d: HudData): string => {
   const trLayer = transitionLayer(th, { W, H, surface: 'band', since: ER2.since, now: d.at, party: d.isParty, ...(chip.w ? { chip: { x: chipX, y: y - 11.5, w: chip.w, h: 16 } } : {}) })
   // Rare scheduled eggs (a car, a face, a dim): from the clock, over the band and under the roamer.
   if (th.extras && !d.isParty) running4(d.crew.filter(m => m.status === 'running').length, d.at)
-  const extras = th.extras ? th.extras({ W, H, surface: 'band', at: d.at, ctxPct: d.ctxPct, ...(d.isParty ? { party: true } : {}), ...(BCS_UNPLUG_AT !== undefined ? { unplugAt: BCS_UNPLUG_AT } : {}), ...(activeFx() ? { fx: activeFx() as { kind: string; at: number } } : {}), working: d.isWorking, ...(swapAtNow() !== undefined ? { swapAt: swapAtNow() } : {}), task: d.title, titleW }) : ''
+  // Where a band act may play (stage/keep.ts): the clear span on the left, up to the first readout on the right in the task row,
+  // the step row and the info line, and the readouts inside that span (the Tasks chip, the step count) for its keep-out holes.
+  const pctX = segs > 0 ? tx + segs * 6 + 4 : W
+  // The step count's hole is as wide as keep.ts's generous text estimate (0.66 em a glyph), so a narrow theme sans keeps its margin.
+  const stepEnd = nSteps ? x0 + pipsN * 13 + 10 + Math.max(cntW, cnt.length * 13 * 0.66) + 6 : x0
+  const stage: BandStage = {
+    x1: Math.round(Math.min(crewLeft - 6, pctX - 6, rx - 2, hasReadouts ? r0 - 24 : W)),
+    keep: [[px - 3, 39, pillW + 6, 22], [x0 - 8, 88, stepEnd - x0 + 8, 21]],
+  }
+  const extras = th.extras ? th.extras({ W, H, surface: 'band', stage, at: d.at, ctxPct: d.ctxPct, ...(d.isWorking && d.taskFrom ? { job: { at: d.taskFrom, n: d.today.tasks } } : {}), ...(d.isParty ? { party: true } : {}), ...(BCS_UNPLUG_AT !== undefined ? { unplugAt: BCS_UNPLUG_AT } : {}), ...(activeFx() ? { fx: activeFx() as { kind: string; at: number } } : {}), working: d.isWorking, ...(swapAtNow() !== undefined ? { swapAt: swapAtNow() } : {}), task: d.title, titleW }) : ''
   const body = `${s.join('\n')}${extras}${d.isParty ? th.cheer(W, H, FONT, c, d.partyAt) : ''}${d.isParty && th.roamer?.hushParty ? '' : roam}${trLayer}`
   return shakeInto(glitchPanel(svg(W, H, body), th, { at: d.at, ctxPct: d.ctxPct, party: d.isParty }), th, { W, H, surface: 'band', at: d.at, working: d.isWorking, party: d.isParty, fx: activeFx(), ...(swapAtNow() !== undefined ? { swapAt: swapAtNow() } : {}) })
+}
+
+// The four Cyberpunk skins' ground, each its own (cyber-motion.ts), under every readout: 2077's Night City in depth with
+// rain; Arasaka's turning tower and its laser ID scan; Lucy's 3D moon and, while a job works, the faint Net floor she
+// dived into; SAMURAI's stage (sweeping lights, the crowd on the beat, the Relic). The job-start acts' grounds and the
+// daily "2023" gig ride here too, pinned (a redraw resumes them).
+const CB_STRIP = 26
+const cyberGround = (egg: CyberEgg, OW: number, OH: number, d: HudData): string => {
+  const y = OH - CB_STRIP
+  let css = IDLE_CSS
+  const out: string[] = []
+  const add = (x: { svg: string; css: string }) => { out.push(x.svg); css += x.css }
+  if (egg === 'runners') add(city({ id: 'cpsk', W: OW, y: y + 4, h: CB_STRIP - 4 }))
+  else out.push(skyline(OW, OH - 16, 14, egg, true))
+  if (egg === 'corpo') {
+    // Under 760 px the tower and Lucy's moon would sit under the readouts' labels (CACHE, $ TOTAL): the skyline carries them.
+    if (OW >= 760) add(tower({ id: 'artw', x: Math.round(OW * 0.72), y: OH - 2, sc: 0.75 }))
+    add(idScan({ W: OW, H: OH, tick: { x: OW - 18, y: OH - 7 }, font: FONT }))
+  }
+  if (egg === 'netrun') {
+    if (d.isWorking) out.push(netGrid({ W: OW, y: OH * 0.42, h: OH * 0.58, color: '#FF5CF0', op: 0.08 }))
+    if (OW >= 760) add(moon({ id: 'lumn', x: Math.round(OW * 0.55), y: OH - 14, sc: 0.5, glow: true }))
+  }
+  if (egg === 'samurai') {
+    add(stage({ id: 'smst', W: OW, y: y - 4, h: CB_STRIP + 2, working: d.isWorking, lamps: [Math.round(OW * 0.6), Math.round(OW * 0.76)] }))
+    add(relic({ id: 'smrc', x: OW - 44, y: OH - 14, sc: 0.55 }))
+  }
+  const start = jobStart(egg, d)
+  if (egg === 'runners' && start !== undefined) out.push(sandevistanAct({ at: start, W: OW, H: OH, fig: 'cbfig', fx: 0, fy: 0 }).bg)
+  if (egg === 'netrun' && start !== undefined) out.push(diveAct({ at: start, W: OW, H: OH, y: OH * 0.42, h: OH * 0.58 }))
+  if (egg === 'samurai') {
+    const gig = gigAt(d.at, d.isWorking)
+    if (gig && d.at < gig.endAt) out.push(gigAct({ at: gig.startAt, W: OW, H: OH, font: FONT, ...gigSpots(OH), strip: { y, h: CB_STRIP } }).bg)
+  }
+  return `<style>${css}</style>${out.join('')}`
+}
+// Johnny's place on the band (the boss figure's middle, in the band's and in the inner group's coordinates).
+const gigSpots = (OH: number) => ({ john: { x: HUD_PAD + 26, y: HUD_PAD + HUD_HEAD - 2 + 22 }, fig: { x: 26, y: 22 }, OH })
+// A job's start as an act's pin: the job's own start (drawn on the redraw the start makes), else a replay of the act.
+const jobStart = (egg: CyberEgg, d: HudData): number | undefined => {
+  const kind = egg === 'runners' ? 'sandevistan' : egg === 'netrun' ? 'dive' : ''
+  if (!kind) return undefined
+  const replay = playing(kind, d.at)
+  if (replay !== undefined) return replay
+  const ms = (ACT_MS as Record<string, number>)[kind] ?? 0
+  return d.isWorking && d.taskFrom && d.at < d.taskFrom + ms ? d.taskFrom : undefined
+}
+// The front pieces of the acts (over the boss figure, in the inner group): the Sandevistan's afterimages, the gig's scanlines.
+const cyberFront = (egg: CyberEgg, OW: number, OH: number, d: HudData): string => {
+  if (d.lite) return ''
+  const start = egg === 'runners' ? jobStart(egg, d) : undefined
+  if (start !== undefined) return sandevistanAct({ at: start, W: OW, H: OH, fig: 'cbfig', fx: 0, fy: 0 }).fg
+  if (egg === 'samurai') {
+    const gig = gigAt(d.at, d.isWorking)
+    if (gig && d.at < gig.endAt) return gigAct({ at: gig.startAt, W: OW, H: OH, font: FONT, ...gigSpots(OH), strip: { y: OH - CB_STRIP, h: CB_STRIP } }).fg
+  }
+  return ''
+}
+// The cheer, each skin its own: 2077's neon PREEM, Arasaka's hanko, Lucy's moon, SAMURAI's shockwave (or a replay of it).
+const cyberCheer = (egg: CyberEgg, OW: number, OH: number, d: HudData): string => {
+  const at = cheerAt(egg, d.at, d.isParty ? d.partyAt ?? d.at : undefined)
+  return at === undefined ? '' : cheerOf(egg, { at, W: OW, H: OH, font: FONT })
 }
 
 const hudBandSvg = (OW: number, d: HudData): string => {
@@ -6621,13 +6741,20 @@ ${egg ? EGG_CSS : th ? th.css : ''}
   const shine = d.isWorking && pct !== null && pct > 0
     ? `<rect class="shine" x="${left}" y="${gaugeY - 1}" width="26" height="9" rx="1" fill="#ffffff" fill-opacity=".55"/>`
     : ''
+  // Where a Cyberpunk fight may play (stage/keep.ts), in the band's own coordinates: the clear span left of the gauge's percent
+  // and the readout column, and the status pill inside it as a keep-out hole. The fight keeps under the header's line.
+  const rowY = HUD_PAD + HUD_HEAD - 2
+  const stage: BandStage = {
+    x1: Math.round(Math.min(HUD_PAD + left + barW + 8 - 6, hasReadouts ? HUD_PAD + W - right - 6 : OW - 14)),
+    keep: [[HUD_PAD + left + titleW + 8 - 3, rowY + 9 - 3, pillW + 6, 21]],
+  }
   return svg(
     OW,
     OH,
     `${css}
 ${cardShape(0.5, 0.5, OW - 1, OH - 1, `class="tile"`, 10)}
 ${cardShape(0.5, 0.5, OW - 1, OH - 1, `fill="none" stroke="${edge}" stroke-opacity="${d.isWorking ? 0.45 : 0.6}" stroke-width="1.2"${d.isWorking ? ' class="hedge"' : ''}`, 10)}
-${egg && !d.lite ? `<g clip-path="url(#hudclip)">${skyline(OW, OH - 16, 14, egg).replace('<g opacity=".5">', '<g opacity=".25">')}</g>` : th?.skyline && !d.lite ? `<g clip-path="url(#hudclip)">${th.skyline(OW, OH - 16, 14, c)}</g>` : ''}
+${egg && !d.lite ? `<g clip-path="url(#hudclip)">${cyberGround(egg, OW, OH, d)}</g>` : th?.skyline && !d.lite ? `<g clip-path="url(#hudclip)">${th.skyline(OW, OH - 16, 14, c)}</g>` : ''}
 ${beam}
 ${brackets}
 <rect x="0.5" y="12" width="3" height="${OH - 24}" rx="1.5" fill="${edge}"/>
@@ -6636,13 +6763,15 @@ ${hudHead(W, d)}
 <g transform="translate(0 ${HUD_HEAD - 2})">
 <line x1="12" y1="${HUD_TOP + 0.5}" x2="${W - 12}" y2="${HUD_TOP + 0.5}" stroke="${c.line}"/>
 ${(() => {
-  const figure = `${crab(10, 9, 'boss', false, d.isWorking, 1.05)}${crown(10, 9, 1.05)}`
-  // (a themed skin's afterimages trail the figure in the pane; the band keeps to the cyberpunk ones)
-  if (!egg || !d.isWorking || d.lite) return dancing(figure, d.isParty)
-  const sv = sandevistan(figure, egg)
-  return `<defs>${sv.defs}</defs>${sv.svg}${dancing(figure, d.isParty)}`
+  if (!egg) return dancing(`${crab(10, 9, 'boss', false, d.isWorking, 1.05)}${crown(10, 9, 1.05)}`, d.isParty)
+  // The four Cyberpunk skins: the boss drawn once (a def) with its idle frames, every trail and afterimage a <use> of it.
+  // David's Sandevistan (trails while he works, the time-slow when a job starts); never on Saburo: Arasaka has no noise.
+  const figure = `<defs><g id="cbfig">${crab(10, 9, 'boss', false, d.isWorking, 1.05, false, d.lite ? '' : bossIdle(egg, d.isWorking))}${crown(10, 9, 1.05)}</g></defs>`
+  const one = '<use href="#cbfig"/>'
+  const trail = egg !== 'corpo' && d.isWorking && !d.lite ? sandevistan(one, egg) : undefined
+  return `${figure}${trail ? `<defs>${trail.defs}</defs>${trail.svg}` : ''}${cyberFront(egg, OW, OH, d)}${dancing(one, d.isParty)}`
 })()}
-${egg ? relicText(left, 20, fitText(d.title, 13, titleW), `font-family="${FONT}" font-size="13" font-weight="800" fill="${c.accent}"`, egg) : th?.glitch ? th.glitch(left, 20, fitText(d.title, 13, titleW), `font-family="${FONT}" font-size="13" font-weight="800" fill="${c.accent}"`, titleW) : `<text x="${left}" y="20" font-family="${FONT}" font-size="13" font-weight="800" class="ac gl">${xml(fitText(d.title, 13, titleW))}</text>`}
+${egg && SKIN.effects.glitch !== false ? relicText(left, 20, fitText(d.title, 13, titleW), `font-family="${FONT}" font-size="13" font-weight="800" fill="${c.accent}"`, egg) : th?.glitch ? th.glitch(left, 20, fitText(d.title, 13, titleW), `font-family="${FONT}" font-size="13" font-weight="800" fill="${c.accent}"`, titleW) : `<text x="${left}" y="20" font-family="${FONT}" font-size="13" font-weight="800" class="ac gl">${xml(fitText(d.title, 13, titleW))}</text>`}
 ${th?.mark ? th.mark(left - 15, 7) : ''}
 <rect x="${left + titleW + 8}" y="9" width="${pillW}" height="15" rx="7.5" fill="${statusTone}" fill-opacity="${d.isWorking || d.isParty ? 0.95 : 0.25}"/>
 <text x="${left + titleW + 8 + pillW / 2}" y="20" text-anchor="middle" font-family="${FONT}" font-size="10.5" font-weight="800" fill="${d.isWorking || d.isParty ? inkOn(statusTone) : c.text}">${xml(d.status)}</text>
@@ -6659,7 +6788,8 @@ ${hudLines(W, d)}
 </g>
 ${hudSpare(W)}
 </g>
-${egg && d.isParty ? celebration(OW, OH, egg, FONT, d.partyAt) : ''}
+${egg && !d.lite ? cyberCheer(egg, OW, OH, d) : egg && d.isParty ? celebration(OW, OH, egg, FONT, d.partyAt) : ''}
+${egg && !d.lite && !d.isParty ? cyberFightBand(egg, OW, d.at, d.isWorking, stage) : ''}
 ${th && d.isParty ? th.cheer(OW, OH, FONT, c, d.partyAt) : ''}
 ${th?.corner ? th.corner(OW, OH, { ctxPct: d.ctxPct, overBudget: Boolean(d.budget && d.budget.usedMs > d.budget.min * 60_000) }) : ''}`,
   )
@@ -6993,6 +7123,8 @@ async function finishIfIdle($: EngineInterface): Promise<void> {
   const isAsking = !outcome && hasOpenPlan(boss.plan)
   const isQuietEnd = Boolean(outcome) || isAsking || Boolean(boss.isFollowUp)
   const isWorthACheer = !isQuietEnd && (crew.length > 0 || at - job.startedAt > 20_000)
+  // The Boys, OFF BOOK: a long job ending green after a red run gets F2 OFF THE BOOKS instead of the cheer, once a day.
+  const comeback = isWorthACheer && isBoys() && tbComebackDue(at, boysWorn(), at - job.startedAt)
   // Claimed in one atomic step: two agents finishing together run this twice, and
   // only the first may cheer and pay out.
   let isMine = false
@@ -7000,20 +7132,24 @@ async function finishIfIdle($: EngineInterface): Promise<void> {
     isMine = false
     if (prev.doneAt || prev.isWorking || prev.task !== boss.task) return prev
     isMine = true
-    return { ...prev, doneAt: at, activity: '', reportDue: undefined, ...(isQuietEnd ? { outcome } : isWorthACheer ? { celebrateUntil: at + CELEBRATE_MS } : { settled: true }) }
+    return { ...prev, doneAt: at, activity: '', reportDue: undefined, ...(isQuietEnd ? { outcome } : isWorthACheer && !comeback ? { celebrateUntil: at + CELEBRATE_MS } : { settled: true }) }
   })
   if (!isMine) return
+  if (comeback) {
+    tbMarkComeback(at)
+    setBoysFx('offthebooks', at + 300)
+  }
   // A follow-up Claude started after the job was done ends as quietly as it began.
   if (isBoys() && outcome === 'stopped') for (const t of boysEvent('cancel', { at, mode: boysWorn() })) tbToast($, t)
   if (boss.isFollowUp || outcome === 'stopped') return
   if (!outcome && isWorthACheer) bcsToast($, SKIN.id === 'gene' && mcgillNow(at) ? 'mcgill' : 'done', at)
   if (outcome === 'error') {
-    $.ui.toast(`⚠ Ended with an error: ${clip(job.task, 60)}`)
+    appToast($, `⚠ Ended with an error: ${clip(job.task, 60)}`, undefined, true)
     void $.ui.notify(`Claude hit an error: ${clip(job.task, 80)}`).catch(() => undefined)
     return
   }
   if (isAsking) {
-    $.ui.toast(`⏸ Claude needs you: ${clip(job.task, 60)}`)
+    appToast($, `⏸ Claude needs you: ${clip(job.task, 60)}`, undefined, true)
     void $.ui.notify(`Claude needs you: ${clip(job.task, 80)}`).catch(() => undefined)
     return
   }
@@ -7044,9 +7180,9 @@ async function finishIfIdle($: EngineInterface): Promise<void> {
   const egg = eggOf()
   const th = themeOf()
   // A long job makes a legend: the Afterlife names a drink after it.
-  if (th && legend.ms >= 180_000) $.ui.toast(typeof th.legends.toast === 'function' ? th.legends.toast(legend.task) : th.legends.toast)
+  if (th && legend.ms >= 180_000) appToast($, typeof th.legends.toast === 'function' ? th.legends.toast(legend.task) : th.legends.toast)
   else if (egg && legend.ms >= 180_000) $.ui.toast(egg === 'corpo' ? `▣ Engram filed in Mikoshi: ${clip(legend.task, 40)}` : `🍸 The Afterlife named a drink after you: The ${clip(legend.task, 40)}`)
-  $.ui.toast(`🎉 Done: ${clip(job.task, 60)}`)
+  appToast($, `🎉 Done: ${clip(job.task, 60)}`)
   void $.ui.notify(`Claude finished: ${clip(job.task, 80)}`).catch(() => undefined)
   // Spoken status (opt-in): the crew, then what the job cost, after the chime.
   if ((await read($, settings)).voice) {
@@ -7159,7 +7295,7 @@ async function startJob($: EngineInterface, asked: string): Promise<void> {
   const big = auto.on ? bigJobReason(asked, 0, 0, 101) : ''
   const reason = big || (auto.always ? EVERY_JOB : '')
   await update($, session, p => ({ ...p, crewMode: reason }))
-  if (big) $.ui.toast(`🦀 Big job (${big}): summoning the crew`)
+  if (big) appToast($, `🦀 Big job (${big}): summoning the crew`)
 }
 
 // What the band draws, from the state: one reading for its drawing and for the tick,
@@ -7508,7 +7644,7 @@ export const register: Register = (on, options) => {
           if (st.warned === 0 || st.warned > minutes) {
             await update($, session, prev => ({ ...prev, warned: minutes }))
             const isWarming = (await read($, watch)).warm?.on
-            $.ui.toast(`⧗ Prompt cache expires in ${Math.ceil((left ?? 0) / 60)} min${isWarming ? '' : ' · /tokens warm on keeps it warm'}`, { timeoutMs: 30000 })
+            appToast($, `⧗ Prompt cache expires in ${Math.ceil((left ?? 0) / 60)} min${isWarming ? '' : ' · /tokens warm on keeps it warm'}`, { timeoutMs: 30000 })
           }
         }
         if (!st.isBusy && isWarmDue(st.cacheUntil, at) && (await read($, watch)).warm?.on) void keepWarm($).catch(() => undefined)
@@ -7521,7 +7657,7 @@ export const register: Register = (on, options) => {
           const dueIds = new Set(quietDue.map(a => a.id))
           await update($, agents, l => l.map(a => (dueIds.has(a.id) ? { ...a, checkedInAt: at } : a)))
           const what = quietDue.length === 1 ? `"${clip(quietDue[0]?.description || quietDue[0]?.type || 'An agent', 40)}" has` : `${quietDue.length} agents have`
-          $.ui.toast(`⧗ ${what} been quiet for ${fmtTime(at - lastSeen(quietDue[0] as AgentRun))}. Still holding the job open. /missioncontrol release lets it go.`, { timeoutMs: 60000 })
+          appToast($, `⧗ ${what} been quiet for ${fmtTime(at - lastSeen(quietDue[0] as AgentRun))}. Still holding the job open. /missioncontrol release lets it go.`, { timeoutMs: 60000 }, true)
           void $.ui.notify(`Mission Control: ${what} been quiet for an hour. Is it still working?`).catch(() => undefined)
         }
         // The same for background work holding a job open: no new status for an hour
@@ -7532,14 +7668,14 @@ export const register: Register = (on, options) => {
           await update($, background, b => ({ ...b, tasks: b.tasks.map(t => (dueIds.has(t.id) ? { ...t, checkedInAt: at } : t)) }))
           const first = bgDue[0] as BgTask
           const what = bgDue.length === 1 ? `Background ${first.type} "${bgName(first)}" has` : `${bgDue.length} background tasks have`
-          $.ui.toast(`⧗ ${what} been quiet for ${fmtTime(at - (first.seenAt ?? bg.at))}. Still holding the job open. /missioncontrol release lets it go.`, { timeoutMs: 60000 })
+          appToast($, `⧗ ${what} been quiet for ${fmtTime(at - (first.seenAt ?? bg.at))}. Still holding the job open. /missioncontrol release lets it go.`, { timeoutMs: 60000 }, true)
           void $.ui.notify(`Mission Control: ${what} been quiet for an hour. Is it still working?`).catch(() => undefined)
         }
         const stuck = list.filter(a => a.status === 'running' && !a.isStuck && at - heardAt(a, list, at) > STUCK_MS)
         if (!stuck.length) return
         const ids = new Set(stuck.map(a => a.id))
         await update($, agents, l => l.map(a => (ids.has(a.id) ? { ...a, isStuck: true } : a)))
-        for (const a of stuck) $.ui.toast(`🦀 "${clip(a.description || a.type, 40)}" has gone quiet for 2 min: it may be stuck`)
+        for (const a of stuck) appToast($, `🦀 "${clip(a.description || a.type, 40)}" has gone quiet for 2 min: it may be stuck`, undefined, true)
       })()
     })
     const rules = await loadRules($)
@@ -7939,7 +8075,7 @@ export const register: Register = (on, options) => {
     const isReadOnly = e.subagentType === 'Explore'
     // While the Staffing brain is on it owns model and effort; Autopilot and Smart staffing are its last fill-in (brainFor).
     const piloted = !brainOn && w.autopilot && isReadOnly && !e.model ? { ...briefed, model: 'haiku' } : briefed
-    if (piloted !== briefed) $.ui.toast(`Token Manager: "${clip(e.description, 30)}" runs on Haiku`)
+    if (piloted !== briefed) appToast($, `Token Manager: "${clip(e.description, 30)}" runs on Haiku`)
     const staff = !brainOn && smartStaffing && !e.model && !isWorker(e.subagentType) && piloted === briefed ? staffFor(e.subagentType, e.description) : null
     // Ultra: a role with a rule gets a deep-check brief and max effort from its first request.
     const ultraRule = matchUltra(ultraRules, e.subagentType, e.description)
@@ -7975,9 +8111,9 @@ export const register: Register = (on, options) => {
         // Once per job: how many of the plan's tasks the Manager put on Ultra.
         if (ultraToastFor !== livePlan.title) {
           ultraToastFor = livePlan.title
-          $.ui.toast(ultraPlanToast(livePlan.tasks))
+          appToast($, ultraPlanToast(livePlan.tasks))
         }
-      } else $.ui.toast(`⚡ Ultra: "${clip(e.description, 30)}" runs at max effort with a deep check`)
+      } else appToast($, `⚡ Ultra: "${clip(e.description, 30)}" runs at max effort with a deep check`)
     }
     if (pick && started.agentId) {
       // Its effort rides every request (turn.step); the person's ⚡ and an Ultra rule still beat it.
@@ -7989,14 +8125,14 @@ export const register: Register = (on, options) => {
       }
       if (isBrainChange) {
         brainCount += 1
-        $.ui.toast(brainNote(clip(e.description, 30), pick))
+        appToast($, brainNote(clip(e.description, 30), pick))
       }
     }
     if (staff && started.agentId) {
       staffEffort.set(started.agentId, staff.effort)
       const base = (await read($, env)).model || (await read($, session)).model
       if (staff.model && base) staffBaseline.set(started.agentId, base)
-      $.ui.toast(`Staffing: "${clip(e.description, 30)}" is ${staff.why}: ${staff.model ? `${staff.model[0]?.toUpperCase()}${staff.model.slice(1)}` : 'session model'} · ${staff.effort} effort`)
+      appToast($, `Staffing: "${clip(e.description, 30)}" is ${staff.why}: ${staff.model ? `${staff.model[0]?.toUpperCase()}${staff.model.slice(1)}` : 'session model'} · ${staff.effort} effort`)
     }
 
     const at = await $.clock.now()
@@ -8158,6 +8294,11 @@ export const register: Register = (on, options) => {
       else if (cyberOf() && ctx >= 95 && !sirenPlayed) {
         sirenPlayed = true
         void play($, `${ADDON}/assets/maxtac.wav`)
+        // On 2077 the raid itself rolls in with the siren (at most once per 30 min; cyber-fights.ts).
+        if (cyberOf() === 'runners') {
+          const now = await $.clock.now().catch(() => Date.now())
+          if (maxtacClimb(now)) await update($, bandTick, () => now)
+        }
       }
       if (ctx < 80) psyWarned = false
       else if (egg && ctx >= 85 && !psyWarned) {
@@ -8581,7 +8722,7 @@ export const register: Register = (on, options) => {
             {egg && !drop.has('breach') ? (
               <Box key="breach" marginBottom={1}>
                 <Svg
-                  source={th ? paneCard(th.card.draw(W, boss.task, boss.isWorking, steps.filter(st => st.state === 'done').length, steps.length, SKIN.colors, FONT, cardShape, legends, steps.map(st => ({ title: st.title, state: st.state, note: st.note }))), th, 'task', clockNow, info.contextPct, (boss.celebrateUntil ?? 0) > clockNow, boss.isWorking) : breachCard(W, steps.filter(st => st.state === 'done').length, steps.length, boss.isWorking, egg, FONT, cardShape)}
+                  source={th ? paneCard(th.card.draw(W, boss.task, boss.isWorking, steps.filter(st => st.state === 'done').length, steps.length, SKIN.colors, FONT, cardShape, legends, steps.map(st => ({ title: st.title, state: st.state, note: st.note }))), th, 'task', clockNow, info.contextPct, (boss.celebrateUntil ?? 0) > clockNow, boss.isWorking) : breachCard(W, steps.filter(st => st.state === 'done').length, steps.length, boss.isWorking, egg, FONT, cardShape).replace(/<\/svg>\s*$/, `${cyberFightEcho(egg as CyberEgg, clockNow, boss.isWorking)}</svg>`)}
                   alt={th ? th.card.alt(boss.isWorking, steps.filter(st => st.state === 'done').length, steps.length) : `Breach Protocol: ${steps.filter(st => st.state === 'done').length} of ${steps.length} steps`}
                 />
               </Box>
@@ -8597,7 +8738,7 @@ export const register: Register = (on, options) => {
             {egg && !drop.has('log') ? (
               <Box key="bd" flexDirection="column" marginBottom={1}>
                 <Svg
-                  source={th ? paneCard(hackInto(th.log.draw(W, beats, pick, SKIN.colors, FONT, cardShape), th, { at: clockNow, ctxPct: info.contextPct, card: 'log', party: (boss.celebrateUntil ?? 0) > clockNow }), th, 'log', clockNow, info.contextPct, (boss.celebrateUntil ?? 0) > clockNow, boss.isWorking) : braindanceCard(W, beats, pick, SKIN.colors, FONT, cardShape, egg === 'samurai' ? 'SETLIST' : 'BRAINDANCE')}
+                  source={th ? paneCard(hackInto(th.log.draw(W, beats, pick, SKIN.colors, FONT, cardShape, { at: clockNow, working: boss.isWorking, ...((boss.celebrateUntil ?? 0) > clockNow && boss.doneAt ? { doneAt: boss.doneAt } : {}) }), th, { at: clockNow, ctxPct: info.contextPct, card: 'log', party: (boss.celebrateUntil ?? 0) > clockNow }), th, 'log', clockNow, info.contextPct, (boss.celebrateUntil ?? 0) > clockNow, boss.isWorking) : braindanceCard(W, beats, pick, SKIN.colors, FONT, cardShape, egg === 'samurai' ? 'SETLIST' : 'BRAINDANCE', undefined, undefined, undefined, egg === 'runners' ? { at: clockNow } : undefined)}
                   alt={th?.log.alt ? th.log.alt(beats, pick) : th && !th.log.hasControls ? `Lab log: ${beats.length} tool calls` : braindanceAlt(beats, pick)}
                 />
                 {th && !th.log.hasControls ? null : <Box flexDirection="row" gap={2}>
@@ -8971,6 +9112,18 @@ export const register: Register = (on, options) => {
         await foundSecret($, found).catch(() => undefined)
       }
     }
+    // SAMURAI, the hidden Cyberpunk skin: "wake up, samurai" typed while wearing 2077, Arasaka or Lucy (2077's own greeting
+    // says it, so the line a fan types back now does something). The prompt goes on unchanged.
+    if (asked && cyberOf() && SKIN.id !== 'samurai' && WAKE_SAMURAI_RE.test(asked)) {
+      const found = SKINS.get('samurai')
+      if (found) {
+        applySkin(found)
+        await $.store.set('skin', found.id).catch(() => undefined)
+        await update($, skin, () => found.id)
+        await retitle($).catch(() => undefined)
+        await foundSecret($, found).catch(() => undefined)
+      }
+    }
     // The same for "say my name" or "what's my name" typed while wearing Breaking Bad: Heisenberg.
     if (asked && SKIN.id === 'breaking-bad' && SAY_MY_NAME_RE.test(asked)) {
       const found = SKINS.get('heisenberg')
@@ -9029,6 +9182,12 @@ export const register: Register = (on, options) => {
       }
       const t = SKIN.id === 'noir' && TB_CURTAIN_RE.test(asked) ? undefined : tbTyped(asked, boysWorn(), { spoilers: BOYS_SPOILERS })
       if (SKIN.id === 'noir' && TB_CURTAIN_RE.test(asked)) await wearBoys($, 'the-boys').catch(() => undefined)
+      else if (SKIN.id === 'noir' && TB_CURTAIN_UP_RE.test(asked)) {
+        // F3 CURTAIN UP: the silent picture, now (theboys-fights.ts).
+        setBoysFx('curtainup', at)
+        await update($, bandTick, () => at)
+        await update($, paneTick, () => at)
+      }
       else if (t?.kind === 'noirmode' && SKIN.id === 'the-boys') {
         // THIS MEANS NOIR: the teaser act (Noir, `…`, the 1979 tape) is the transition, then the silent skin is on.
         tbFire(t, at, boysWorn())
@@ -9122,7 +9281,7 @@ export const register: Register = (on, options) => {
         if (reason && reason !== EVERY_JOB) {
           crewCalled = true
           await update($, session, prev => ({ ...prev, crewMode: reason }))
-          $.ui.toast(`🦀 Big job (${reason}): summoning the crew`)
+          appToast($, `🦀 Big job (${reason}): summoning the crew`)
         }
       }
       if (reason) sections.push({ id: 'crab-progress:crew', text: crewText(reason), scope: 'session' as const })
@@ -10170,7 +10329,7 @@ export const register: Register = (on, options) => {
     if (isBoys() && SKIN.id !== 'noir' && boysState().inFlight >= 4) {
       const at = await $.clock.now().catch(() => Date.now())
       const words = SKIN.words
-      return next({ ...e, props: { ...e.props, word: `${words[Math.floor(at / 500) % words.length] ?? skinWord(e.props.word)} · 2×` } })
+      return next({ ...e, props: { ...e.props, word: `${words[Math.floor(at / 500) % words.length] ?? skinWord(e.props.word)} · 2×`, suffix: turboSuffix(at) } })
     }
     return next({ ...e, props: { ...e.props, word: skinWord(e.props.word) } })
   })

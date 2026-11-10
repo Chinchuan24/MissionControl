@@ -1,4 +1,5 @@
 // Themed (non-cyberpunk) easter eggs, one table per skin family.
+import type { BandStage } from './stage/keep'
 //
 // A themed skin is a `ThemeEggs` entry in THEMES, keyed by its cast. register.tsx asks
 // `themeOf()` and draws whatever the entry gives; nothing there is named after a show.
@@ -47,14 +48,18 @@ import type { RoamColors, RoamPlan, RoamTiming } from './roamer'
 import type { Badge, Beat, Cred, CredWords, Frame } from './extras'
 import type { Legend } from './eggs'
 import { perWindow } from './stage/director'
+import type { SwitchFlavour } from './stage/wipe'
+import { CAPRI_SWITCH, D_SWITCH, er2FightBand, er2FightPane, fightLive, playing as er2Playing, slateAct } from './edgerunners2-motion'
 
 /** What the band's figure slot knows: the clock, the context, and whether the job-done celebration is drawing. */
+/** What the log card knows of the clock (Edgerunners 2's tape: it runs while a job works, rewinds on a new beat, CUT! when done). */
+export type LogNow = { at: number; working?: boolean; doneAt?: number }
 export type FigureCtx = { at: number; ctxPct: number; party?: boolean; fx?: { kind: string; at: number }; /** A job is running. */ working?: boolean; /** The job's progress, 0 to 100 (absent before a plan). */ progress?: number }
 export type ThemeKey = 'mentalist' | 'redjohn' | 'breakingbad' | 'heisenberg' | 'edgerunners2' | 'capricorn' | 'bettercallsaul' | 'gene' | 'invincible' | 'invincible2' | 'caliper' | 'caliperlight' | 'boys' | 'boys2' | 'solidgold' | 'boysnoir'
 /** The pane cards a roaming act can belong to: the level card, the task card, the log. */
 export type PaneCard = 'cred' | 'task' | 'log'
 /** What a theme's rare scheduled eggs know (all from the clock, so an idle draw still shows them). */
-export type ExtraArgs = { W: number; H: number; surface: 'band' | 'pane'; at: number; ctxPct: number; party?: boolean; card?: PaneCard; unplugAt?: number; fx?: { kind: string; at: number }; /** A job is running (a theme's fights only play then). */ working?: boolean; /** When the last era swap started (Invincible's title-card slam transition). */ swapAt?: number; /** The band only: the task title and the width it is drawn in (The Boys' title SPIN). */ task?: string; titleW?: number }
+export type ExtraArgs = { W: number; H: number; surface: 'band' | 'pane'; at: number; ctxPct: number; /** The band only: the running job's start and its number today (Edgerunners 2's slate). */ job?: { at: number; n: number }; party?: boolean; card?: PaneCard; unplugAt?: number; fx?: { kind: string; at: number }; /** A job is running (a theme's fights only play then). */ working?: boolean; /** When the last era swap started (Invincible's title-card slam transition). */ swapAt?: number; /** The band only: the task title and the width it is drawn in (The Boys' title SPIN). */ task?: string; titleW?: number; /** The band only: where a band act may play, and the readouts it must keep clear (stage/keep.ts). */ stage?: BandStage }
 /** One node of the hierarchy as a theme's `org` drawer sees it (a structural copy of the engine's). */
 export type ThemeOrg = { label: string; color: string; kind: string; status?: string; isQuiet?: boolean; children: ThemeOrg[] }
 /** The skin colours a theme's drawers read. */
@@ -98,6 +103,8 @@ export type ThemeRoamer = {
   still?: boolean
   /** Lines that flash across a panel now and then (Capri's red hack lines): drawn last, over everything, from the seed and the clock. */
   hack?: (a: HackArgs) => string
+  /** Nothing of hers draws at `at` (a fight owns the panel: one act at a time). */
+  hush?: (at: number) => boolean
 }
 
 export type ThemeEggs = {
@@ -111,6 +118,9 @@ export type ThemeEggs = {
   /** The context chip past 85%. */
   /** `W` is the band's width (a chip may wait for room). */
   chip: (x: number, y: number, ctxPct: number, t: ThemeColors, font: string, W?: number) => { svg: string; w: number }
+  /** The chip outranks the band's state chips: on a narrow band CREW and the background count give way before it (CAPRI IN
+   *  CONTROL, Chin's call). Without it the chip goes first. */
+  chipStays?: boolean
   warning: (ctxPct: number) => string
   /** The cheer when a job is done. */
   cheer: (W: number, H: number, font: string, t: ThemeColors, startAt?: number) => string
@@ -121,7 +131,7 @@ export type ThemeEggs = {
   /** `hidden`: the theme's `card` already draws the closed jobs (the Classroom's honor roll), so the shared legends card is skipped. */
   legends: { title: string; empty: string; icon: string; alt: string; toast: string | ((task: string) => string); hidden?: boolean }
   /** The pane's log of tool calls. `hasControls`: it has the First/Back/Next/Live buttons (a replay timeline). */
-  log: { draw: (W: number, beats: Beat[], pick: number, t: ThemeColors, font: string, frame: Frame) => string; hasControls: boolean; alt?: (beats: Beat[], pick: number) => string }
+  log: { draw: (W: number, beats: Beat[], pick: number, t: ThemeColors, font: string, frame: Frame, now?: LogNow) => string; hasControls: boolean; alt?: (beats: Beat[], pick: number) => string }
   boot: [string, string]
   /** The pane's boot strip in the theme's own hand, in place of the shared one (W by 30). */
   bootDraw?: (W: number) => string
@@ -141,6 +151,8 @@ export type ThemeEggs = {
   shake?: (o: { W: number; H: number; surface: 'band' | 'pane'; at: number; card?: PaneCard; working?: boolean; fx?: { kind: string; at: number }; swapAt?: number }) => string
   /** Edgerunners 2 only: which of the skin's two modes this entry draws. CAPRI mode has glitches in place of the roamer and the duets. */
   mode?: 'd' | 'capri'
+  /** The theme's own flavour of the generic skin switch (stage/wipe.ts `skinSwitch`). */
+  switchFlavour?: SwitchFlavour
   /** The slim band (two info rows, one quiet cold-read line, no skin chip, beam or brackets) in place of the full HUD band. */
   slimBand?: boolean
   /** What a slim band draws in the theme's own hand (the Breaking Bad band): the name, figure, crew, pips, gauge and foot. A theme without it gets the Mentalist's. */
@@ -289,10 +301,12 @@ const bbTheme = (heis: boolean): ThemeEggs => ({
 // Edgerunners 2 v2 "D's optics" (and its secret CAPRICORN skin): a glass HUD in cobalt and ice, Capri's pink and green
 // only when she is near. The band is the slim band in the theme's own hand; NEURAL SYNC is the level card, NETRUN TRACE
 // the log, CLOSED GIGS the closed jobs.
-// The roamer's chances, shared by the roamer and by the duets (which never double her). D mode is calm: with her hack lines and
-// the duets, about one Capri event in five 30 s windows under 85% (roam ~1 in 10), escalating at 85% and again at 95%. CAPRI
-// mode (she is in control) keeps its own pace.
-const er2Chance = (sec: boolean) => (ctxPct: number): number => (sec ? 0.6 : ctxPct >= 95 ? perWindow(1.6) : ctxPct >= 85 ? perWindow(2.5) : perWindow(5))
+// The roamer's chances, shared by the roamer and by the duets (which never double her). D mode is CALM, so she is a surprise:
+// one Capri event (a walk, peek or sit; a duet; or her hack lines alone) in about thirteen 30 s windows under 85% (one every
+// 6-7 min; roam about one in 24), one window in five from 85%, most windows from 95%. One event per window, in priority order:
+// roam > duet > hack lines (a hack line that rides her walk is part of that walk). CAPRI mode (she is in control) keeps its own
+// pace. Nothing of hers draws while a fight plays.
+const er2Chance = (sec: boolean) => (ctxPct: number): number => (sec ? 0.6 : ctxPct >= 95 ? perWindow(1.6) : ctxPct >= 85 ? perWindow(4) : perWindow(12))
 const ER2_LINES = ['hi, choom.', 'hi.', 'just me, choom.', 'bye-bye, choomba!']
 const er2RoamFor = (ctxPct: number) => (windowStart: number) => roamPlan('er2', windowStart, { chance: er2Chance(false)(ctxPct), takeoverEveryMin: 30, lines: ER2_LINES })
 const er2Theme = (sec: boolean): ThemeEggs => ({
@@ -301,6 +315,7 @@ const er2Theme = (sec: boolean): ThemeEggs => ({
   css: ER2_CSS,
   readout: { w: 0, draw: () => '' },
   chip: (x, y, ctxPct, _t, _f, W) => er2Chip(x, y, ctxPct, sec, W),
+  ...(sec ? { chipStays: true } : {}),
   slimBand: true,
   slim: {
     h: ER2_BAND_H,
@@ -312,6 +327,8 @@ const er2Theme = (sec: boolean): ThemeEggs => ({
     pill: er2Pill,
     ownEdge: true,
     figure: ctx => {
+      // While a fight plays the box is empty: D (or Capri) is out in the fight.
+      if (ctx && !ctx.party && fightLive(ctx.at, true, sec)) return ''
       if (sec || !ctx || ctx.party) return er2Figure(sec)
       return duetAt(duetPlan(DUET_SEED, ctx.at, ctx.ctxPct, er2RoamFor(ctx.ctxPct)), ctx.at) || er2Figure(false)
     },
@@ -328,7 +345,7 @@ const er2Theme = (sec: boolean): ThemeEggs => ({
     alt: () => 'Closed gigs',
   },
   legends: { title: 'CLOSED GIGS', empty: 'No gigs closed yet. Finish one and it posts here.', icon: '◢', alt: 'Closed gigs', toast: 'Gig posted to the net log.', hidden: true },
-  log: { draw: (W, beats, pick) => traceCard(W, beats, pick, sec), hasControls: true, alt: traceAlt },
+  log: { draw: (W, beats, pick, _t, _f, _fr, now) => traceCard(W, beats, pick, sec, now ? { ...now, ...(er2Playing('cut', now.at) !== undefined ? { doneAt: er2Playing('cut', now.at) } : {}) } : undefined), hasControls: true, alt: traceAlt },
   boot: sec ? CAPRICORN_BOOT : ER2_BOOT,
   bootDraw: W => bootLine(W, sec, sec ? CAPRICORN_BOOT : ER2_BOOT),
   greeting: sec ? CAPRICORN_GREETING : ER2_GREETING,
@@ -348,9 +365,21 @@ const er2Theme = (sec: boolean): ThemeEggs => ({
     creep: er2PaneCreep,
     halo: er2Halo,
     css: TK_CSS,
-    hack: a => er2Hack(sec ? 'capricorn' : 'er2', a, sec),
+    hack: a => (fightLive(a.at, true, sec) ? '' : er2Hack(sec ? 'capricorn' : 'er2', sec ? a : { ...a, taken: w0 => duetPlan(DUET_SEED, w0, a.ctxPct, er2RoamFor(a.ctxPct)).on }, sec)),
+    hush: at => fightLive(at, true, sec),
   },
   takeover: (W, H, line, tm) => er2Takeover(W, H, line, tm, sec),
+  // The rare fight (D vs a cyberpsycho; CAPRI vs D for the HUD) on the band and its echo on one card; D's slate on a job start.
+  extras: o => {
+    if (o.party) return ''
+    const working = o.working ?? false
+    if (o.surface === 'pane') return o.card === 'log' || o.card === 'cred' ? er2FightPane(o.card, o.W, o.H, o.at, working, sec) : ''
+    const fight = er2FightBand(o.W, o.H, o.at, working, sec, o.stage)
+    if (fight || sec) return fight
+    const slateAt = er2Playing('slate', o.at) ?? (o.job && working && o.at < o.job.at + 900 ? o.job.at : undefined)
+    return slateAt === undefined ? '' : slateAct({ at: slateAt, take: Math.max(1, o.job?.n ?? 1), scene: new Date(slateAt).getHours() + 1, x: 60, y: 30 })
+  },
+  switchFlavour: sec ? CAPRI_SWITCH : D_SWITCH,
 })
 
 // Better Call Saul (and its hidden GENE skin): the strip-mall law office. The band is the slim band in the theme's own hand;

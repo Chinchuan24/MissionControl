@@ -14,6 +14,7 @@
 // A fan homage to Cyberpunk: Edgerunners (CD PROJEKT RED / Studio Trigger / Netflix). Only episode titles,
 // short phrases and original drawing; no logos, no spoilers.
 import { ER_CAPRI, ER_CAPRI_BIG, ER_CAPRI_BUST, ER_D, ER_RUNNER, ER_RUNNER2, ER_RUNNER3, hashOf } from './cast'
+import { heartbeat } from './edgerunners2-motion'
 import type { Sprite } from './cast'
 import type { RoamPlan, RoamTiming } from './roamer'
 
@@ -394,8 +395,8 @@ export const ER2_TOOLS: Record<string, string> = { Read: 'Probe', Grep: 'Sweep',
 export const CAPRICORN_RE = /0\s*\+\s*2\s*=\s*1/
 export const HI_CAPRI_RE = /\bhi,?\s+capri\b/i
 export const HI_CAPRI_MS = 60_000
-/** The whole word "capri" (any case) in a prompt lets her in; "bye capri" (checked first) sends her back. */
-export const CAPRI_WORD_RE = /\bcapri\b/i
+/** "hi capri" (or "let capri in") lets her in; the bare word "capri" no longer does (capri pants, the island). "bye capri" (checked first) sends her back. */
+export const CAPRI_WORD_RE = new RegExp(`${HI_CAPRI_RE.source}|\\blet\\s+capri\\s+in\\b`, 'i')
 export const BYE_CAPRI_RE = /\bbye,?\s+capri\b/i
 
 // --- the band's pieces ---------------------------------------------------------------------
@@ -429,7 +430,8 @@ export const er2Foot = (W: number, H: number, sec: boolean, ctx: BandCtx): strin
   // CAPRI mode keeps one D trace: the link rail stays his cobalt, with an ice pulse.
   s += `<line x1="5" y1="14" x2="5" y2="${H - 14}" stroke="${sec ? D_TRACE : near ? K.hot : P.a}" stroke-width="2" stroke-opacity="${sec ? 0.7 : 0.55}"/>`
   if (working) s += `<line class="v2-rail" x1="5" y1="14" x2="5" y2="${H - 14}" stroke="${sec ? '#BFD8FF' : near ? K.white : P.ice}" stroke-width="2" stroke-dasharray="12 208"/>`
-  return s + (sec ? capriCorners(W, H) : '') + corner(W, H, near, sec)
+  // CAPRI mode: her heartbeat on the frame, lub-dub, faster as the context climbs.
+  return s + (sec ? capriCorners(W, H) + heartbeat(d, ctx.ctxPct) : '') + corner(W, H, near, sec)
 }
 /** CAPRI mode: her shards in the four corners (three angular slivers each, plus two white chips), inside the chamfer. */
 export const capriCorners = (W: number, H: number): string => {
@@ -464,7 +466,8 @@ export const er2Name = (x: number, y: number, W: number, sec: boolean, near: boo
   const px = x + lw + 10
   if (sec) s += `<g id="er2bust"><path d="${cham(px, y - 12, 17, 17, 3, 1)}" fill="${K.black}" stroke="${K.green}" stroke-width="1"/>${pixels(ER_CAPRI_BUST, px + 2, y - 11, 0.31)}</g>`
   else s += `<path d="${cham(px, y - 12, 16, 16, 3, 1)}" fill="${P.a}"/>${T(px + 4.3, y + 0.6, 'D', 12, 800, '#FFFFFF')}`
-  const id = sec ? (W >= 600 ? 'PROJECT CAPRICORN · HOST D' : 'CAPRICORN') : W >= 1100 ? 'SNAKE NATION · NETRUNNER' : W >= 900 ? 'SNAKE NATION' : ''
+  // Under 500 px CAPRI's id gives way to her chip (CAPRI IN CONTROL stays on a narrow band: Chin's call), her bust still marks her.
+  const id = sec ? (W >= 600 ? 'PROJECT CAPRICORN · HOST D' : W >= 500 ? 'CAPRICORN' : '') : W >= 1100 ? 'SNAKE NATION · NETRUNNER' : W >= 900 ? 'SNAKE NATION' : ''
   if (id) s += T(px + 23, y + 0.5, id, 9.5, 800, P.aT, 'letter-spacing="1.3"')
   let w = lw + 10 + 17 + (id ? 7 + er2W(id, 9.5, 1.3, 800) : 0)
   // CAPRI mode: his dimmed D patch after the id, the second D trace.
@@ -477,7 +480,8 @@ export const er2Name = (x: number, y: number, W: number, sec: boolean, near: boo
 }
 
 /**
- * The header chip. CAPRI mode: CAPRI IN CONTROL (her fill, green text, her eye, a 1 px jitter; the context joins it from 85%).
+ * The header chip. CAPRI mode: CAPRI IN CONTROL (her fill, green text, her eye, a 1 px jitter; the context joins it from 85% on a
+ * band 600 px wide or more).
  * D mode: 85% CHIP HOT (amber), 95% CAPRI'S AWAKE (her colours, a jitter, her eye), else HOST D · STABLE (a cobalt
  * outline) from a band 900 px wide; narrower, D's patch alone marks the mode.
  */
@@ -485,7 +489,8 @@ export const er2Chip = (x: number, y: number, pct: number, sec: boolean, W = 0):
   const K = kOf(sec)
   const P = palOf(sec)
   if (sec) {
-    const label = pct >= 85 ? `CAPRI IN CONTROL · ${Math.round(pct)}%` : 'CAPRI IN CONTROL'
+    // Under 600 px the context stays in the readouts' ring alone, so the chip (which stays: `chipStays`) still fits.
+    const label = pct >= 85 && !(W > 0 && W < 600) ? `CAPRI IN CONTROL · ${Math.round(pct)}%` : 'CAPRI IN CONTROL'
     const w = r1(er2W(label, 9.5, 1.2, 800) + 34)
     return { svg: ff(`<g class="v2-psy"><path d="${cham(x, y - 11.5, w, 16, 4, 1)}" fill="${K.hot}" fill-opacity=".26" stroke="${K.hot}" stroke-opacity=".8"/>${eye(x + 6, y - 7.5, 0.85, 'v2-led', true)}${T(x + 23, y, label, 9.5, 800, K.green, 'letter-spacing="1.2"')}</g>`), w }
   }

@@ -13,11 +13,16 @@ import { Act, KIT, bub, cap, defineActs, slate } from './theboys-acts'
 import type { Geo, Row } from './theboys-acts'
 import { BUST, C, CRAWL_Y, PROPS, SP, T, condW, pal, pin, px, r1, sansW, spH, spW, stamp, tape, unit } from './theboys'
 import type { Mode } from './theboys'
-import { actMs, autoLookAtMe, boysFx, fixedAt, onBoysEvent, registerReplay, setActMs, setApprovalMod, setStageBusy, testFails, toastOk, vnnBreak } from './theboys-eggs'
+import { REPLAYS, actMs, autoLookAtMe, boysFx, fixedAt, onBoysEvent, registerReplay, setActMs, setBoysFx, setApprovalMod, setFightDrawn, setFightOk, setStageBusy, testFails, toastOk, vnnBreak } from './theboys-eggs'
+import { FIGHT_KINDS } from './theboys-fights'
 import type { BoysEventArgs, BoysMode } from './theboys-eggs'
-import { cadence } from './stage/director'
+import * as fx from './stage/fx'
+import { ease } from './stage/ease'
+import * as MS from './theboys-motion-sprites'
+import { AMBUSH_MS, AMB_SLOT_MS, FIGHT_ID, PIECES, ambushOfSlot, directorAt, kindOf, noirClue, stageAt } from './theboys-director'
+import { PLAY_NAME, playsFrom, playsOf, registerPlay } from './stage/replay'
 
-const { feet, GROUND, gaugeOf, coverBust, dim, poof, knight, octo, tentacle, beaver, critter, dog, pig, flashbulb, cone, vial, crowd, runner, streak, heart } = KIT
+const { poses, actor, stillPose, arc, runFrame, feet, GROUND, gaugeOf, coverBust, dim, poof, knight, octo, tentacle, beaver, critter, dog, pig, flashbulb, cone, vial, crowd, runner, streak, heart } = KIT
 const by = (m: BoysMode, brand: string, book: string, gold: string, noir = brand): string => (m === 'book' ? book : m === 'gold' ? gold : m === 'noir' ? noir : brand)
 
 // ---------------------------------------------------------------- M4 Kimiko's sign subtitles
@@ -32,134 +37,10 @@ export const sign = (x: number, y: number, text: string, z = 10): string => {
 export const translate = (x: number, y: number, said: string, m: Mode): string => bub(x, y, `She says: ${said}`, m)
 
 // ---------------------------------------------------------------- 2. the schedule
-/** The LOCAL date's day number (a UTC day would flip mid-evening west of UTC and re-roll the day's times halfway through). */
-export const localDay = (at: number): number => {
-  const d = new Date(at)
-  return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86_400_000)
-}
-const hourOf = (at: number, h: number): number => {
-  const d = new Date(at)
-  d.setHours(Math.floor(h), Math.round((h % 1) * 60), 0, 0)
-  return d.getTime()
-}
-export type Slot = { kind: string; startAt: number; endAt: number; src: 'fx' | 'ambush' | 'piece' | 'roamer'; book?: boolean }
-/** The daily set pieces (bible §5.1): each once a day in its window (local hours); THE WALK twice in OFF BOOK; BRAVE MAEVE only in
- *  June; none within 10 s of another; the SOLID GOLD teaser never within 2 min of THE PREMIERE. */
-export const PIECES: { kind: string; from: number; to: number; june?: boolean; book?: boolean }[] = [
-  { kind: 'redscare', from: 8, to: 12 },
-  { kind: 'ice', from: 9, to: 22 },
-  { kind: 'whale', from: 10, to: 21 },
-  { kind: 'expo', from: 14, to: 18 },
-  { kind: 'premiere', from: 19, to: 22.5 },
-  { kind: 'teaser', from: 18, to: 23 },
-  { kind: 'walk', from: 11, to: 20 },
-  { kind: 'walk', from: 11, to: 20, book: true },
-  { kind: 'bravemaeve', from: 10, to: 20, june: true },
-]
-export const PIECE_GAP_MS = 10_000
-export const TEASER_GAP_MS = 120_000
-const DAYS = new Map<number, Slot[]>()
-/** The day's set pieces, the same for every moment of the same local day. */
-export const dayPlan = (at: number): Slot[] => {
-  const day = localDay(at)
-  const hit = DAYS.get(day)
-  if (hit) return hit
-  const june = new Date(at).getMonth() === 5
-  const out: Slot[] = []
-  PIECES.forEach((p, i) => {
-    if (p.june && !june) return
-    const ms = actMs(p.kind)
-    const lo = hourOf(at, p.from)
-    const span = Math.max(1, hourOf(at, p.to) - ms - lo)
-    for (let k = 0; k < 16; k++) {
-      const startAt = lo + Math.floor(unit(`tb-day|${day}|${i}|${k}`) * span)
-      const endAt = startAt + ms
-      const gap = (q: Slot): number => ((p.kind === 'teaser' && q.kind === 'premiere') || (p.kind === 'premiere' && q.kind === 'teaser') ? TEASER_GAP_MS : PIECE_GAP_MS)
-      if (out.every(q => startAt >= q.endAt + gap(q) || endAt + gap(q) <= q.startAt)) {
-        out.push({ kind: p.kind, startAt, endAt, src: 'piece', ...(p.book ? { book: true } : {}) })
-        return
-      }
-    }
-  })
-  out.sort((a, b) => a.startAt - b.startAt)
-  if (DAYS.size > 8) DAYS.clear()
-  DAYS.set(day, out)
-  return out
-}
-const near = (a: { startAt: number; endAt: number }, b: { startAt: number; endAt: number }, gap: number): boolean => a.startAt < b.endAt + gap && b.startAt < a.endAt + gap
-const pieceNear = (s: { startAt: number; endAt: number }): boolean => [s.startAt, s.endAt].some(t => dayPlan(t).some(q => near(s, q, PIECE_GAP_MS)))
-
-// THE AMBUSH v2: rare, through the stage director's `rare` cadence (30-45 min): slots of 37.5 min, each AMBUSH at a seeded
-// moment in its slot's first 7.5 min, so two in a row are 30-45 min apart while a job works (about 37 min on average). It was
-// every 15-20 min, a 12 s takeover with the scrim over the working numbers: tens a day.
-export const AMBUSH_MS = 12_000
-export const AMB_SLOT_MS = cadence('rare').slotMs
-export const AMB_JITTER_MS = cadence('rare').jitterMs
-export const CHOREOS = ['a', 'b', 'c'] as const
-/** The slot's AMBUSH: its start and its choreography (the three take turns, so the same one never plays twice running). */
-export const ambushOfSlot = (slot: number): Slot => {
-  const startAt = slot * AMB_SLOT_MS + Math.floor(unit(`tb-amb|${slot}`) * AMB_JITTER_MS)
-  return { kind: `ambush-${CHOREOS[((slot % 3) + 3) % 3]}`, startAt, endAt: startAt + AMBUSH_MS, src: 'ambush' }
-}
-/** The AMBUSH due at `at` (a job must be working; never within 10 s of a set piece). */
-export const ambushAt = (at: number): Slot | undefined => {
-  const a = ambushOfSlot(Math.floor(at / AMB_SLOT_MS))
-  return at >= a.startAt - 1000 && at < a.endAt && !pieceNear(a) ? a : undefined
-}
-
-// The rare roamers: one shared 6-min slot; 65% of slots get one, at a seeded moment in the slot's first 2 min; never inside a set
-// piece or an AMBUSH window. Butcher's `Oi.` takeover only in every 8th slot (at most one per 48 min).
-export const ROAM_SLOT_MS = 360_000
-export const ROAM_JITTER_MS = 120_000
-export const ROAM_CHANCE = 0.65
-export const ROAMERS: [string, number][] = [
-  ['r-hughie', 30], ['r-starlight', 8], ['r-kimiko', 8], ['r-frenchie', 7], ['r-noir', 7], ['r-atrain', 8], ['r-terror', 7],
-  ['r-fish', 5], ['r-timothy', 4], ['r-ambrosius', 4], ['r-beaver', 3], ['r-blimp', 5], ['r-oi', 4],
-]
-const ROAM_SUM = ROAMERS.reduce((n, [, w]) => n + w, 0)
-export const roamerOfSlot = (slot: number): Slot | undefined => {
-  if (unit(`tb-roam|on|${slot}`) >= ROAM_CHANCE) return undefined
-  let r = unit(`tb-roam|who|${slot}`) * ROAM_SUM
-  let kind = 'r-hughie'
-  for (const [k, w] of ROAMERS) {
-    if (r < w) { kind = k; break }
-    r -= w
-  }
-  if (kind === 'r-oi' && ((slot % 8) + 8) % 8 !== 0) kind = 'r-hughie'
-  const startAt = slot * ROAM_SLOT_MS + Math.floor(unit(`tb-roam|t|${slot}`) * ROAM_JITTER_MS)
-  const s: Slot = { kind, startAt, endAt: startAt + actMs(kind), src: 'roamer' }
-  const amb = ambushOfSlot(Math.floor(startAt / AMB_SLOT_MS))
-  if (pieceNear(s) || near(s, amb, PIECE_GAP_MS)) return undefined
-  return s
-}
-/** Black Noir's cameo carries the `1979` VHS tag (the clue to THIS MEANS NOIR) one time in five. */
-export const noirClue = (startAt: number): boolean => unit(`tb-noir79|${startAt}`) < 0.2
-/** How far ahead an idle draw schedules a set piece or a roamer (the band redraws once a minute at rest). */
-export const AHEAD_MS = 75_000
-export type StageArgs = { working?: boolean; mode: Mode; swapAt?: number }
-/** What plays at `at`, one thing at a time: a typed act or an event egg (`fx`), else THE AMBUSH (while a job works), else the day's
- *  set piece, else a roamer. A breath of 10 s after an `fx` keeps the schedule off; a mode swap holds everything. NOIR is quiet:
- *  no set pieces (the roamers and the AMBUSH stay, silently). */
-export const stageAt = (at: number, o: StageArgs): Slot | undefined => {
-  const fx = boysFx()
-  if (fx && at >= fx.at - 1000 && at < fx.at + actMs(fx.kind)) return { kind: fx.kind, startAt: fx.at, endAt: fx.at + actMs(fx.kind), src: 'fx' }
-  if (o.swapAt !== undefined && o.swapAt > 0 && at >= o.swapAt - 1000 && at < o.swapAt + 2_700) return undefined
-  if (fx && at >= fx.at && at < fx.at + actMs(fx.kind) + 10_000) return undefined
-  if (o.working) {
-    const a = ambushAt(at)
-    if (a) return a
-  }
-  if (o.mode !== 'noir') {
-    const p = dayPlan(at).find(q => (!q.book || o.mode === 'book') && at < q.endAt && q.startAt <= at + AHEAD_MS)
-    if (p) return p
-  }
-  const slot = Math.floor(at / ROAM_SLOT_MS)
-  for (const s of [slot, slot + 1]) {
-    const r = roamerOfSlot(s)
-    if (r && at < r.endAt && r.startAt <= at + AHEAD_MS) return r
-  }
-  return undefined
-}
+// The daily set pieces, THE AMBUSH and the roamers all come from ONE stage director now (theboys-director.ts: lanes in priority
+// order, seeded slots, typed acts as held windows). These names stay here for the theme, the register and the tests.
+export { AHEAD_MS, AMBUSH_MS, AMB_JITTER_MS, AMB_SLOT_MS, CHOREOS, PIECES, PIECE_GAP_MS, ROAMERS, ROAM_CHANCE, ROAM_JITTER_MS, ROAM_SLOT_MS, TEASER_GAP_MS, ambushAt, ambushOfSlot, dayPlan, localDay, noirClue, roamerOfSlot, stageAt } from './theboys-director'
+export type { Slot, StageArgs } from './theboys-director'
 /** A scheduled act drawn before its start stays hidden until then (its keyframes' first frame would otherwise show early). */
 export const ahead = (svg: string, startAt: number): string => `<g style="animation:tqpre 1ms steps(1,end) both;animation-delay:calc(${pin(startAt)} + 0s)"><style>@keyframes tqpre{0%{opacity:0}100%{opacity:1}}</style>${svg}</g>`
 
@@ -191,10 +72,15 @@ export const IDLE_NAP_MS = 600_000
 export const noteWorking = (w: boolean | undefined, m?: Mode): void => { LAST_WORKING = Boolean(w); if (m) LAST_MODE = m }
 export const lastWorking = (): boolean => LAST_WORKING
 
+setFightDrawn(at => FIGHT_KINDS.includes(stageAt(at, { working: LAST_WORKING, mode: LAST_MODE })?.kind ?? ''))
 setStageBusy(at => {
   const s = stageAt(at, { working: LAST_WORKING, mode: LAST_MODE })
-  return Boolean(s && (s.src === 'ambush' || s.src === 'piece') && at >= s.startAt - 1000 && at < s.endAt)
+  return Boolean(s && (s.src === 'ambush' || s.src === 'fight' || s.src === 'piece') && at >= s.startAt - 1000 && at < s.endAt)
 })
+/** An event fight (A-Train's RACE on TURBO RUSH) keeps the director's fight gap: no scheduled fight within one AMBUSH slot
+ *  (30-45 min) either side, so it never lands next to the look's own fight (the director holds its window, so nothing stacks). */
+export const FIGHT_GAP_MS = AMB_SLOT_MS
+setFightOk(at => !directorAt(at).plan(at - FIGHT_GAP_MS, at + FIGHT_GAP_MS, { working: true }).some(s => s.lane === 'ambush' && s.id === FIGHT_ID && Math.abs(s.startAt - at) < FIGHT_GAP_MS))
 
 // ---------------------------------------------------------------- 3. the acts
 const W2 = (g: Geo) => g.W / 2
@@ -301,18 +187,42 @@ const EVENT_ROWS: Record<string, Row & { scrim?: boolean; ms: number }> = {
   // E5 in SOLID GOLD: the CHEST BLAST ring clears the band.
   chestblast: {
     ms: 1_600,
-    band: (a, g) => ring(a, 37, 74, g.W, '#FFB347', 0.15, 1.4) + flash(a, g, 0.2, '#FFE3B0', 0.5),
-    pane: ['all', (a, g) => ring(a, W2(g), g.H / 2, g.W, '#FFB347', 0.15, 1.4)],
+    band: (a, g) => {
+      const x = 46
+      const gold = g.m === 'gold'
+      // Soldier Boy braces behind the shield (the wind-up: his chest glow swells), then the BLAST: two rings clear the band, sparks,
+      // a dust ring at his feet, one flash, a 3 px shake.
+      poses(a, { sh: gold ? MS.TB_GOLD_SOLDIERBOY_SHIELD : SP.TB_SOLDIERBOY_SHIELD, bl: gold ? MS.TB_GOLD_SOLDIERBOY_BLAST : SP.TB_SOLDIERBOY_BLAST })
+      const sb = actor(a, 'sb', [[0, 0.32, 'sh'], [0.32, 1.6, 'bl']], [[0, x - 30, GROUND], [0.2, x, GROUND, 0.92], [0.32, x, GROUND, 1.05], [0.44, x - 6, GROUND, 1], [1.6, x - 6, GROUND]], 0.96, { h: 46 })
+      const cy = GROUND - 27
+      const glow = a.kf(`<circle cx="${x + 4}" cy="${cy}" r="9" fill="#FFB347"/>`, [[0, 'opacity:0;transform:scale(.2)'], [0.05, 'opacity:.5;transform:scale(.3)'], [0.3, 'opacity:.95;transform:scale(1.3)'], [0.4, 'opacity:0;transform:scale(1.8)'], [1.6, 'opacity:0']], { origin: `${x + 4}px ${cy}px`, still: 'opacity="0"' })
+      return glow + sb + stillPose(a, 'bl', x - 6, GROUND, 0.96) + ring(a, x + 4, cy, g.W, '#FFB347', 0.32, 1.4) + ring(a, x + 4, cy, g.W * 0.6, '#FFE3B0', 0.42, 1.3) + flash(a, g, 0.34, '#FFE3B0', 0.45) + a.fx(fx.sparks(a.sg, 0.32, x + 4, cy, { n: 9, seed: 'cbs', color: '#FFE3B0', len: 7 }) + fx.ring(a.sg, 0.34, x - 6, GROUND - 1, { rx: 22, color: '#C9C2B0' }) + fx.dust(a.sg, 0.36, x - 14, GROUND - 2, { n: 3, seed: 'cbd' }))
+    },
+    pane: ['all', (a, g) => ring(a, W2(g), g.H / 2, g.W, '#FFB347', 0.32, 1.4) + a.fx(fx.sparks(a.sg, 0.32, W2(g), g.H / 2, { n: 9, seed: 'cbp', color: '#FFE3B0', len: 8 }))],
+    shake: { band: shakeOf([0.32], 1.6) },
   },
   // E6 permission denied: a red beam stopped dead by a gold LEGAL SAYS NO (OFF BOOK: a strip of tape, NOT TODAY).
   legalno: {
     ms: 2_200,
     band: (a, g) => {
-      const x = g.W * 0.6
-      const block = g.m === 'book' ? `${tape(x, 64, 120, 26, -6, 0.95)}${C(x, 69, 'NOT TODAY', 13, PROPS.marker, 'text-anchor="middle" letter-spacing="1.4"')}` : stamp(x, 64, 'LEGAL SAYS NO', '#C9A13B', 14, -6)
-      return a.on(`<path d="M${r1(g.W - 20)} 66L${r1(x + 70)} 66" stroke="#FF2A2A" stroke-width="3"/><circle cx="${r1(x + 70)}" cy="66" r="5" fill="#FFFFFF" opacity=".8"/>`, 0.3, 1.2, { still: false }) + a.slam(block, 0.25, 2.1)
+      const x = g.W * 0.4
+      const y = 92
+      const hx = 132
+      const block = g.m === 'book' ? `${tape(x, y, 120, 26, -6, 0.95)}${C(x, y + 5, 'NOT TODAY', 13, PROPS.marker, 'text-anchor="middle" letter-spacing="1.4"')}` : stamp(x, y, 'LEGAL SAYS NO', '#C9A13B', 14, -6)
+      // The block slams down first; Homelander drops in beside the bust (HOVER), squints (LASER) and fires: the beam whips out and
+      // stops dead on the block, sparking; the block shudders; he gives up and drifts off. The numbers stay clear of all of it.
+      poses(a, { hv: SP.TB_HOMELANDER_HOVER, lz: SP.TB_HOMELANDER_LASER })
+      const hl = actor(a, 'hl', [[0, 0.5, 'hv'], [0.5, 1.35, 'lz'], [1.35, 2.2, 'hv']], [[0, hx, -20], [0.25, hx, -20], [0.5, hx, 104], [1.5, hx, 104], [1.65, hx, 110], [2.15, hx - 30, -20], [2.2, hx - 30, -20]], 0.9, { h: 47 })
+      const ex = hx + 4
+      const ey = 104 - 47 * 0.9 + 6
+      const tx = x - 66
+      const beam = a.kf(`<path d="M${r1(ex)} ${r1(ey)}L${r1(tx)} ${y - 4}" stroke="#FF2A2A" stroke-width="3"/><path d="M${r1(ex)} ${r1(ey)}L${r1(tx)} ${y - 4}" stroke="#FF8A7A" stroke-width="7" opacity=".3"/>`, [[0, 'opacity:0;transform:scale(0)'], [0.55, 'opacity:1;transform:scale(0)'], [0.68, 'opacity:1;transform:none'], [1.3, 'opacity:1;transform:none'], [1.32, 'opacity:0;transform:none'], [2.2, 'opacity:0']], { origin: `${r1(ex)}px ${r1(ey)}px`, ease: ease('whip'), still: 'opacity="0"' })
+      const shud = a.kf(block, [[0, 'transform:none'], [0.68, 'transform:none'], [0.74, 'transform:translate(2px,1px)'], [0.82, 'transform:translate(-2px,-1px)'], [0.9, 'transform:translate(1px,0)'], [1.0, 'transform:translate(-2px,1px)'], [1.1, 'transform:translate(1px,-1px)'], [1.25, 'transform:none'], [2.2, 'transform:none']], {})
+      let sp = ''
+      for (const t of [0.68, 0.86, 1.04, 1.22]) sp += fx.sparks(a.sg, t, tx, y - 4, { n: 6, seed: `lg${t}`, color: '#FFD0A0', len: 6 })
+      return a.slam(shud, 0.15, 2.1) + beam + hl + stillPose(a, 'lz', hx, 104, 0.9) + a.fx(sp + fx.puff(a.sg, 1.3, tx - 4, y - 6, { s: 0.6, fill: '#B6BBC2' }))
     },
-    pane: ['task', (a, g) => a.slam(stamp(W2(g), g.H / 2, by(g.m, 'LEGAL SAYS NO', 'NOT TODAY', 'LEGAL SAYS NO', '…'), g.m === 'book' ? PROPS.marker : '#C9A13B', 16, -6), 0.25, 2.1)],
+    pane: ['task', (a, g) => a.slam(stamp(W2(g), g.H / 2, by(g.m, 'LEGAL SAYS NO', 'NOT TODAY', 'LEGAL SAYS NO', '…'), g.m === 'book' ? PROPS.marker : '#C9A13B', 16, -6), 0.25, 2.1) + a.fx(fx.sparks(a.sg, 0.5, W2(g) + 60, g.H / 2, { n: 7, seed: 'lgp', color: '#FFD0A0' }) + fx.ring(a.sg, 0.5, W2(g), g.H / 2 + 14, { rx: 50, color: '#C9A13B', w: 1.4 }))],
   },
   // E7 a force push: the tape rewinds (three tracking bars climb), HISTORY REWRITTEN.
   rewind: {
@@ -379,12 +289,33 @@ const ROAM_ROWS: Record<string, Row & { scrim?: boolean; ms: number }> = {
   'r-starlight': {
     ms: 4_000,
     band: () => '',
-    pane: ['cred', (a, g) => a.mv(feet(SP.TB_STARLIGHT_FLY, 0.9), [[0, g.W * 0.7, -30], [1.0, g.W * 0.7, 30, 1]], { still: 1 }) + a.on(`<g transform="translate(${r1(g.W * 0.7)} 32)">${feet(SP.TB_STARLIGHT, 0.9)}</g>`, 1.0, 3.8) + a.on(cone(g.W * 0.7, -10, 40, 80, '#FFF4C2', 0.3), 1.0, 3.6, { fade: 0.3 })],
+    pane: ['cred', (a, g) => {
+      const x = g.W * 0.7
+      const y = 76
+      // She drifts down (settle), lands with a squash and a gold ring, her hands flare (BLAST, a soft flash), and she lifts off.
+      poses(a, { fl: SP.TB_STARLIGHT_FLY, st: SP.TB_STARLIGHT, bl: SP.TB_STARLIGHT_BLAST })
+      const sl = actor(a, 'sl', [[0, 0.9, 'fl'], [0.9, 2.3, 'st'], [2.3, 3.0, 'bl'], [3.0, 3.25, 'st'], [3.25, 4, 'fl']], [[0, x, -10], [0.85, x, y - 4], [0.9, x, y, 0.9], [1.05, x, y, 1.04], [1.2, x, y, 1], [3.1, x, y, 1], [3.2, x, y, 0.9], [3.3, x, y - 6, 1.05], [4, x + 20, -40, 1]], 0.9, { h: 45 })
+      return a.on(cone(x, -10, y, 80, '#FFF4C2', 0.3), 0.9, 3.4, { fade: 0.3 }) + sl + stillPose(a, 'st', x, y, 0.9) + a.fx(fx.ring(a.sg, 0.9, x, y - 1, { rx: 20, color: '#F0D27A' }) + fx.sparks(a.sg, 0.92, x, y - 6, { n: 6, seed: 'sls', color: '#FFF4C2' }) + fx.flash(a.sg, 2.35, { a: 0.18, color: '#FFF4C2', d: 0.1 }) + fx.sparks(a.sg, 2.35, x + 10, y - 26, { n: 8, seed: 'slb', color: '#FFFFFF', len: 7 }) + fx.dust(a.sg, 3.25, x + 8, y - 2, { n: 3, seed: 'sld' }))
+    }],
   },
   'r-kimiko': {
     ms: 4_000,
     scrim: true,
-    band: (a, g) => a.mv(feet(SP.TB_KIMIKO_LEAP, 0.8), [[0, -30, GROUND], [0.6, g.W * 0.2, GROUND - 26], [1.1, g.W * 0.32, GROUND], [1.7, g.W * 0.48, GROUND - 26], [2.2, g.W * 0.6, GROUND], [3.4, g.W * 0.6, GROUND], [4, g.W + 30, GROUND]], { still: 4 }) + a.on(sign(g.W * 0.6, 30, 'hi'), 2.2, 3.6),
+    band: (a, g) => {
+      // She keeps to the left of the cost line and the crew pills (the numbers stay clear under the scrim).
+      const x1 = g.W * 0.22
+      const x3 = g.W * 0.44
+      // A crouch (the wind-up), two real jumps (up eases out, down eases in) with a flying KICK on the second, a squash and dust
+      // at each landing, the STANCE, a signed `hi`, then she DASHES off with speed lines.
+      poses(a, { st: SP.TB_KIMIKO_STANCE, lp: SP.TB_KIMIKO_LEAP, kk: SP.TB_KIMIKO_KICK, ds: MS.TB_KIMIKO_DASH })
+      const keys = [[0, -30, GROUND], [0.35, g.W * 0.1, GROUND], [0.45, g.W * 0.1, GROUND, 0.86], [0.55, g.W * 0.1, GROUND, 1.04],
+        ...arc(0.56, 1.1, g.W * 0.1, x1, GROUND, 30).slice(1), [1.18, x1, GROUND, 0.88], [1.28, x1, GROUND, 1.04],
+        ...arc(1.3, 2.0, x1, x3, GROUND, 40).slice(1), [2.08, x3, GROUND, 0.88], [2.2, x3, GROUND, 1], [3.4, x3, GROUND, 1], [3.5, x3 - 6, GROUND, 0.92], [4, g.W + 40, GROUND, 1]] as any
+      const km = actor(a, 'km', [[0, 0.56, 'st'], [0.56, 1.1, 'lp'], [1.1, 1.3, 'st'], [1.3, 1.55, 'lp'], [1.55, 1.95, 'kk'], [1.95, 3.5, 'st'], [3.5, 4, 'ds']], keys, 0.96, { h: 38, trail: [[3.5, 4, fx.speedLines(-12, -14, 40, 4, 1, '#F4ECD0', { seed: 'kmsl' })]] })
+      let d = ''
+      for (const [t, xx] of [[0.45, g.W * 0.1], [1.18, x1], [2.08, x3]] as [number, number][]) d += fx.dust(a.sg, t, xx + 8, GROUND - 2, { n: 3, seed: `kmd${t}` }) + fx.ring(a.sg, t, xx, GROUND - 1, { rx: 12, color: '#C9C2B0', w: 1.2 })
+      return km + stillPose(a, 'st', x3, GROUND, 0.96) + a.fx(d) + a.on(sign(x3 + 24, GROUND - 46, 'hi'), 2.3, 3.5)
+    },
     pane: ['cred', () => ''],
   },
   'r-frenchie': {
@@ -396,8 +327,14 @@ const ROAM_ROWS: Record<string, Row & { scrim?: boolean; ms: number }> = {
     ms: 3_500,
     band: () => '',
     pane: ['cred', (a, g) => {
+      const x = g.W - 40
+      const y = g.H - 6
       const tag = noirClue(a.at) ? `<g transform="translate(${r1(g.W - 70)} ${g.H - 30})"><rect width="28" height="16" rx="1.5" fill="#1C1C22" stroke="#D9A441"/>${C(14, 11.5, '1979', 8.5, '#D9A441', 'text-anchor="middle" letter-spacing=".8"')}</g>` : ''
-      return a.on(`<g transform="translate(${r1(g.W - 30)} ${g.H - 6})">${feet(SP.TB_NOIR_THUMBSUP, 0.9)}</g>${tag}`, 0.2, 3.3, { fade: 0.25 })
+      // He drops out of nowhere with the sword drawn (READY, a hard landing, dust), stares, sheathes it for a THUMBS-UP, and is
+      // gone in a puff of smoke. Never a word.
+      poses(a, { rd: SP.TB_NOIR_READY, tu: SP.TB_NOIR_THUMBSUP })
+      const nr = actor(a, 'nr', [[0, 1.45, 'rd', -1], [1.45, 3.0, 'tu', -1]], [[0, x, -30], [0.3, x, -30], [0.48, x, y, 0.86], [0.6, x, y, 1.04], [0.7, x, y, 1], [1.4, x, y], [1.48, x, y, 0.94], [1.58, x, y - 4, 1.03], [1.68, x, y, 1], [3.0, x, y, 1], [3.01, x, y, 1], [3.5, x, y, 1]], 0.9, { h: 47 })
+      return nr + stillPose(a, 'tu', x, y, 0.9, -1) + a.on(tag, 1.6, 3.3, { fade: 0.25 }) + a.fx(fx.dust(a.sg, 0.48, x + 10, y - 2, { n: 3, seed: 'nrd', color: '#8C96A0' }) + fx.ring(a.sg, 0.48, x, y - 1, { rx: 16, color: '#8C96A0', w: 1.2 }) + fx.smoke(a.sg, 2.95, x, y - 20, { n: 4, seed: 'nrs', colors: ['#2A2D32', '#4A4F57'], d: 0.6, spread: 0.12 }))
     }],
   },
   'r-atrain': {
@@ -457,30 +394,34 @@ const CAPTIONS: Record<BoysMode, string[]> = {
 }
 export const ambushCaption = (at: number, m: BoysMode): string => oneOf(CAPTIONS[m], `amb-cap|${at}`)
 /** Homelander lands at (x, GROUND) at `t`, hovers until `up`, then flies off up and to the right. */
+// The AMBUSH cast stands at 1.2x the roamers' scale (AS), so it reads on the band.
+const AS = 0.96
 const homelander = (a: Act, x: number, t: number, up: number) =>
-  a.mv(feet(SP.TB_HOMELANDER_HOVER, 0.8), [[0, x, -50], [t - 0.45, x, -50], [t, x, GROUND], [up, x, GROUND], [up + 0.01, x, GROUND, 0], [12, x, GROUND, 0]], { still: 3 }) +
-  a.mv(feet(SP.TB_HOMELANDER_FLY, 0.8), [[0, x, GROUND - 10, 0], [up, x, GROUND - 10, 0], [up + 0.01, x, GROUND - 10, 1], [up + 0.9, x + 200, -60, 1], [12, x + 200, -60, 1]], { still: 0 })
+  a.mv(feet(SP.TB_HOMELANDER_HOVER, AS), [[0, x, -50], [t - 0.45, x, -50], [t, x, GROUND], [up, x, GROUND], [up + 0.01, x, GROUND, 0], [12, x, GROUND, 0]], { still: 3 }) +
+  a.mv(feet(SP.TB_HOMELANDER_FLY, AS), [[0, x, GROUND - 10, 0], [up, x, GROUND - 10, 0], [up + 0.01, x, GROUND - 10, 1], [up + 0.9, x + 200, -60, 1], [12, x + 200, -60, 1]], { still: 0 })
+// He walks in from (and back out to) the stage strip's left edge, fading there: never across the step count at the far left.
 const butcher = (a: Act, x: number, out: number) =>
-  a.mv(`<g class="tqb">${feet(SP.TB_BUTCHER_WALK, 0.8)}</g>`, [[0, -40, GROUND], [1.2, x, GROUND], [out, x, GROUND], [out + 0.7, -50, GROUND], [12, -50, GROUND]], { still: 1 }) + a.on(dust(-30 + 40, GROUND - 2), out, out + 0.5, { still: false })
-const starlight = (a: Act, g: Geo, x: number, t: number) => a.on(`<g transform="translate(${r1(x)} ${GROUND})">${feet(SP.TB_STARLIGHT_BLAST, 0.8)}</g>`, t - 0.3, t + 2.6) + flash(a, g, t, '#FFF4C2', 0.85)
-const kimiko = (a: Act, g: Geo, t: number, x: number) => a.mv(feet(SP.TB_KIMIKO_LEAP, 0.8), [[0, -30, GROUND, 0], [t - 0.2, g.W * 0.12, GROUND, 1], [t + 0.3, x - 40, GROUND - 32, 1], [t + 0.7, x - 20, GROUND, 1], [t + 1.6, x - 20, GROUND, 1], [t + 2.2, -40, GROUND, 1], [12, -40, GROUND, 0]], { still: 3 }) + a.on(sign(x - 20, 30, 'now'), t, t + 1.4)
-const capEnd = (a: Act, g: Geo, t: number) => a.on(cap(W2(g), 30, ambushCaption(a.at, g.m), g.m, { mid: true, z: 12 }), t, 11.9)
+  a.mv(`<g class="tqb">${feet(SP.TB_BUTCHER_WALK, AS)}</g>`, [[0, 132, GROUND, 0], [0.3, 132, GROUND, 1], [1.2, x, GROUND, 1], [out, x, GROUND, 1], [out + 0.6, 134, GROUND, 0], [12, 134, GROUND, 0]], { still: 3 }) + a.on(dust(140, GROUND - 2), out + 0.4, out + 0.9, { still: false })
+const starlight = (a: Act, g: Geo, x: number, t: number) => a.on(`<g transform="translate(${r1(x)} ${GROUND})">${feet(SP.TB_STARLIGHT_BLAST, AS)}</g>`, t - 0.3, t + 2.6) + flash(a, g, t, '#FFF4C2', 0.85)
+const kimiko = (a: Act, g: Geo, t: number, x: number) => a.mv(feet(SP.TB_KIMIKO_LEAP, AS), [[0, -30, GROUND, 0], [t - 0.2, g.W * 0.12, GROUND, 1], [t + 0.3, x - 40, GROUND - 32, 1], [t + 0.7, x - 20, GROUND, 1], [t + 1.6, x - 20, GROUND, 1], [t + 2.2, -40, GROUND, 1], [12, -40, GROUND, 0]], { still: 3 }) + a.on(sign(x - 20, GROUND - 56, 'now'), t, t + 1.4)
+// The closing caption sits on the title row (the stage strip), never over the top row's numbers.
+const capEnd = (a: Act, g: Geo, t: number) => a.on(cap(W2(g), 64, ambushCaption(a.at, g.m), g.m, { mid: true, z: 12 }), t, 11.9)
 const deskPane = (a: Act, g: Geo, seal: string, line: string, hughieOut: number, vialT: number) =>
   a.mv(`<g>${feet(SP.TB_HUGHIE_REMOTE, 1)}</g>`, [[0, 50, g.H - 6, 0], [0.3, 50, g.H - 6, 1], [hughieOut, 50, g.H - 6, 1], [hughieOut + 0.6, -40, g.H - 6, 1], [12, -40, g.H - 6, 0]], { still: 1 }) +
   a.mv(feet(SP.TB_FRENCHIE_VIAL, 1), [[0, g.W - 60, g.H + 70], [vialT - 1.0, g.W - 60, g.H + 70], [vialT - 0.6, g.W - 60, g.H - 4], [vialT + 1.2, g.W - 60, g.H - 4], [vialT + 1.8, g.W - 60, g.H + 70], [12, g.W - 60, g.H + 70]], { still: 2 }) +
   a.mv(vial(0, 0, 1.2), [[0, g.W - 70, g.H - 60, 0], [vialT, g.W - 70, g.H - 60, 1], [vialT + 0.4, W2(g) + 40, 10, 1], [vialT + 0.8, W2(g), -20, 0], [12, W2(g), -20, 0]], { still: 1 }) +
   smoke(a, W2(g), g.H * 0.5, vialT + 0.7, vialT + 2.4, 1.4) + slipIn(a, g, line, seal, 9.8)
-const AMBUSH_ROWS: Record<string, Row & { scrim?: boolean; ms: number }> = {
+const AMBUSH_ROWS: Record<string, Row & { scrim?: boolean | 'stage'; ms: number }> = {
   // A · THE LANDING (the plan's nine beats).
   'ambush-a': {
     ms: AMBUSH_MS,
-    scrim: true,
+    scrim: 'stage',
     band: (a, g) => {
-      const hx = g.W * 0.56
+      const hx = g.W * 0.44
       const q = gaugeOf(g.W)
       let s = butcher(a, 150, 7.6) + homelander(a, hx, 1.9, 8.7) + a.on(flashbulb(hx, GROUND - 30, 8), 1.9, 2.1, { still: false })
       for (const [i, t] of [3.0, 3.25, 3.5].entries()) s += a.on(beams(hx - 2, GROUND - 38, q.x + 20 + ((q.w - 40) * (i + 1)) / 3, gaugeY + 4), t, t + 0.2, { still: false })
-      s += scorchLine(a, q.x + 12, gaugeY + 3, Math.max(20, q.w - 22), 3.05, 7.0) + starlight(a, g, g.W * 0.3, 4.6) + kimiko(a, g, 6.0, hx) + smoke(a, hx, GROUND - 22, 7.4, 9.4) + capEnd(a, g, 10.0)
+      s += scorchLine(a, q.x + 12, gaugeY + 3, Math.max(20, q.w - 22), 3.05, 7.0) + starlight(a, g, g.W * 0.3, 4.6) + kimiko(a, g, 6.0, hx) + smoke(a, hx, GROUND - 36, 7.4, 9.4, 0.6) + capEnd(a, g, 10.0)
       if (g.m === 'book') s += a.on(bub(160, GROUND - 46, 'Oi.', g.m), 0.9, 1.8) + a.on(bub(160, GROUND - 46, 'Diabolical.', g.m), 3.2, 4.2) + a.on(bub(160, GROUND - 46, 'Leg it!', g.m), 7.6, 8.4)
       return s
     },
@@ -490,12 +431,12 @@ const AMBUSH_ROWS: Record<string, Row & { scrim?: boolean; ms: number }> = {
   // B · THE DROP: Noir drops first and slices the smoke, then the landing.
   'ambush-b': {
     ms: AMBUSH_MS,
-    scrim: true,
+    scrim: 'stage',
     band: (a, g, P) => {
-      const hx = g.W * 0.5
-      let s = smoke(a, hx, GROUND - 22, 0, 1.6) + a.mv(feet(SP.TB_NOIR_SLASH, 0.8), [[0, hx - 30, -60], [0.6, hx - 30, -60], [1.0, hx - 30, GROUND], [2.4, hx - 30, GROUND], [3.0, g.W + 40, GROUND], [12, g.W + 40, GROUND]], { still: 2 })
+      const hx = g.W * 0.38
+      let s = smoke(a, hx, GROUND - 36, 0, 1.6, 0.6) + a.mv(feet(SP.TB_NOIR_SLASH, AS), [[0, hx - 30, -60], [0.6, hx - 30, -60], [1.0, hx - 30, GROUND], [2.4, hx - 30, GROUND], [3.0, g.W + 40, GROUND], [12, g.W + 40, GROUND]], { still: 2 })
       s += a.kf(`<path d="M${r1(hx - 70)} ${GROUND - 4}L${r1(hx + 70)} ${GROUND - 60}" stroke="#FFFFFF" stroke-width="1.6"/>`, [[0, 'opacity:0'], [1.0, 'opacity:0'], [1.05, 'opacity:1'], [1.5, 'opacity:0'], [12, 'opacity:0']], { still: 'opacity="0"' })
-      s += a.on(T(hx + 4, GROUND - 56, '…', 16, 700, P.text), 1.3, 2.4) + homelander(a, hx + 40, 3.4, 9.0) + a.on(flashbulb(hx + 40, GROUND - 30, 8), 3.4, 3.6, { still: false }) + starlight(a, g, g.W * 0.25, 5.0) + kimiko(a, g, 6.5, hx + 40) + smoke(a, hx + 40, GROUND - 22, 8.0, 9.6) + capEnd(a, g, 10.2)
+      s += a.on(T(hx + 4, GROUND - 56, '…', 16, 700, P.text), 1.3, 2.4) + homelander(a, hx + 40, 3.4, 9.0) + a.on(flashbulb(hx + 40, GROUND - 30, 8), 3.4, 3.6, { still: false }) + starlight(a, g, g.W * 0.25, 5.0) + kimiko(a, g, 6.5, hx + 40) + smoke(a, hx + 40, GROUND - 36, 8.0, 9.6, 0.6) + capEnd(a, g, 10.2)
       if (g.m === 'book') s += a.on(bub(140, GROUND - 46, 'Oi.', g.m), 3.6, 4.4) + a.on(bub(140, GROUND - 46, 'Diabolical.', g.m), 5.2, 6.2) + a.on(bub(140, GROUND - 46, 'Leg it!', g.m), 8.0, 8.8)
       return s + butcher(a, 130, 8.0)
     },
@@ -506,9 +447,9 @@ const AMBUSH_ROWS: Record<string, Row & { scrim?: boolean; ms: number }> = {
   // back two seconds later with a `my bad`.
   'ambush-c': {
     ms: AMBUSH_MS,
-    scrim: true,
+    scrim: 'stage',
     band: (a, g, P) => {
-      const hx = g.W * 0.58
+      const hx = g.W * 0.44
       const q = gaugeOf(g.W)
       const bx = q.x + 12
       const bw = Math.max(20, q.w - 22)
@@ -516,9 +457,9 @@ const AMBUSH_ROWS: Record<string, Row & { scrim?: boolean; ms: number }> = {
       const mini = `<rect x="-26" y="-30" width="22" height="6" rx="2" fill="${PROPS.vblue}" stroke="#FFFFFF" stroke-width=".6"/><rect x="-4" y="-28.5" width="5" height="3" fill="#DDE8F2"/>`
       let s = butcher(a, 140, 8.6) + homelander(a, hx, 1.6, 9.0)
       s += a.on(hole, 3.2, 6.6) + a.on(dust(bx + 10, gaugeY + 2) + dust(bx + bw * 0.5, gaugeY + 3), 3.2, 4.0, { still: false })
-      s += a.mv(`<g>${streak(70, '#3DDC84')}${runner(a, 0.8)}${mini}</g>`, [[0, -40, 86, 0], [3.0, -40, 86, 1], [3.6, g.W + 60, 86, 1], [3.61, g.W + 60, 86, 0], [12, g.W + 60, 86, 0]], { still: 2 })
-      s += a.mv(`<g class="tqb">${feet(SP.TB_HUGHIE_WALK, 0.8)}</g>`, [[0, -40, GROUND], [3.7, -40, GROUND], [5.6, g.W + 40, GROUND], [12, g.W + 40, GROUND]], { still: 1 })
-      s += a.mv(`<g transform="scale(-1 1)">${streak(70, '#3DDC84')}</g><g>${feet(SP.TB_ATRAIN_RUN1, 0.8, true)}</g>`, [[0, g.W + 60, 86, 0], [5.8, g.W + 60, 86, 1], [6.5, -60, 86, 1], [6.51, -60, 86, 0], [12, -60, 86, 0]], { still: 0 })
+      s += a.mv(`<g>${streak(70, '#3DDC84')}${runner(a, AS)}${mini}</g>`, [[0, -40, 86, 0], [3.0, -40, 86, 1], [3.5, bx + bw - 6, 86, 1], [3.51, bx + bw - 6, 86, 0], [12, bx + bw - 6, 86, 0]], { still: 2 })
+      s += a.mv(`<g class="tqb">${feet(SP.TB_HUGHIE_WALK, AS)}</g>`, [[0, -40, GROUND], [3.7, -40, GROUND], [5.2, g.W * 0.5, GROUND], [5.21, g.W * 0.5, GROUND, 0], [12, g.W * 0.5, GROUND, 0]], { still: 1 }) + a.kf(poof(g.W * 0.5, GROUND - 22), [[0, 'opacity:0;transform:scale(.3)'], [5.15, 'opacity:0;transform:scale(.3)'], [5.25, 'opacity:1;transform:scale(1.2)'], [5.6, 'opacity:0;transform:scale(1.6)'], [12, 'opacity:0']], { c: true, still: 'opacity="0"' })
+      s += a.mv(`<g transform="scale(-1 1)">${streak(70, '#3DDC84')}</g><g>${runFrame(a, 0, AS, -1)}</g>`, [[0, bx + bw - 6, 86, 0], [5.8, bx + bw - 6, 86, 0], [5.81, bx + bw - 6, 86, 1], [6.4, -60, 86, 1], [6.41, -60, 86, 0], [12, -60, 86, 0]], { still: 0 })
       s += a.on(bub(bx + bw * 0.4, gaugeY - 4, 'my bad', g.m), 6.5, 7.8) + starlight(a, g, g.W * 0.32, 7.8) + capEnd(a, g, 10.0)
       if (g.m === 'book') s += a.on(bub(150, GROUND - 46, 'Oi.', g.m), 0.9, 1.8) + a.on(bub(150, GROUND - 46, 'Diabolical.', g.m), 4.0, 5.0) + a.on(bub(150, GROUND - 46, 'Leg it!', g.m), 8.6, 9.4)
       return s
@@ -637,12 +578,29 @@ const PLAY: [string, string, string][] = [
   ['swimby', 'r-timothy', 'roamer: Timothy swims by'], ['tentacle', 'r-ambrosius', 'roamer: Ambrosius'], ['bounce', 'r-beaver', 'roamer: Buster Beaver'], ['blimp', 'r-blimp', 'roamer: the VNN blimp'], ['oi', 'r-oi', 'roamer: Butcher, Oi.'],
 ]
 for (const [name, fx, what] of PLAY) registerReplay({ name, what, run: () => ({ fx }) })
-registerReplay({ name: 'ambush', what: 'THE AMBUSH (the next of the three)', run: at => ({ fx: ambushOfSlot(Math.floor(at / AMB_SLOT_MS) + 1).kind }) })
+registerReplay({ name: 'ambush', what: 'THE AMBUSH (the next of the three)', run: at => {
+  // The next slot that is an AMBUSH (one slot in four is the look's fight: that one has its own play name).
+  let slot = Math.floor(at / AMB_SLOT_MS) + 1
+  while (ambushOfSlot(slot).src !== 'ambush') slot++
+  return { fx: ambushOfSlot(slot).kind }
+} })
 registerReplay({ name: 'night', what: 'E14 VNN OVERNIGHT on the crawl', run: (at, m) => { vnnBreak(t(m, 'VNN OVERNIGHT: midnight to 5 AM, the night desk is on', 'THE WIRE: past midnight. Kettle’s on.', 'Late show: midnight to 5 AM'), at, 'midnight'); return {} } })
+// The shared `/missioncontrol play` registry (stage/replay.ts), which the command asks before the Boys' own list: every director
+// bit by its play name (`playsFrom`: the AMBUSH, the roamers, the set pieces), then every other act in REPLAYS whose replay only
+// starts an act. The mode swaps (hijack, onbrand) and the lines that need the engine (breaking, night, spin, scoreboard, turbo)
+// stay in REPLAYS only: the register falls back to it, so all 92 names still play. The curtain call is NOIR's own.
+export const BOYS_SKINS = ['the-boys', 'solidgold', 'noir']
+export const ENGINE_PLAYS = new Set(['hijack', 'onbrand', 'breaking', 'scoreboard', 'spin', 'turbo', 'night'])
+playsFrom(BOYS_SKINS, directorAt(Date.now()), s => setBoysFx(kindOf(s.id), s.startAt), n => REPLAYS.find(r => r.name === n)?.what ?? n)
+for (const r of REPLAYS) {
+  if (ENGINE_PLAYS.has(r.name) || !PLAY_NAME.test(r.name) || playsOf('the-boys').some(p => p.name === r.name)) continue
+  registerPlay(r.name === 'curtain' ? ['noir'] : BOYS_SKINS, { name: r.name, what: r.what, run: at => { const out = r.run(at, 'brand'); if (out.fx) setBoysFx(out.fx, at) } })
+}
 /** The set pieces by their replay names (the plan's): ice, whale, teaser, premiere, expo, redscare, walk, bravemaeve are acts. */
 export const PIECE_KINDS = [...new Set(PIECES.map(p => p.kind))]
 export type { BoysEventArgs }
 /** THIS MEANS NOIR's way back (the theatre kid's bow); typed while wearing it. */
 export const CURTAIN_RE = /\bcurtain\s+call\b/i
+export { CURTAIN_UP_RE, FIGHT_KINDS } from './theboys-fights'
 /** NOIR is a real quiet mode: every toast of the skin's own is `…` and a thumbs-up. */
 export const quiet = (text: string, noir: boolean): string => (noir ? '… 👍' : text)

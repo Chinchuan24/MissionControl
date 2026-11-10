@@ -11,7 +11,7 @@ import { pin } from './smooth'
 import type { ExtraArgs, PaneCard, ThemeEggs, ThemeRoamer } from './themes'
 import { GLITCH_SEED, TRANSITION_MS, glitchEvents, glitchInto, transitionAt } from './edgerunners2-duet'
 import type { Er2ModeName, TransitionOpts } from './edgerunners2-duet'
-import { er2HackBurst } from './edgerunners2-hack'
+import { er2HackBurst, hackPlan } from './edgerunners2-hack'
 
 export type Spots = { peek?: { x: number; y: number }; sit?: { x: number; y: number } }
 export type OverlayArgs = { W: number; H: number; surface: 'band' | 'pane'; at: number; ctxPct: number; spots?: Spots; /** The job-done celebration is drawing: no hack lines. */ party?: boolean }
@@ -28,6 +28,8 @@ export const roamOverlay = (th: ThemeEggs, o: OverlayArgs & { card?: PaneCard })
   const r = th.roamer
   if (!r) return ''
   const creep = r.creep && o.surface === 'pane' ? r.creep(o.W, o.H, o.ctxPct, o.card) : ''
+  // A fight owns the panel: nothing of hers draws (one act at a time).
+  if (r.hush?.(o.at)) return creep
   const plan = roamPlan(r.seed, o.at, roamOptsOf(r, o.ctxPct))
   const hack = hackOf(th, o, plan, o.card === 'task' ? undefined : o.card)
   // A theme that spreads her acts over the cards (Mike peeks at the log, sits on the task card): the other cards draw none of it.
@@ -102,7 +104,9 @@ export const modeOf = (th: ThemeEggs | undefined): Er2ModeName | undefined => th
  * `i` is the pane card's place in the cascade (the band is 0). The drawing is returned as it was when nothing is planned.
  */
 export const glitchPanel = (svg: string, th: ThemeEggs | undefined, o: { at: number; ctxPct: number; party?: boolean; i?: number }): string =>
-  th?.mode === 'capri' && !o.party ? glitchInto(svg, glitchEvents(GLITCH_SEED, o.at, o.ctxPct), o.i ?? 0) : svg
+  th?.mode === 'capri' && !o.party && !th.roamer?.hush?.(o.at) ? glitchInto(svg, glitchEvents(GLITCH_SEED, o.at, o.ctxPct, undefined, w0 => hackOwns(th, w0, o.ctxPct)), o.i ?? 0) : svg
+/** CAPRI mode: does her hack-line event own the 30 s window starting at `w0`? (Her glitches yield to it.) */
+const hackOwns = (th: ThemeEggs, w0: number, ctxPct: number): boolean => hackPlan(`${th.roamer?.seed ?? 'capricorn'}|hack`, w0, ctxPct, true, null).on
 
 /** Is the possession transition still drawing? */
 export const transitionLive = (since: number, now: number): boolean => since > 0 && now >= since - 1000 && now - since < TRANSITION_MS
@@ -154,5 +158,6 @@ export const shakeInto = (svg: string, th: ThemeEggs | undefined, o: { W: number
   const root = /^<svg\b[^>]*>/.exec(svg)?.[0]
   const end = svg.lastIndexOf('</svg>')
   if (!anim || !root || end < 0) return svg
-  return `${root}<g class="dl-cam" style="animation:${anim}">${svg.slice(root.length, end)}</g></svg>`
+  // Longhands (`animation-name:a,b;...`) go in as they are: a list glued to an `animation:` shorthand played only one shake.
+  return `${root}<g class="dl-cam" style="${/^animation-name:/.test(anim) ? anim : `animation:${anim}`}">${svg.slice(root.length, end)}</g></svg>`
 }

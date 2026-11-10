@@ -64,11 +64,14 @@ const er2 = THEMES.edgerunners2.roamer as NonNullable<(typeof THEMES.edgerunners
 const roamFor = (ctx: number) => (t: number) => roamPlan(er2.seed, t, roamOptsOf(er2, ctx))
 const QUIET = BASE + 5 * 30_000 // a moment; the tests below only look at the mode, not at the roamer
 
-test('modes: "capri", "bye capri" and "0+2=1" switch the mode both ways, and the prompt goes through unchanged', async ($, on) => {
+test('modes: "hi capri", "bye capri" and "0+2=1" switch the mode both ways, and the prompt goes through unchanged', async ($, on) => {
   base(on, QUIET)
   await start($, 'edgerunners-2')
   expect(isCapri(await bandOf($))).toBe(false)
+  // The bare word never lets her in (capri pants); "hi capri" does.
   expect((await say($, 'hello Capri, are you there')).text).toBe('hello Capri, are you there')
+  expect(isCapri(await bandOf($))).toBe(false)
+  expect((await say($, 'hi capri, are you there')).text).toBe('hi capri, are you there')
   expect(isCapri(await bandOf($))).toBe(true)
   expect((await say($, 'bye capri')).text).toBe('bye capri')
   expect(isCapri(await bandOf($))).toBe(false)
@@ -128,7 +131,7 @@ test('modes: at 95% she lets herself in; back below 85% only if she came by hers
 test('modes: a user\'s choice sticks when the context falls', async ($, on) => {
   base(on, QUIET, { ctx: 40 })
   await start($, 'edgerunners-2')
-  await say($, 'capri')
+  await say($, 'hi capri')
   ctxPct = 96
   await $.tool.call({ tool: 'Read', file_path: '/repo/a.ts' } as never).catch(() => undefined)
   ctxPct = 50
@@ -140,7 +143,7 @@ test('transition: draws for 2.5 s after the switch, then stops; reduced motion h
   base(on, QUIET)
   await start($, 'edgerunners-2')
   expect(await bandOf($)).not.toContain('tr-anim')
-  await say($, 'capri')
+  await say($, 'hi capri')
   const band = async () => (await svgs($, 'AbovePrompt', 1250)).join('')
   const pane1 = (await svgs($, 'Pane')).join('')
   expect(pane1).toContain('tr-anim')
@@ -176,9 +179,9 @@ test('duets: only in D mode, only where the roamer is not out; the rates; POSSES
   }
   const low = rate(30)
   const high = rate(96)
-  // Rare at a normal context: about one duet every 10 min (was every 2.5-6 min).
-  expect(low.minutesPer).toBeGreaterThan(6)
-  expect(low.minutesPer).toBeLessThan(16)
+  // Rare at a normal context: about one duet every 25 min (was every 2.5-6 min, then 10).
+  expect(low.minutesPer).toBeGreaterThan(15)
+  expect(low.minutesPer).toBeLessThan(40)
   expect(high.minutesPer).toBeGreaterThan(1)
   expect(high.minutesPer).toBeLessThan(2.6)
   expect(high.kinds.possess ?? 0).toBeGreaterThan(high.kinds.link ?? 0)
@@ -194,7 +197,7 @@ test('duets: in D mode the band draws them inside the figure box, the bubble abo
   expect(d).toContain('class="cd-sp"')
   expect(DUET_CSS).not.toMatch(/[<>]/)
   expect(d).toMatch(/>Red-herring|>D</) // the title text stays plain
-  await say($, 'capri')
+  await say($, 'hi capri')
   await clockRef?.advance(3000)
   const c = await bandOf($)
   expect(c).not.toContain('cd-bub')
@@ -208,8 +211,8 @@ test('glitches: only in CAPRI mode, ahead of time, at the set rates, never above
     for (let b = 0; b < 2 * 24 * 120; b++) n += glitchPlan(GLITCH_SEED, BASE + b * 30_000, ctx).events.length
     return (2 * 24 * 120 * 0.5) / n
   }
-  expect(per(30)).toBeGreaterThan(0.6)
-  expect(per(30)).toBeLessThan(1.4) // one per 20 to 60 s: about one per minute at 50%
+  expect(per(30)).toBeGreaterThan(2.5)
+  expect(per(30)).toBeLessThan(6) // about one per 4 minutes: a surprise (was one a minute)
   expect(per(90)).toBeLessThan(per(30))
   expect(per(96)).toBeLessThan(per(90))
   let last = 0
@@ -228,7 +231,7 @@ test('glitches: only in CAPRI mode, ahead of time, at the set rates, never above
   expect(ev0).toBeDefined()
   base(on, (ev0 as { startAt: number }).startAt - 25_000, { ctx: 60 })
   await start($, 'edgerunners-2')
-  await say($, 'capri')
+  await say($, 'hi capri')
   await clockRef?.advance(3000)
   const band = await bandOf($)
   expect(band).toMatch(/class="cg cg-/)
@@ -247,7 +250,7 @@ test('palette: the whole pane and band in CAPRI mode are black, hot red, acid gr
   base(on, QUIET)
   await start($, 'edgerunners-2')
   await job($)
-  await say($, 'capri')
+  await say($, 'hi capri')
   await clockRef?.advance(3000)
   const all = [...(await svgs($, 'Pane')), await bandOf($)].join('')
   expect(all).toContain('#FF1F4E')
@@ -266,7 +269,7 @@ test(`sizes and layout (${mode} mode): 4 agents, both modes, the transition and 
     await start($, 'edgerunners-2')
     await job($)
     for (let i = 1; i <= 4; i++) await spawnAgent($, i)
-    await say($, mode === 'capri' ? 'capri' : 'bye capri')
+    await say($, mode === 'capri' ? 'hi capri' : 'bye capri')
     const sigs = new Set<string>()
     let maxBand = 0
     let maxOne = 0
@@ -277,7 +280,12 @@ test(`sizes and layout (${mode} mode): 4 agents, both modes, the transition and 
       maxOne = Math.max(maxOne, ...p.map(s => s.length))
       maxTotal = Math.max(maxTotal, p.join('').length)
       sigs.add(`${p.length}${p.some(s => s.includes('Effort')) ? 'full' : 'compact'}`)
-      if (i % 5 === 0 || i < 6) maxBand = Math.max(maxBand, (await svgs($, 'AbovePrompt', 1250)).join('').length)
+      if (i % 5 === 0 || i < 6) {
+        // A rare fight (one per 30-45 min while working) is a big act: the band's lite cut (120 k) is its bar; the rest stays under 70 k.
+        const b = (await svgs($, 'AbovePrompt', 1250)).join('')
+        if (b.includes('<!--dl-->')) expect(b.length).toBeLessThan(120_000)
+        else maxBand = Math.max(maxBand, b.length)
+      }
       for (const s of [...p]) for (const m of s.matchAll(/<style>([\s\S]*?)<\/style>/g)) expect(m[1]).not.toMatch(/[<>]/)
     }
     expect(maxBand).toBeLessThan(70_000)
@@ -287,15 +295,15 @@ test(`sizes and layout (${mode} mode): 4 agents, both modes, the transition and 
   }
 })
 
-test('calm D mode: about one Capri event (roam, hack or duet) in five 30 s windows under 85%, escalating at 85% and 95%', () => {
+test('calm D mode: about one Capri event (roam, hack or duet) in thirteen 30 s windows under 85%, escalating at 85% and 95%', () => {
   const share = (ctx: number) => {
     let any = 0
     const N = 2 * 24 * 120
     for (let i = 0; i < N; i++) {
       const t = BASE + i * 30_000
       const roam = roamFor(ctx)(t)
-      const hack = hackPlan(`${er2.seed}|hack`, t, ctx, false, roam)
       const duet = duetPlan(DUET_SEED, t, ctx, roamFor(ctx))
+      const hack = !roam?.on && duet.on ? { on: false } : hackPlan(`${er2.seed}|hack`, t, ctx, false, roam)
       if (roam?.on || hack.on || duet.on) any++
     }
     return any / N
@@ -303,8 +311,8 @@ test('calm D mode: about one Capri event (roam, hack or duet) in five 30 s windo
   const low = share(30)
   const mid = share(88)
   const high = share(96)
-  expect(low).toBeGreaterThan(0.14) // was about 0.6: she was out in most windows
-  expect(low).toBeLessThan(0.27)
-  expect(mid).toBeGreaterThan(low + 0.15)
+  expect(low).toBeGreaterThan(0.04) // was about 0.6 at the audit, 0.2 after wave 1
+  expect(low).toBeLessThan(0.1)
+  expect(mid).toBeGreaterThan(low + 0.1)
   expect(high).toBeGreaterThan(mid + 0.1)
 })

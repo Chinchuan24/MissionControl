@@ -4,7 +4,7 @@
 //
 // Beats run on a cursor `t` (act seconds), in time order. Moves advance the cursor; instants (hit, freeze, impact, sfx)
 // happen at it. `at(t)` jumps, `wait(s)` waits, `with()` runs the next move alongside the last one.
-//   moves      approach, strike, knockback, throw, exit                     (the fight)
+//   moves      approach, strike, knockback, throw, orbit, exit              (the fight)
 //   stand-off  stare, step, flinch, backdown, say                           (the tension before it)
 //   instants   hit (star + flash + shake + hit-stop), freeze, impact, smear, sfx, pose
 // PG-13: an impact is a star, a flash, dust; nobody bleeds. Fights are RARE: schedule them with `fightLane` (director.ts).
@@ -42,6 +42,10 @@ export type FightLook = {
   /** Big flashes: opacity (<= .5). */
   flash?: number
   font?: string
+  /** A class for every word and bubble line in place of the font attributes (the skin's CSS sets font-family and weight). */
+  textClass?: string
+  /** `false`: no afterimages anywhere (each ghost repeats every pose's <use>: a tight band budget turns them off). */
+  ghosts?: boolean
 }
 type F = { name: string; x: number; y: number; face: 1 | -1; pose: string; from: number; segs: Seg[]; path: Key[]; ghosts?: [number, number]; trail: [number, number, string][]; spin: boolean }
 
@@ -65,6 +69,8 @@ export class Fight {
     return f
   }
   private log(beat: string): void { this.script.push([beat, r3(this.t)]) }
+  /** The text's font: the look's class when it has one (a few chars), else the font attributes. */
+  private fontAttrs(weight: number): string { return this.o.textClass ? `class="${this.o.textClass}"` : `font-family="${this.o.font ?? 'ui-sans-serif,system-ui,sans-serif'}" font-weight="${weight}"` }
 
   // ---------------------------------------------------------------- cast and clock
   /** A fighter standing at (x, y) in `pose` (a key cast on the act), facing `face` (1 right, -1 left), from t = 0. */
@@ -173,7 +179,7 @@ export class Fight {
     const t0 = this.t
     const fast = Math.abs(x - f.x) / Math.max(0.05, d) > 300
     if (o.lines ?? fast) f.trail.push([t0, t0 + d, fx.speedLines(-f.face * 10 * this.sc, -4 * this.sc, 14 * this.sc, 4, f.face, this.o.lines ?? '#FFFFFF', { seed: `${who}${t0}` })])
-    if (o.ghosts ?? fast) f.ghosts ??= [t0, t0 + d]
+    if (this.o.ghosts !== false && (o.ghosts ?? fast)) f.ghosts ??= [t0, t0 + d]
     this.move(f, x, o.y ?? f.y, d, o.ease ?? 'snap')
     return this
   }
@@ -197,8 +203,9 @@ export class Fight {
   /**
    * The hit, at the cursor: `target` takes it (pose for `d` s), a 3-frame star, sparks, a flash, a shake, a word, then
    * the HIT-STOP (`freeze` s, default 0.07: every path holds while the star plays). `impact` adds an impact frame.
+   * `star: false` skips the star (the skin's own impact mark goes at `hits[hits.length - 1]`).
    */
-  hit(target: string, o: { pose?: string; d?: number; x?: number; y?: number; r?: number; flash?: number | false; shake?: 1 | 2 | 3 | 4 | false; freeze?: number | false; word?: string; sparks?: boolean; impact?: boolean } = {}): this {
+  hit(target: string, o: { pose?: string; d?: number; x?: number; y?: number; r?: number; flash?: number | false; shake?: 1 | 2 | 3 | 4 | false; freeze?: number | false; word?: string; sparks?: boolean; impact?: boolean; star?: boolean } = {}): this {
     this.log('hit')
     const g = this.get(target)
     const t = this.t
@@ -209,7 +216,8 @@ export class Fight {
     this.hits.push({ t, x, y, who: target })
     if (o.pose) this.pose(target, o.pose)
     if (o.impact) this.impact()
-    this.out += fx.star3(this.act, t, x, y, r, { ...this.o.star, ...(this.o.ink ? { ink: this.o.ink } : {}) })
+    // `star: false`: the skin draws its own mark at `hits` (a censor mosaic, a slash line): the hit-stop and shake stay.
+    if (o.star ?? true) this.out += fx.star3(this.act, t, x, y, r, { ...this.o.star, ...(this.o.ink ? { ink: this.o.ink } : {}) })
     if (o.sparks ?? true) this.out += fx.sparks(this.act, t + 0.02, x, y, { seed: `hit${t}${target}`, ...(this.o.spark ? { color: this.o.spark } : {}) })
     // With an impact frame the flash follows it (a flash over the ink frame would grey it out).
     if (o.flash !== false && (o.flash ?? 0) > 0) this.out += fx.flash(this.act, o.impact ? t + 0.08 : t, { a: Math.min(0.5, o.flash as number) })
@@ -248,7 +256,7 @@ export class Fight {
   sfx(word: string, x: number, y: number, o: { size?: number; tilt?: number; d?: number; fill?: string } = {}): this {
     const size = o.size ?? 14
     const ink = this.o.ink ?? '#111111'
-    this.out += this.act.cue('pop', this.t, `<text text-anchor="middle" font-family="${this.o.font ?? 'ui-sans-serif,system-ui,sans-serif'}" font-weight="900" font-size="${r1(size)}" fill="${o.fill ?? this.o.word ?? '#FFE066'}" stroke="${ink}" stroke-width="${r1(size * 0.18)}" paint-order="stroke" transform="rotate(${o.tilt ?? -6})">${esc(word)}</text>`, { x, y, d: o.d ?? 0.55 })
+    this.out += this.act.cue('pop', this.t, `<text text-anchor="middle" ${this.fontAttrs(900)} font-size="${r1(size)}" fill="${o.fill ?? this.o.word ?? '#FFE066'}" stroke="${ink}" stroke-width="${r1(size * 0.18)}" paint-order="stroke" transform="rotate(${o.tilt ?? -6})">${esc(word)}</text>`, { x, y, d: o.d ?? 0.55 })
     return this
   }
   /** A speech bubble over a fighter from the cursor for `d` s (escaped; keep it to a few words). The stand-off's line. */
@@ -262,7 +270,7 @@ export class Fight {
     const x = r1(f.face < 0 ? f.x - w + 10 : f.x - 10)
     const tail = f.face < 0 ? `M${r1(x + w - 18)} ${y}l6 7 2-7z` : `M${r1(x + 12)} ${y}l-2 7 8-7z`
     const ink = o.ink ?? this.o.ink ?? '#111111'
-    this.out += this.act.win(this.t, this.t + d, `<rect x="${x}" y="${r1(y - 18)}" width="${w}" height="18" rx="3" fill="${o.fill ?? '#FFFFFF'}" stroke="${ink}" stroke-width="1.5"/><path d="${tail}" fill="${o.fill ?? '#FFFFFF'}" stroke="${ink}" stroke-width="1.5" stroke-linejoin="round"/><text x="${r1(x + w / 2)}" y="${r1(y - 5.5)}" text-anchor="middle" font-family="${this.o.font ?? 'ui-sans-serif,system-ui,sans-serif'}" font-weight="800" font-size="${size}" fill="${ink}">${esc(text)}</text>`)
+    this.out += this.act.win(this.t, this.t + d, `<rect x="${x}" y="${r1(y - 18)}" width="${w}" height="18" rx="3" fill="${o.fill ?? '#FFFFFF'}" stroke="${ink}" stroke-width="1.5"/><path d="${tail}" fill="${o.fill ?? '#FFFFFF'}" stroke="${ink}" stroke-width="1.5" stroke-linejoin="round"/><text x="${r1(x + w / 2)}" y="${r1(y - 5.5)}" text-anchor="middle" ${this.fontAttrs(800)} font-size="${size}" fill="${ink}">${esc(text)}</text>`)
     return this
   }
   /**
@@ -275,7 +283,7 @@ export class Fight {
     const d = o.d ?? 0.45
     if (o.pose) this.pose(who, o.pose)
     const t0 = this.t
-    f.ghosts ??= [t0, t0 + d]
+    if (this.o.ghosts !== false) f.ghosts ??= [t0, t0 + d]
     const x1 = f.x - f.face * dx
     const y1 = f.y + (o.dy ?? 0)
     this.move(f, x1, y1, d, o.ease ?? 'settle', { ...(o.rot !== undefined ? { rot: o.rot } : {}), arc: o.arc ?? 10, n: 5 })
@@ -295,9 +303,38 @@ export class Fight {
     this.log('throw')
     const f = this.get(who)
     if (o.pose) this.pose(who, o.pose)
-    f.ghosts ??= [this.t, this.t + (o.d ?? 0.5)]
+    if (this.o.ghosts !== false) f.ghosts ??= [this.t, this.t + (o.d ?? 0.5)]
     this.move(f, x, y, o.d ?? 0.5, 'linear', { arc: o.arc ?? 30, rot: 360 * (o.turns ?? 1), n: 8 })
     f.spin = true
+    return this
+  }
+  /**
+   * A swing round a pivot (a fighter swung by the wrist, a hammer throw): the fighter turns from angle `a0` to `a1` (CSS
+   * degrees, clockwise) while its centre circles (cx, cy) at radius `r`, so its top always points at the pivot (0 = hanging
+   * straight below it, 90 = held out to its left, 180 = straight above it). Rotation is smooth (a stepped spin from an earlier
+   * throw on the same fighter steps it: keep `n` keys at ~20 degrees). `upright` squares it up when the swing ends.
+   */
+  orbit(who: string, cx: number, cy: number, r: number, a0: number, a1: number, d = 0.5, o: { pose?: string; ease?: Ease | string; n?: number; upright?: boolean } = {}): this {
+    this.log('orbit')
+    const f = this.get(who)
+    if (o.pose) this.pose(who, o.pose)
+    const t0 = this.t
+    const c = curve(o.ease ?? 'linear')
+    const n = o.n ?? Math.max(3, Math.ceil(Math.abs(a1 - a0) / 20))
+    const at = (a: number): [number, number] => { const q = (a * Math.PI) / 180; return [r1(cx - r * Math.sin(q)), r1(cy + r * Math.cos(q))] }
+    this.hold(f, t0)
+    for (let i = 0; i <= n; i++) {
+      const u = i / n
+      const a = a0 + (a1 - a0) * c(u)
+      const [x, y] = at(a)
+      f.path.push([r3(t0 + d * u + (i ? 0 : 0.001)), x, y, r1(a)] as Key)
+    }
+    const [x1, y1] = at(a1)
+    f.x = x1
+    f.y = y1
+    if (o.upright) f.path.push([r3(t0 + d + 0.01), x1, y1, 0] as Key)
+    this.last = t0
+    this.t = t0 + d
     return this
   }
   /** Exit: off the panel toward `dir` (default: the way it faces) over `d` s, fading if `fade`. */

@@ -4118,6 +4118,40 @@ export const spriteMarkup = (sp: Sprite, tint: string, box = 30, floor = 27): st
   return `<g transform="translate(${x0},${y0}) scale(${+pixel.toFixed(4)})"><g class="bd">${draw('rim')}${draw('bd')}<g class="hd">${draw('hdrim')}${draw('hd')}</g>${inner}</g><g class="la">${draw('la')}</g><g class="lb">${draw('lb')}</g></g>`
 }
 
+/**
+ * An idle alternate as an overlay: only the pixels where `alt` differs from `base` (a blink's lids, lit optics, a strum
+ * arm), placed exactly as `spriteMarkup(base)` places the figure and nested in the same motion groups (head in `.hd`
+ * inside `.bd`), so they breathe and nod with it. Put it inside the figure's `.ch` group and toggle it with a stepped
+ * loop on `cls`: a frame swap that costs a few hundred chars instead of a second full figure. Pixels `alt` clears are
+ * not erased (the alternates only add or recolour).
+ */
+export const spriteDiff = (base: Sprite, alt: Sprite, cls: string, box = 30, floor = 27): string => {
+  const width = Math.max(...base.rows.map(r => r.length))
+  const height = base.rows.length
+  const headTo = base.float ? 0 : Math.round(height / 6)
+  const colorOf = (sp: Sprite, ch: string | undefined) => (ch === undefined || ch === '.' ? undefined : sp.pal[ch])
+  const head = new Map<string, string>()
+  const body = new Map<string, string>()
+  for (let y = 0; y < height; y++) {
+    const a = alt.rows[y] ?? ''
+    const b = base.rows[y] ?? ''
+    for (let x = 0; x < width; x++) {
+      const c = colorOf(alt, a[x])
+      if (c === undefined || c === colorOf(base, b[x])) continue
+      let n = 1
+      while (x + n < width && colorOf(alt, a[x + n]) === c && colorOf(base, b[x + n]) !== c) n++
+      const g = y < headTo ? head : body
+      g.set(c, `${g.get(c) ?? ''}M${x} ${y}h${n}v1h${-n}z`)
+      x += n - 1
+    }
+  }
+  const draw = (m: Map<string, string>) => [...m].map(([c, d]) => `<path d="${d}" fill="${c}"/>`).join('')
+  const pixel = Math.min(PIXEL, floor / height)
+  const x0 = +((box - width * pixel) / 2).toFixed(2)
+  const y0 = +(floor - height * pixel).toFixed(2)
+  return `<g class="${cls}" transform="translate(${x0},${y0}) scale(${+pixel.toFixed(4)})"><g class="bd">${draw(body)}<g class="hd">${draw(head)}</g></g></g>`
+}
+
 // How the cast moves: a breath at rest, hair that sways, visors that flicker,
 // lights that pulse; a brisker step and flicker while it works.
 export const CAST_CSS = `.ch g{transform-box:fill-box}

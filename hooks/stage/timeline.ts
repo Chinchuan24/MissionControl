@@ -31,6 +31,29 @@ export const r3 = (n: number): number => Math.round(n * 1000) / 1000
  * Keyframe rows without the redundant ones: a row whose value equals both neighbours' sits inside a hold (whatever the
  * timing function, the value between equal rows is constant), and a repeat of the same percent and value says nothing.
  */
+/** Two key values equal to float noise (both unset, or within 0.005). */
+const same = (a: number | undefined, b: number | undefined): boolean => a === b || (a !== undefined && b !== undefined && Math.abs(a - b) < 0.005)
+/**
+ * Path keys with no two at the same time: a key at (or before) the time of the one before it moves 10 ms after it. Two keys
+ * on one percent collapse (the later wins), so a teleport written as two keys at one time became a slow glide from the key
+ * before (Invincible's skid bug); 10 ms apart it is a cut.
+ */
+export const apart = <K extends (number | undefined)[]>(keys: K[]): K[] => {
+  let last = -Infinity
+  let prev: K | undefined
+  const out: K[] = []
+  for (const k of [...keys].sort((a, b) => (a[0] as number) - (b[0] as number))) {
+    const t0 = k[0] as number
+    // A repeat (same time, same values to float noise: one move's end written again as the next one's start, 628 then
+    // 627.9999999999999) says nothing: drop it rather than push it 10 ms on, where it would cost a keyframe row (The Boys' walks).
+    if (prev && Math.abs(t0 - (prev[0] as number)) < 1e-6 && k.length === prev.length && k.every((v, i) => i === 0 || same(v, prev?.[i]))) continue
+    const t = t0 > last ? t0 : r3(last + 0.01)
+    last = t
+    prev = k
+    out.push((t === t0 ? k : [t, ...k.slice(1)]) as K)
+  }
+  return out
+}
 export const slim = (rows: [number, string][]): [number, string][] =>
   rows.filter((r, i) => {
     const a = rows[i - 1]
@@ -51,6 +74,9 @@ export type ActOpts = {
   H: number
   /** Seconds into the timeline where THIS surface's piece starts (a pane card after the band cut). Default 0. */
   off?: number
+  /** Decimals of every keyframe percent (and of a cue's start, in s). Default 3; 2 saves a char a key (0.01 % of an 18 s
+   *  timeline is 2 ms; a cue starts within 5 ms) for a band that is full. */
+  dp?: 2 | 3
   /** Colours kept per pose (frames.ts quantise). Default 6. */
   K?: number
 }
@@ -118,13 +144,19 @@ export class Act {
   /** Act time to timeline time on this surface, freezes included. */
   warp(t: number): number { let w = t; for (const [tf, s] of this.freezes) if (t > tf) w += s; return w }
   /** Percent of the whole timeline at act time `t` (clamped). */
-  pc(t: number): number { return r3(Math.min(100, Math.max(0, ((this.off + this.warp(t)) / this.T) * 100))) }
+  pc(t: number): number { return this.rp(Math.min(100, Math.max(0, ((this.off + this.warp(t)) / this.T) * 100))) }
+  private rp(n: number): number { return this.o.dp === 2 ? Math.round(n * 100) / 100 : r3(n) }
   /** The pinned delay of act time `t` (calc keeps `phased` from shifting it). */
   delay(t = 0): string { return `calc(${pin(this.o.at)} + ${r3(this.off + this.warp(t))}s)` }
   /** A fresh keyframes name under this act's prefix. */
   k(): string { return `${this.p}_${(this.n++).toString(36)}` }
   /** Register a keyframes block. */
   rows(name: string, rows: [number, string][]): void { this.css += `@keyframes ${name}{${slim(rows).map(([p, v]) => `${p}%{${v}}`).join('')}}` }
+  /**
+   * Rows that end on their last value: a track whose keys stop before 100% would otherwise ease back to the element's own
+   * attributes over the rest of the act (a prop thrown off-panel drifted back in, a faded one came back).
+   */
+  private held(rows: [number, string][]): [number, string][] { const l = rows[rows.length - 1]; return l && l[0] < 100 ? [...rows, [100, l[1]]] : rows }
   /**
    * Numeric keys (index 0 = act time) in timeline order with every freeze turned into a hold: the value at the freeze
    * time is repeated at its end, so the piece stands still through it. Times come back warped (use `pcw` on them).
@@ -145,22 +177,22 @@ export class Act {
     return out.sort((x, y) => (x[0] as number) - (y[0] as number))
   }
   /** Percent of an already-warped time. */
-  pcw(w: number): number { return r3(Math.min(100, Math.max(0, ((this.off + w) / this.T) * 100))) }
+  pcw(w: number): number { return this.rp(Math.min(100, Math.max(0, ((this.off + w) / this.T) * 100))) }
 
   // ---------------------------------------------------------------- tracks (whole-act keyframes)
   /** Any keyframes ([t s, declarations]) on a wrapper. `c` turns/scales about its own centre; `origin` sets one. */
   kf(svg: string, rows: [number, string][], o: { ease?: Ease | string; c?: boolean; origin?: string; attrs?: string } = {}): string {
     const k = this.k()
-    this.rows(k, rows.map(([t, v]) => [this.pc(t), v]))
+    this.rows(k, this.held(rows.map(([t, v]) => [this.pc(t), v])))
     return `<g class="${this.p}k${o.c ? ' sg-c' : ''}" style="animation-name:${k}${o.ease ? `;animation-timing-function:${ease(o.ease)}` : ''}${o.origin ? `;transform-origin:${o.origin}` : ''}"${o.attrs ? ` ${o.attrs}` : ''}>${svg}</g>`
   }
   /** Moves `svg` through [t, x, y, opacity?, extra transform?] keys (freezes hold). */
   mv(svg: string, keys: [number, number, number, number?, string?][], o: { ease?: Ease | string; c?: boolean } = {}): string {
     const k = this.k()
-    const num = this.hold(keys.map(([t, x, y, op]) => [t, x, y, op] as [number, number, number, number | undefined]))
+    const num = this.hold(apart(keys.map(([t, x, y, op]) => [t, x, y, op] as [number, number, number, number | undefined])))
     const extra = new Map(keys.map(([t, , , , ex]) => [this.warp(t), ex]))
     const fades = keys.some(q => q[3] !== undefined)
-    this.rows(k, num.map(([w, x, y, op]) => [this.pcw(w), `transform:translate(${r1(x)}px,${r1(y)}px)${extra.get(w) ? ` ${extra.get(w)}` : ''}${fades ? `;opacity:${op ?? 1}` : ''}`]))
+    this.rows(k, this.held(num.map(([w, x, y, op]) => [this.pcw(w), `transform:translate(${r1(x)}px,${r1(y)}px)${extra.get(w) ? ` ${extra.get(w)}` : ''}${fades ? `;opacity:${op ?? 1}` : ''}`])))
     const f = keys[0]
     return `<g class="${this.p}k${o.c ? ' sg-c' : ''}" style="animation-name:${k}${o.ease ? `;animation-timing-function:${ease(o.ease)}` : ''}"${f ? ` transform="translate(${r1(f[1])} ${r1(f[2])})"` : ''}>${svg}</g>`
   }
@@ -187,15 +219,15 @@ export class Act {
   cue(kind: Cue, t: number, inner: string, o: { d?: number; x?: number; y?: number } = {}): string {
     this.cues.add(kind)
     const scaled = kind === 'pop' || kind === 'burst' || kind === 'ring' || kind === 'rise'
-    const g = `<g class="sg-${kind}${scaled ? ' sg-c' : ''}" style="--t:${r3(this.warp(t))}s${o.d !== undefined ? `;--d:${r3(o.d)}s` : ''}">${inner}</g>`
+    const g = `<g class="sg-${kind}${scaled ? ' sg-c' : ''}" style="--t:${this.o.dp === 2 ? Math.round(this.warp(t) * 100) / 100 : r3(this.warp(t))}s${o.d !== undefined ? `;--d:${r3(o.d)}s` : ''}">${inner}</g>`
     return o.x !== undefined || o.y !== undefined ? `<g transform="translate(${r1(o.x ?? 0)} ${r1(o.y ?? 0)})">${g}</g>` : g
   }
   /** Shown from t0 to t1 (a cut both ways). */
   win(t0: number, t1: number, svg: string): string { return this.cue('show', t0, svg, { d: Math.max(0.02, this.warp(t1) - this.warp(t0)) }) }
 
   // ---------------------------------------------------------------- actors (frames + path)
-  /** Register a pose (a `Sprite`) under `key`; `ax` is where the body stands across its width (0..1). */
-  cast(key: string, sp: Sprite, ax = 0.5): this { this.bank.add(key, sp, ax); return this }
+  /** Register a pose (a `Sprite`) under `key`; `ax` is where the body stands across its width (0..1); `K` its own colour count. */
+  cast(key: string, sp: Sprite, ax = 0.5, K?: number): this { this.bank.add(key, sp, ax, K); return this }
   /**
    * A frame-swap actor: its poses toggled by `segs`, moved along `path` (t, x, y, rotation?, opacity?, y-squash?).
    * Each pose is cut once (defs), each window costs a keyframe row, the path one keyframes block.
@@ -208,26 +240,31 @@ export class Act {
     for (const [a, b, k, dir = 1] of segs) { const fk = `${k}|${dir}`; (frames.get(fk) ?? frames.set(fk, []).get(fk))?.push([a, b]) }
     const rotates = path.some(k => k[3] !== undefined || k[5] !== undefined)
     let uses = ''
+    const usesBy = new Map<string, string>()
     for (const [fk, wins] of frames) {
       const [k, dirS] = fk.split('|') as [string, string]
       const fid = `${id}-${k.replace(/[^\w-]/g, '_')}${dirS === '-1' ? 'l' : 'r'}`
       this.rows(fid, swapRows(wins, t => this.pc(t)))
-      uses += `<g class="${this.p}f" style="animation-name:${fid}">${this.bank.use(k, 0, 0, Number(dirS) as 1 | -1, sc)}</g>`
+      const u = `<g class="${this.p}f" style="animation-name:${fid}">${this.bank.use(k, 0, 0, Number(dirS) as 1 | -1, sc)}</g>`
+      usesBy.set(fk, u)
+      uses += u
     }
-    const keys = this.hold(path)
+    const keys = this.hold(apart(path))
     const fades = path.some(k => k[4] !== undefined)
     this.rows(id, keys.map(([w, x, y, , op]) => [this.pcw(w), `transform:translate(${r1(x)}px,${r1(y)}px)${fades ? `;opacity:${op ?? 1}` : ''}`]))
     if (rotates) this.rows(`${id}r`, keys.map(([w, , , rot, , sy]) => [this.pcw(w), `transform:rotate(${r1(rot ?? 0)}deg)${sy !== undefined && sy !== 1 ? ` scale(1,${sy})` : ''}`]))
-    const body = (withTrail: boolean): string => {
+    const body = (withTrail: boolean, only?: [number, number]): string => {
       let trail = ''
       if (withTrail) for (const [a, b, m] of o.trail ?? []) trail += this.win(a, b, m)
-      const inner = rotates ? `<g class="sg-c ${this.p}${o.spin ? 's' : 'k'}" style="animation-name:${id}r">${uses}</g>` : uses
+      // A ghost carries only the poses that show while it does (an afterimage of the run, not every pose of the act).
+      const u = only ? [...frames].filter(([, wins]) => wins.some(([a, b]) => a < only[1] && b > only[0] - 0.15)).map(([fk]) => usesBy.get(fk) ?? '').join('') : uses
+      const inner = rotates ? `<g class="sg-c ${this.p}${o.spin ? 's' : 'k'}" style="animation-name:${id}r">${u}</g>` : u
       return `${trail}${inner}`
     }
     let out = `<g class="${this.p}k" style="animation-name:${id}">${body(true)}</g>`
     if (o.ghosts) {
       const [a, b] = o.ghosts
-      for (const [i, lag] of [0.07, 0.14].entries()) out += this.win(a, b + lag, `<g class="${this.p}k" style="--q:calc(var(--p) + ${lag}s);opacity:${i ? 0.18 : 0.34};animation-name:${id}">${body(false)}</g>`)
+      for (const [i, lag] of [0.07, 0.14].entries()) out += this.win(a, b + lag, `<g class="${this.p}k" style="--q:calc(var(--p) + ${lag}s);opacity:${i ? 0.18 : 0.34};animation-name:${id}">${body(false, [a, b + lag])}</g>`)
     }
     return out
   }

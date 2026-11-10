@@ -1,6 +1,7 @@
 // Extras for Mission Control: Street Cred (XP, levels, badges), the Braindance
 // replay of a session's tool calls, and the boot-up strip. Pure functions and SVG
 // strings; the hooks module keeps the state and decides when each shows.
+import { Act } from './stage/timeline'
 
 // --- Street Cred ---
 
