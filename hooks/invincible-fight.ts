@@ -145,6 +145,9 @@ export { rectPaths }
 // ---------------------------------------------------------------- shared CSS (once per Svg that carries a piece of the fight)
 /** The panel shake's keyframes (the engine's four tiers) and the camera wrapper stopped under reduced motion. */
 export const FIGHT_CSS = `${SHAKE_CSS.replace(/\n/g, '')}.dl-c{transform-box:fill-box;transform-origin:50% 50%}.dl-t{font-family:${COND};font-weight:900}@media (prefers-reduced-motion: reduce){.dl-anim{display:none}.dl-cam{animation:none!important}.dl-still{display:block}}`
+/** The band cut's CSS: the band never wears the panel shake (no `dl-cam` wrapper there) and draws nothing `dl-c`, so it carries
+ *  neither the shake keyframes nor those rules (about 830 chars of headroom under the band's 32 k). */
+export const BAND_CSS = `.dl-t{font-family:${COND};font-weight:900}@media (prefers-reduced-motion: reduce){.dl-anim{display:none}.dl-still{display:block}}`
 
 // ---------------------------------------------------------------- the cut builder
 const STAR = { core: '#FFFFFF', star: '#FFE066', ring: '#9FE8FF' }
@@ -168,6 +171,7 @@ class Cut {
   /** Where each fighter is (kept by the cut's own moves), for impact frames and stills. */
   readonly at: Record<string, { x: number; y: number; pose: string; face: 1 | -1 }> = {}
   private filters = false
+  private bursts = 0
   /** The band's readouts inside the window (stage/keep.ts): a word that would sit on one drops under it. */
   keep: [number, number, number, number][] = []
   /** A word's baseline clear of the readouts (a word under a hole would be cut in half). */
@@ -208,9 +212,13 @@ class Cut {
     // The silhouettes are the poses themselves through a flat-colour filter (no second copy of any pose in the defs).
     const p = this.act.p
     if (!this.filters) { this.filters = true; this.set += `<defs><filter id="${p}iw"><feColorMatrix values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1 0"/></filter><filter id="${p}ik"><feColorMatrix values="0 0 0 0 .04 0 0 0 0 .05 0 0 0 0 .08 0 0 0 1 0"/></filter></defs>` }
-    const figs = (k: string): string => `<g filter="url(#${p}${k})">${Object.values(this.at).map(q => this.act.bank.use(q.pose, r1(q.x), r1(q.y), q.face, this.sc)).join('')}</g>`
-    this.set += this.act.win(t, t + 0.04, `<polygon points="${pts}" fill="${PROPS.ink}" opacity=".92"/>${figs('iw')}`)
-    this.set += this.act.win(t + 0.04, t + 0.08, `<polygon points="${pts}" fill="#FFFFFF" opacity=".9"/>${figs('ik')}`)
+    // The burst and the fighters once in the defs, used by both halves (ink burst + white silhouettes, then the inverse): the
+    // same picture for about half the characters.
+    const n = this.bursts++
+    this.set += `<defs><polygon id="${p}ib${n}" points="${pts}"/><g id="${p}ig${n}">${Object.values(this.at).map(q => this.act.bank.use(q.pose, r1(q.x), r1(q.y), q.face, this.sc)).join('')}</g></defs>`
+    const half = (fill: string, op: string, k: string): string => `<use href="#${p}ib${n}" fill="${fill}" opacity="${op}"/><use href="#${p}ig${n}" filter="url(#${p}${k})"/>`
+    this.set += this.act.win(t, t + 0.04, half(PROPS.ink as string, '.92', 'iw'))
+    this.set += this.act.win(t + 0.04, t + 0.08, half('#FFFFFF', '.9', 'ik'))
   }
   /** A hit, the v2 way: the engine's hit (star, sparks, word, HIT-STOP), then the shake AFTER the freeze, and a punch-in. */
   hit(target: string, o: { pose?: string; word?: string; r?: number; stop: number; sparks?: boolean; shake: 1 | 2 | 3 | 4; flash?: number; impact?: [number, number]; push?: number; x?: number; y?: number; wx?: number; wy?: number }): void {
@@ -265,7 +273,7 @@ class Cut {
   /** The panel shake for this surface (engine longhands: every shake plays, not just the first). */
   shake(): string { return this.cam.shakeStyle() }
   still(key: string, x: number, y: number, face: 1 | -1): void { this.stills += this.act.still(key, x, y, face, this.sc) }
-  starStill(x: number, y: number, r = 14): void { this.stills += `<polygon points="${Array.from({ length: 16 }, (_, i) => { const a = (Math.PI * i) / 8 - Math.PI / 2; const rr = i % 2 ? r * 0.43 : r; return `${r1(x + Math.cos(a) * rr)},${r1(y + Math.sin(a) * rr)}` }).join(' ')}" fill="#FFE066" stroke="${PROPS.ink}"/>` }
+  starStill(x: number, y: number, r = 14): void { this.stills += `<polygon points="${Array.from({ length: 16 }, (_, i) => { const a = (Math.PI * i) / 8 - Math.PI / 2; const rr = i % 2 ? r * 0.43 : r; return `${Math.round(x + Math.cos(a) * rr)},${Math.round(y + Math.sin(a) * rr)}` }).join(' ')}" fill="#FFE066" stroke="${PROPS.ink}"/>` }
 }
 
 // ---------------------------------------------------------------- beats shared by the versions
@@ -804,6 +812,7 @@ const build = (a: FightArgs, surface: 'band' | ActIndex): Built => {
   // and the downtown arena where the card has the room for it (GDA WALL; COVER STORY's card is at its 60 k).
   if (fr) c.set += `<rect x="${r1(-fr.x / fr.k)}" width="${r1(a.W / fr.k)}" height="${fr.Hv}" fill="${PROPS.ink}" opacity="${surface === 0 ? 0.8 : 0.5}"/>${surface === 1 ? arena(c, Math.round(fr.Hv * 0.32)) : ''}`
   if (st) c.keep = st.keep
+  if (band) { c.act.extraCss.delete(FIGHT_CSS); c.act.extraCss.add(BAND_CSS) }
   if (band) { if (cq) conquestBand(c); else bandCut(c, v as 0 | 1 | 2) }
   else if (cq) conquestAct(c, surface)
   else actCut(c, surface)

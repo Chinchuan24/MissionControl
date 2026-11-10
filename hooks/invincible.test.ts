@@ -439,7 +439,8 @@ test('fight: each frame once per Svg in defs, shown with use; one pinned delay; 
   const ids = [...defs.matchAll(/<g id="([^"]+)"/g)].map(m => m[1])
   expect(new Set(ids).size).toBe(ids.length)
   expect(ids.length).toBe(8)
-  expect([...a.matchAll(/<use href="#([^"]+)"/g)].every(m => ids.includes(m[1]))).toBe(true)
+  // Every frame drawn is a use of the bank (the impact frame's burst and silhouette group, `ib`/`ig`, are its own defs).
+  expect([...a.matchAll(/<use href="#([^"]+)"/g)].filter(m => !/i[bg]\d+$/.test(m[1] as string)).every(m => ids.includes(m[1]))).toBe(true)
   expect(a).toMatch(/--p:@@T5000@@/)
   expect(new Set([...a.matchAll(/@@T(\d+)@@/g)].map(m => m[1]))).toEqual(new Set(['5000']))
   const fxOnly = a.replace(/<defs>[\s\S]*?<\/defs>/, '').replace(/<g class="dl-still"[\s\S]*$/, '')
@@ -537,6 +538,20 @@ for (const era of [1, 2] as const) {
     expect(p.reduce((n, s) => n + s.length, 0)).toBeLessThan(260_000)
   })
 }
+// Headroom: the band cuts sit at least 1,000 chars under the 32 k band cap (they were within 10-20 of it), at every width the
+// band draws, staged on the real band's clear span (a narrower or wider span) and unstaged. The band carries BAND_CSS (no shake).
+test('fight: every band cut keeps 1 k of headroom under the 32 k band cap, staged or not, 450 to 1600 wide', () => {
+  const keep: [number, number, number, number][] = [[259, 39, 84, 22], [12, 88, 114, 21]]
+  for (const era of [1, 2] as const) for (const v of [0, 1, 2, 3] as const) {
+    if (v === 3 && era === 1) continue
+    for (const [W, x1] of [[450, 150], [600, 200], [750, 290], [900, 439], [1100, 600], [1250, 794], [1600, 1030]] as const) {
+      const s = fightBand({ W, H: 134, era, startAt: 0, v, stage: { x1, keep } }).svg
+      expect(s.length, `e${era} v${v} ${W}/${x1}`).toBeLessThanOrEqual(31_000)
+      expect(s).not.toMatch(/@keyframes sg-sh\d/)
+    }
+    for (const W of [750, 900, 1250]) expect(fightBand({ W, H: 134, era, startAt: 0, v }).svg.length, `e${era} v${v} ${W}`).toBeLessThanOrEqual(31_000)
+  }
+})
 test('fight: sizes of the pieces, and the pane reserve covers the three acts at the widest card', () => {
   for (const era of [1, 2] as const) {
     let all = 0
