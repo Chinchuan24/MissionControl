@@ -11,6 +11,7 @@
 // redraw anywhere in the fight resumes it and a draw up to AHEAD_MS before it schedules it (a positive delay).
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Sprite } from './cast'
+import { rectPaths } from './stage/frames'
 import { C, COND, PROPS, SP, condW, hash, koStars, pal, pin, r1, speedLines, unit } from './invincible'
 import type { Era } from './invincible'
 
@@ -48,58 +49,8 @@ export const frameSprite = (key: string, era: Era): Sprite => {
 }
 const info = (key: string): FrameInfo => ({ name: key, ax: AX[key] ?? 0.5, face: 1 })
 
-// Pixel runs merged into rectangles, the palette reduced to the `K` most used colours (the nearest merged into them).
-const hex3 = (h: string): number[] => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16))
-const d2 = (a: string, b: string): number => {
-  const x = hex3(a)
-  const y = hex3(b)
-  return ((x[0] ?? 0) - (y[0] ?? 0)) ** 2 + ((x[1] ?? 0) - (y[1] ?? 0)) ** 2 + ((x[2] ?? 0) - (y[2] ?? 0)) ** 2
-}
-const PATHS = new Map<string, string>()
-/** The `<path>`s of a sprite in pixel units (one per colour), rectangles merged, at most `K` colours. */
-export const rectPaths = (sp: Sprite, K: number): string => {
-  const key = `${sp.rows.length}|${sp.rows[0]?.length}|${hash(sp.rows.join(''))}|${hash(JSON.stringify(sp.pal))}|${K}`
-  const hit = PATHS.get(key)
-  if (hit !== undefined) return hit
-  const count = new Map<string, number>()
-  for (const r of sp.rows) for (const ch of r) { const c = ch === '.' ? undefined : sp.pal[ch]; if (c) count.set(c, (count.get(c) ?? 0) + 1) }
-  let cols = [...count.keys()]
-  const map = new Map<string, string>(cols.map(c => [c, c]))
-  while (cols.length > K) {
-    cols.sort((a, b) => (count.get(a) ?? 0) - (count.get(b) ?? 0))
-    const a = cols[0] as string
-    let best = cols[1] as string
-    let bd = Infinity
-    for (const b of cols.slice(1)) { const d = d2(a, b); if (d < bd) { bd = d; best = b } }
-    count.set(best, (count.get(best) ?? 0) + (count.get(a) ?? 0))
-    for (const [k, v] of map) if (v === a) map.set(k, best)
-    cols = cols.slice(1)
-  }
-  const h = sp.rows.length
-  const w = sp.rows[0]?.length ?? 0
-  const grid = sp.rows.map(r => [...r].map(ch => { const c = ch === '.' ? undefined : sp.pal[ch]; return c ? (map.get(c) ?? c) : undefined }))
-  const used = grid.map(r => r.map(() => false))
-  const by = new Map<string, string>()
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const c = grid[y]?.[x]
-      if (!c || used[y]?.[x]) continue
-      let rw = 1
-      while (x + rw < w && grid[y]?.[x + rw] === c && !used[y]?.[x + rw]) rw++
-      let rh = 1
-      for (; y + rh < h; rh++) {
-        let ok = true
-        for (let i = 0; i < rw; i++) if (grid[y + rh]?.[x + i] !== c || used[y + rh]?.[x + i]) { ok = false; break }
-        if (!ok) break
-      }
-      for (let j = 0; j < rh; j++) for (let i = 0; i < rw; i++) (used[y + j] as boolean[])[x + i] = true
-      by.set(c, `${by.get(c) ?? ''}M${x} ${y}h${rw}v${rh}h-${rw}z`)
-    }
-  }
-  const out = [...by.entries()].map(([c, d]) => `<path fill="${c}" d="${d}"/>`).join('')
-  PATHS.set(key, out)
-  return out
-}
+// Pixel runs merged into rectangles, the palette reduced to the `K` most used colours: the shared stage engine's cutter.
+export { rectPaths }
 
 // ---------------------------------------------------------------- shared CSS (once per Svg that carries a piece of the fight)
 export const FIGHT_CSS = `.dl-c{transform-box:fill-box;transform-origin:50% 50%}.dl-still{display:none}

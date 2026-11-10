@@ -27,6 +27,38 @@ export const BLANK_CRED: Cred = { xp: 0, jobs: 0, longJobs: 0, agents: 0, crewJo
 export const foundOf = (c: Cred, id: string): boolean => (c.found ?? []).includes(id)
 /** Marks a skin's secret as found (and pays the finder once). */
 export const withFound = (c: Cred, id: string, xp = 50): Cred => (foundOf(c, id) ? c : { ...c, found: [...(c.found ?? []), id], xp: c.xp + xp })
+/**
+ * The hidden-skin secrets that once shared the one `samurai` flag. Each now has its own `found` id, so finding one never
+ * lights another skin's secret badge or button. A stored `samurai: true` (the legacy shared flag) stands for all of them:
+ * `cleanCred` adds every one, so nobody loses what they found. (SOLID GOLD and NOIR always had their own.)
+ */
+export const SECRET_IDS = ['samurai', 'red-john', 'heisenberg', 'gene', 'capricorn', 'invincible2'] as const
+/** Any of the hidden-skin secrets found: what the shared SAMURAI badge (and a skin with no secret of its own) counts. */
+export const anySecret = (c: Cred): boolean => c.samurai || SECRET_IDS.some(id => foundOf(c, id))
+/** Skin id or cast -> the one secret its card's last badge stands for. A skin not listed (Caliper) counts any secret. */
+export const SECRET_OF: Record<string, (typeof SECRET_IDS)[number]> = {
+  runners: 'samurai', netrun: 'samurai', corpo: 'samurai', samurai: 'samurai', 'cyberpunk-2077': 'samurai', arasaka: 'samurai', 'lucy-edgerunners': 'samurai',
+  edgerunners2: 'capricorn', 'edgerunners-2': 'capricorn', capricorn: 'capricorn',
+  invincible: 'invincible2', invincible2: 'invincible2',
+  mentalist: 'red-john', redjohn: 'red-john', 'red-john': 'red-john',
+  breakingbad: 'heisenberg', 'breaking-bad': 'heisenberg', heisenberg: 'heisenberg',
+  bettercallsaul: 'gene', 'better-call-saul': 'gene', gene: 'gene',
+}
+/** Has the secret that `key`'s (skin id or cast) card stands for been found? */
+export const secretFoundFor = (c: Cred, key: string | undefined): boolean => {
+  const id = key ? SECRET_OF[key] : undefined
+  return id ? foundOf(c, id) : anySecret(c)
+}
+/**
+ * The cred as one skin's card sees it: its last badge (id 'samurai', named per skin) earned only when THAT skin's own
+ * secret is found. Pure: the store keeps the whole truth; only the drawing and the skin's buttons read this view.
+ */
+export const credFor = (c: Cred, key: string | undefined): Cred => {
+  const has = secretFoundFor(c, key)
+  const hasBadge = c.badges.includes(SECRET_BADGE)
+  if (has === c.samurai && has === hasBadge) return c
+  return { ...c, samurai: has, badges: has ? (hasBadge ? c.badges : [...c.badges, SECRET_BADGE]) : c.badges.filter(b => b !== SECRET_BADGE) }
+}
 /** Three jobs finished inside one hour (the news cycle), from the last three finish times. */
 export const lateEditionOf = (c: Cred): number => {
   const t = (c.jobTimes ?? []).slice(-3)
@@ -60,7 +92,7 @@ export const BADGES: Badge[] = [
   { id: 'crewboss', name: 'FIXER', icon: '⚑', how: 'Run a gig with 5+ sub-agents', progress: c => share(c.crewJobs, 1) },
   { id: 'chromed', name: 'CYBERPSYCHO', icon: '⚙', how: 'Push the context past 90%', progress: c => (c.chromed ? 1 : 0) },
   { id: 'owl', name: 'GRAVEYARD SHIFT', icon: '☾', how: 'Finish a gig between midnight and 5 am', progress: c => share(c.nightJobs, 1) },
-  { id: 'samurai', name: 'SAMURAI', icon: '♪', how: 'Keep exploring.', progress: c => (c.samurai ? 1 : 0) },
+  { id: 'samurai', name: 'SAMURAI', icon: '♪', how: 'Keep exploring.', progress: c => (anySecret(c) ? 1 : 0) },
 ]
 
 // The badges a cred has just earned, and the cred with them recorded.
@@ -95,7 +127,8 @@ export const cleanCred = (v: unknown): Cred => {
     chromed: r.chromed === true,
     samurai: r.samurai === true,
     badges: Array.isArray(r.badges) ? [...new Set(r.badges.filter((b): b is string => typeof b === 'string' && BADGES.some(x => x.id === b)))] : [],
-    ...(Array.isArray(r.found) ? { found: [...new Set(r.found.filter((f): f is string => typeof f === 'string' && /^[a-z0-9-]{1,24}$/.test(f)))].slice(0, 20) } : {}),
+    // The legacy shared flag stands for every secret it once covered (idempotent: a Set, the same ids each time).
+    ...(Array.isArray(r.found) || r.samurai === true ? { found: [...new Set([...(Array.isArray(r.found) ? r.found : []).filter((f): f is string => typeof f === 'string' && /^[a-z0-9-]{1,24}$/.test(f)), ...(r.samurai === true ? SECRET_IDS : [])])].slice(0, 20) } : {}),
     ...(Array.isArray(r.jobTimes) ? { jobTimes: r.jobTimes.filter((t): t is number => typeof t === 'number' && Number.isFinite(t) && t > 0).slice(-3) } : {}),
     ...(Array.isArray(r.skinBadges) ? { skinBadges: [...new Set(r.skinBadges.filter((b): b is string => typeof b === 'string' && SKIN_BADGES.some(x => x.id === b)))] } : {}),
   }

@@ -20,6 +20,7 @@ import { D_TRACE, K, KC, M, cham, clamp, delayer, er2W, mw, pixels, r1, streaks 
 import { ROAM_WINDOW_MS, unit } from './roamer'
 import type { RoamPlan, RoamTiming } from './roamer'
 import { pin } from './smooth'
+import { perWindow } from './stage/director'
 
 export type Er2ModeName = 'd' | 'capri'
 /** The skin's mode: when it last switched (ms, 0 after a restart) and whether the context rule did it. */
@@ -47,8 +48,8 @@ export const DUET_DUR: Record<DuetKind, number> = { ride: 5000, link: 4000, poss
 export const RIDE_LINES = ['relax, choom.', 'eyes up, D.', 'you need me.']
 export const DUET_SEED = 'er2duet'
 
-/** The chance of a duet in a free 30 s window: a little at the start, more from 85%, much more from 95%. */
-export const duetChance = (ctxPct: number): number => (ctxPct >= 95 ? 0.6 : ctxPct >= 85 ? 0.2 : 0.12)
+/** The chance of a duet in a free 30 s window: rare at the start (one free window in 25), more from 85%, much more from 95%. */
+export const duetChance = (ctxPct: number): number => (ctxPct >= 95 ? perWindow(1.25) : ctxPct >= 85 ? perWindow(4) : perWindow(12.5))
 
 /**
  * What the pair does in the window containing `at`. Deterministic in (seed, window, context).

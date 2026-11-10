@@ -372,7 +372,7 @@ const hackPlanAt = (t: number, ctx: number, sec = false) => {
   return hackPlan(`${r.seed}|hack`, t, ctx, sec, roamPlan(r.seed, t, roamOptsOf(r, ctx)))
 }
 /** A moment when the first line for `surface` (on `card`, for a pane) is mid-draw; with `none`, a moment with no event and no roamer. */
-const hackAt = (ctx: number, o: { surface?: HackSurface; card?: HackCard; sec?: boolean; none?: boolean; from?: number } = {}): number => {
+const hackAt = (ctx: number, o: { surface?: HackSurface; card?: HackCard; sec?: boolean; none?: boolean; from?: number; alone?: boolean } = {}): number => {
   const from = o.from ?? BASE
   for (let t = from; t < from + 86_400_000 * 3; t += 30_000) {
     const p = hackPlanAt(t, ctx, o.sec)
@@ -384,12 +384,15 @@ const hackAt = (ctx: number, o: { surface?: HackSurface; card?: HackCard; sec?: 
       continue
     }
     if (!p.on || (o.surface === 'pane' && p.paneCard !== (o.card ?? 'cred'))) continue
+    // `alone`: an event while she is not out (what the lines alone add, not a walk's sprite on top)
+    if (o.alone && roamPlan(roamerOf(Boolean(o.sec)).seed, p.startAt, roamOptsOf(roamerOf(Boolean(o.sec)), ctx)).on) continue
     const l = p.lines.find(x => x.on === (o.surface ?? 'band'))
     if (l) return p.startAt + Math.round(l.t * 1000) + 500
   }
   throw new Error('no hack event')
 }
-const hackArgs = (at: number, W: number, H: number, surface: HackSurface, card: HackCard, ctx = 96, sec = false) => ({ W, H, surface, card, at, ctxPct: ctx, roam: roamPlan(roamerOf(sec).seed, at, roamOptsOf(roamerOf(sec), ctx)) })
+// As overlay.ts calls it: her plan for this window, and for the windows a draw schedules ahead.
+const hackArgs = (at: number, W: number, H: number, surface: HackSurface, card: HackCard, ctx = 96, sec = false) => ({ W, H, surface, card, at, ctxPct: ctx, roam: roamPlan(roamerOf(sec).seed, at, roamOptsOf(roamerOf(sec), ctx)), roamFor: (t: number) => roamPlan(roamerOf(sec).seed, t, roamOptsOf(roamerOf(sec), ctx)) })
 const spawnAgent = ($: Engine, i: number) => $.agent.spawn({ tool_use_id: `t${i}`, prompt: 'p', description: `Engineer: piece ${i}`, subagentType: 'general-purpose', provider: 'engine', parentModel: 'x', background: false, fork: false } as never)
 
 test('hack lines: the plan is a pure function of the seed and the clock, and a redraw resumes the same lines', () => {
@@ -397,7 +400,7 @@ test('hack lines: the plan is a pure function of the seed and the clock, and a r
   expect(hackPlanAt(BASE + 7000, 96)).toEqual(p) // anywhere in the 30 s window
   expect(hackPlanAt(BASE, 96)).toEqual(p)
   expect(p.on).toBe(true)
-  expect(p.startAt).toBe(1792490406936)
+  expect(p.startAt).toBe(1792490406048) // golden: the calm D-mode odds (her roam plan for this window changed)
   expect(p.lines.map(l => `${l.on}@${l.t}`)).toEqual(['band@0', 'pane@0.38', 'band@0.76', 'band@1.14', 'band@1.51'])
   expect(p.burst).toBe(true)
   expect(p.paneCard).toBe('log')
@@ -528,17 +531,18 @@ test('hack lines: never while the celebration draws', () => {
 })
 
 test('hack lines: rare at a normal context, more often from 85%, most at 95%, in both skins', () => {
+  // Events per hour, averaged over a day (a single hour is too noisy at the calm D-mode rate).
   const hour = (ctx: number, sec: boolean) => {
     let events = 0
     let lines = 0
-    for (let t = BASE; t < BASE + 3_600_000; t += 30_000) {
+    for (let t = BASE; t < BASE + 86_400_000; t += 30_000) {
       const p = hackPlanAt(t, ctx, sec)
       if (p.on) {
         events++
         lines += p.lines.length
       }
     }
-    return { events, lines }
+    return { events: events / 24, lines: lines / 24 }
   }
   const n30 = hour(30, false)
   const n88 = hour(88, false)
@@ -546,10 +550,11 @@ test('hack lines: rare at a normal context, more often from 85%, most at 95%, in
   expect(n96.events).toBeGreaterThan(n30.events)
   expect(n96.events).toBeGreaterThan(n88.events)
   expect(n88.events).toBeGreaterThan(n30.events)
-  expect(n30.events).toBeGreaterThanOrEqual(40) // about one a minute at a normal context
-  expect(n30.events).toBeLessThanOrEqual(75)
-  expect(n88.events).toBeGreaterThanOrEqual(70)
-  expect(n96.events).toBeGreaterThanOrEqual(95) // nearly every window
+  // D mode is calm: about one window in ten at a normal context (was about one a minute), escalating at 85% and 95%.
+  expect(n30.events).toBeGreaterThanOrEqual(6)
+  expect(n30.events).toBeLessThanOrEqual(20)
+  expect(n88.events).toBeGreaterThanOrEqual(35)
+  expect(n96.events).toBeGreaterThanOrEqual(70) // most windows
   expect(hour(96, true).events).toBeGreaterThan(hour(30, true).events)
   expect(hour(30, true).events).toBeGreaterThan(hour(30, false).events) // she owns the secret skin
   // 2 to 5 lines; a burst of five from 95%.
@@ -651,7 +656,7 @@ test('hack lines: a draw (the live event and up to three ahead) is under 16 kB o
 
 for (const ctx of [30, 96]) {
   test(`hack lines: add little at ${ctx}%: the band and every pane Svg stay well under the limit, the pane total under the budget (4 agents)`, async ($, on) => {
-    const t = hackAt(ctx, { surface: 'pane', card: 'cred' })
+    const t = hackAt(ctx, { surface: 'pane', card: 'cred', alone: true })
     base(on, t, { ctx })
     await start($, 'edgerunners-2')
     await job($)

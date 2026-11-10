@@ -182,7 +182,7 @@ test('SOLID GOLD: `solidgold` typed in The Boys puts it on with its own flag and
   expect(pn).toContain('GOLD RECORD')
   expect(pn).toContain('>SOLID GOLD<')
   expect(pn).not.toContain('>THIS MEANS NOIR<')
-  // The shared flag is untouched: Invincible's era button (shown only once `samurai` is set) stays hidden.
+  // Invincible's era button (shown only once its own NEW SUIT secret is found) stays hidden.
   await $.command.run({ command: 'skin', args: 'invincible' } as never)
   const inv = await $.ui.mount({ plugin: 'crab-progress', surface: 'desktop', component: 'Pane', requestId: 'crab-agents', props: pane })
   const labels = (await inv.findAll({ type: 'Button' })).map(b => String(b.props.label))

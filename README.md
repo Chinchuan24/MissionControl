@@ -9,6 +9,8 @@
   who's working, on what, how far along, and what it costs.
 </p>
 
+<p align="center">🎤 <b>Presented at Claude Code Meetup #13</b></p>
+
 <p align="center">
   <a href="#-choose-your-edition">Download</a> ·
   <a href="#-what-mission-control-does">Features</a> ·
@@ -388,7 +390,7 @@ The Saul words also work on GENE.
 
 **Rare roamers** (one 6-minute slot, about two in three slots, never inside another act): Hughie (`…sorry, wrong room.`), Starlight, Kimiko (`[signs: hi]`: she signs, in closed captions), Frenchie, Black Noir (one time in five he carries a `1979` tape: the clue), A-Train, Terror, the fish school, Timothy, Ambrosius, Buster Beaver, the VNN blimp, and Butcher's `Oi.` (at most once per 48 min).
 
-**THE AMBUSH** (12 s, band and CRISIS DESK, every 15–20 min while a job works; three choreographies that take turns): A · THE LANDING, B · THE DROP (Noir first), C · THE SNATCH (A-Train steals your real progress bar, then brings it back: `my bad`).
+**THE AMBUSH** (12 s, band and CRISIS DESK, about every 30–45 min while a job works; three choreographies that take turns): A · THE LANDING, B · THE DROP (Noir first), C · THE SNATCH (A-Train steals your real progress bar, then brings it back: `my bad`).
 
 **Replays:** `/missioncontrol play` lists all 92 names, e.g. `ambush`, `ambush-c`, `scorch`, `sweep`, `blackout`, `shredder`, `teaser`, `kimiko`, `atrain`, `oi`, `whale`, `premiere`.
 

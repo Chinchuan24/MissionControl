@@ -131,16 +131,27 @@ test('roamers: rare. At most one per 6-min slot, about 65% of slots, never close
   for (const r of list) for (const p of dayPlan(r.startAt)) expect(r.startAt >= p.endAt || r.endAt <= p.startAt, `${r.kind} vs ${p.kind}`).toBe(true)
 })
 
-test('THE AMBUSH: every 15-20 min while a job works, 12 s, the three choreographies take turns; never with no job', () => {
+test('THE AMBUSH: rare (about every 30-45 min) while a job works, 12 s, the three choreographies take turns; never with no job', () => {
+  let sum = 0
+  let n0 = 0
   for (let s = 5000; s < 5400; s++) {
     const a = ambushOfSlot(s)
     const b = ambushOfSlot(s + 1)
     const gap = b.startAt - a.startAt
-    expect(gap).toBeGreaterThanOrEqual(15 * 60_000)
-    expect(gap).toBeLessThanOrEqual(20 * 60_000)
+    expect(gap).toBeGreaterThanOrEqual(20 * 60_000) // never two inside 20 min (was 15-20 min apart every time)
+    expect(gap).toBeLessThanOrEqual(55 * 60_000)
+    sum += gap
+    n0++
     expect(a.endAt - a.startAt).toBe(12_000)
     expect(a.kind).not.toBe(b.kind)
   }
+  // On average one every 30-45 min: a working day of 8 h sees about 13, not 25-30.
+  expect(sum / n0).toBeGreaterThanOrEqual(30 * 60_000)
+  expect(sum / n0).toBeLessThanOrEqual(45 * 60_000)
+  let day = 0
+  for (let t = T0; t < T0 + 8 * 3_600_000; t += 6000) if (ambushAt(t)?.startAt !== undefined && ambushAt(t - 6000)?.startAt !== ambushAt(t)?.startAt) day++
+  expect(day).toBeGreaterThanOrEqual(8)
+  expect(day).toBeLessThanOrEqual(17)
   expect(AMBUSH_KINDS).toEqual(['ambush-a', 'ambush-b', 'ambush-c'])
   fresh()
   let n = 0
@@ -151,12 +162,12 @@ test('THE AMBUSH: every 15-20 min while a job works, 12 s, the three choreograph
     expect(stageAt(a.startAt + 6000, { mode: 'brand', working: true })?.kind).toBe(a.kind)
     expect(stageAt(a.startAt + 6000, { mode: 'brand', working: false })?.src).not.toBe('ambush')
   }
-  expect(n).toBeGreaterThan(90)
+  expect(n).toBeGreaterThan(90)  // of 100 slots (a few give way to a set piece)
   // C steals the real progress bar (the slot goes empty with a dashed outline), on the band.
   const c = actOn('ambush-c', { W: 900, H: 148, m: 'brand', at: T0, on: 'band' })
   expect(c).toContain('stroke-dasharray="3 2"')
   expect(c).toContain('my bad')
-  expect(AMB_SLOT_MS).toBe(1_050_000)
+  expect(AMB_SLOT_MS).toBe(2_250_000) // 37.5 min, the director's `rare` cadence
 })
 
 test('replays: 90+ unique names, every one resolves to an act that draws (or a mode / a line)', () => {

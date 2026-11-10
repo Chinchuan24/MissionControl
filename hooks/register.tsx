@@ -9,6 +9,9 @@ import { TYGER_RE } from './mentalist'
 import { BB_REVEAL_MS, BB_RIGHT, BB_SKIN_WORDS, BB_TOOLS, SAY_MY_NAME_RE } from './breakingbad'
 import { bbRightLine } from './breakingbad-cards'
 import { THEMES, themeKeyOf } from './themes'
+import { SWITCH_CARDS, SWITCH_MS, into as switchInto, sizeOf as svgSizeOf, skinSwitch } from './stage/wipe'
+import { playsOf, runPlay } from './stage/replay'
+import type { SwitchLook } from './stage/wipe'
 import { ramStatus, settingsTagline, settingsTones } from './settingslook'
 import type { SettingsSection } from './settingslook'
 import { GROUP_TAGLINE, GROUP_TITLE, SKIN_GROUPS, groupOf, skinTagline, skinsSummary } from './skinslook'
@@ -34,7 +37,7 @@ import { extrasInto, glitchPanel, hackInto, overlayInto, roamOnBand, roamOverlay
 import type { ThemeCtx, ThemeEggs } from './themes'
 import { canNudge, nudge, pickQuiet, prBadge, quietOf, rememberTask, repoAndBranch, rescueText, retryOnHaiku, whatIf, whatIfText, whatIfTip } from './coach'
 import { flatSmiley, serifClip, serifW } from './mentalist-cards'
-import { BEATS_KEPT, BLANK_CRED, BOOT_H, award, withFound, rockerRankOf, bdHeight, bootStrip, braindanceCard, cleanCred, credCard, credHeight, levelOf, rankOf, shiftPick, stepPick } from './extras'
+import { BADGES, BEATS_KEPT, BLANK_CRED, BOOT_H, SECRET_BADGE, award, credFor, foundOf, secretFoundFor, withFound, rockerRankOf, bdHeight, bootStrip, braindanceCard, cleanCred, credCard, credHeight, levelOf, rankOf, shiftPick, stepPick } from './extras'
 import type { Beat, Cred } from './extras'
 import { ONESHOT_KEY, ULTRA_BY_KEY, ULTRA_BY_OPTIONS, ULTRA_KEY, ULTRA_TASK_HINT, cleanUltraBy, managerPicks, parseUltraBy, ultraBySaid, ultraBySection, ultraPlanToast, type UltraBy, pillChip, oneShotChipWord, cleanOneShot, cleanUltraRules, isUltraAgent, matchUltra, nextOneShot, oneShotChip, oneShotSaid, oneShotSection, oneShotWord, parseOneShot, resolveEffort, ultraCommand, ultraLine, withUltraBrief } from './crewcontrol'
 import type { OneShot } from './crewcontrol'
@@ -2140,6 +2143,51 @@ const activeFx = (): { kind: string; at: number } | undefined => (isInv() ? INV_
 // When the phrase turned Breaking Bad into Heisenberg (0: it did not): the band's "You're goddamn right!" is drawn from it for
 // BB_REVEAL_MS, pinned to this time, so a redraw keeps it and it ends on its own. Also kept in the store as bbRevealAt.
 let BB_REVEAL_AT = 0
+// The generic skin switch (stage/wipe.ts): set when the person wears a skin from the picker or `/skin`, pinned to that moment. The
+// band and the top pane cards play a short wipe from the old skin's ground to the new one (well under a second; a 2 px rule under
+// reduced motion). Typed unlocks with a transition of their own (CAPRI, SOLID GOLD, NOIR, the Heisenberg reveal, the era swap) never
+// set it.
+let SKIN_SWAP: { at: number; from: SwitchLook; to: SwitchLook } | undefined
+const switchLookOf = (k: Skin): SwitchLook => ({ bg: k.backdrop.fill || k.colors.tile, accent: k.colors.accent, ink: k.colors.text })
+/** The band takes the switch only with room for it (the band's 70 k motion budget, less the wipe's 8 k) and never over another act. */
+const SWITCH_BAND_ROOM = 60_000
+const switchLive = (at: number): { at: number; from: SwitchLook; to: SwitchLook } | undefined => (SKIN_SWAP && at >= SKIN_SWAP.at - 1000 && at < SKIN_SWAP.at + SWITCH_MS + 600 ? SKIN_SWAP : undefined)
+/** The switch over a drawn band source (its viewBox gives the size). */
+const switchBand = (src: string, at: number): string => {
+  const sw = switchLive(at)
+  const box = sw && src.length <= SWITCH_BAND_ROOM && !src.includes('<!--dl-->') ? svgSizeOf(src) : undefined
+  return sw && box ? switchInto(src, skinSwitch({ W: box.W, H: box.H, at: sw.at, surface: 'band', from: sw.from, to: sw.to })) : src
+}
+/** The switch over the pane's first cards (chips with a fixed width are left alone), cascading down. `room`: false while the theme keeps
+ *  a fight's reserve (a job works), so the reserve stays free. */
+const switchTree = <T,>(tree: T, at: number, room: boolean): T => {
+  const sw = switchLive(at)
+  // Never over a fight's reserved room or an act already drawn (one big act at a time).
+  if (!sw || !room || JSON.stringify(tree).includes('<!--dl-->')) return tree
+  let i = 0
+  const walk = (x: unknown): unknown => {
+    if (Array.isArray(x)) return x.map(walk)
+    if (!x || typeof x !== 'object') return x
+    const n = x as { type?: unknown; props?: Record<string, unknown>; children?: unknown }
+    if (n.type === 'Svg' && typeof n.props?.source === 'string') {
+      if (n.props.width !== undefined || i >= SWITCH_CARDS) return n
+      const box = svgSizeOf(n.props.source)
+      if (!box) return n
+      const idx = i++
+      return { ...n, props: { ...n.props, source: switchInto(n.props.source, skinSwitch({ W: box.W, H: box.H, at: sw.at, surface: 'pane', from: sw.from, to: sw.to, i: idx })) } }
+    }
+    return Array.isArray(n.children) ? { ...n, children: n.children.map(walk) } : n
+  }
+  return walk(tree) as T
+}
+/** Starts the switch from `from` (the skin worn a moment ago) to the one worn now, and redraws both panels. */
+async function noteSwitch($: EngineInterface, from: Skin): Promise<void> {
+  if (from.id === SKIN.id && from.cast === SKIN.cast) return
+  const at = await $.clock.now().catch(() => Date.now())
+  SKIN_SWAP = { at, from: switchLookOf(from), to: switchLookOf(SKIN) }
+  await update($, bandTick, () => at)
+  await update($, paneTick, () => at)
+}
 // Better Call Saul / GENE: the last trigger word typed (a drawing for a few seconds), when Chuck last "unplugged" (the dim), the
 // toasts' last times and the run of failed commands behind them. All in memory; the drawings are pinned to these times.
 let BCS_FX: Fx | undefined
@@ -2390,14 +2438,21 @@ async function bumpCredNow($: EngineInterface, change: (c: Cred) => Cred, quiet:
   if (!eggOf()) return false
   const th = themeOf()
   if (now > was) $.ui.toast(th ? th.cred.toast(now) : `${eggOf() === 'samurai' ? 'ROCKERBOY CRED' : 'STREET CRED'} ↑ ${now} · ${eggOf() === 'samurai' ? rockerRankOf(now) : rankOf(now)}`)
+  // The secret badge is per skin (credFor): cheered when THIS skin's own secret is newly found, never for another skin's.
+  const secretNow = secretFoundFor(next, SKIN.cast) && !secretFoundFor(before, SKIN.cast)
   for (const b0 of fresh) {
+    if (b0.id === SECRET_BADGE && !secretNow) continue
     const b = th ? (th.cred.badges.find(x => x.id === b0.id) ?? b0) : b0
     $.ui.toast(`${b.icon} Badge unlocked: ${b.name}`)
+  }
+  if (secretNow && !fresh.some(b => b.id === SECRET_BADGE)) {
+    const b = (th ? th.cred.badges : BADGES).find(x => x.id === SECRET_BADGE)
+    if (b) $.ui.toast(`${b.icon} Badge unlocked: ${b.name}`)
   }
   // A badge only one skin lists (The Boys' LATE EDITION, SOLID GOLD) is earned anywhere and announced only there.
   const ownFresh = freshSkin.filter(b => th?.cred.badges.some(x => x.id === b.id))
   for (const b of ownFresh) $.ui.toast(`${b.icon} Badge unlocked: ${b.name}`)
-  const isCheer = now > was || fresh.length > 0 || ownFresh.length > 0
+  const isCheer = now > was || fresh.some(b => b.id !== SECRET_BADGE) || secretNow || ownFresh.length > 0
   if (!quiet && isCheer) void play($, cyberOf() ? `${ADDON}/assets/levelup.wav` : 'assets/done.wav')
   return isCheer
 }
@@ -2515,9 +2570,9 @@ async function foundSecret($: EngineInterface, k: Skin): Promise<void> {
   const themed = themeKeyOf(k.cast)
   $.ui.toast(themed ? THEMES[themed].greeting : GREETING.samurai)
   if (!themed) void play($, `${ADDON}/assets/done-samurai.wav`)
-  // Quiet: the badge's chime would cut the band's own. SOLID GOLD keeps its own flag: the shared one is never touched.
-  if (k.id === 'solidgold' || k.id === 'noir') await bumpCred($, c => withFound(c, k.id), true).catch(() => false)
-  else await bumpCred($, c => (c.samurai ? c : { ...c, samurai: true, xp: c.xp + 50 }), true).catch(() => false)
+  // Quiet: the badge's chime would cut the band's own. Each hidden skin sets only its OWN flag (its id): finding one never
+  // lights another skin's secret badge or button (the shared `samurai` flag is legacy, migrated by cleanCred).
+  await bumpCred($, c => withFound(c, k.id), true).catch(() => false)
 }
 
 // The Boys' mode: ON BRAND or OFF BOOK. Writes the state, redraws in the mode's palette and starts the swap (pinned to `since`).
@@ -2597,7 +2652,7 @@ async function boysReplay($: EngineInterface, name: string): Promise<string> {
   const r = TB_REPLAYS.find(x => x.name === name)
   if (!r) {
     // The curtain call is NOIR's own; the count matches the names listed.
-    const names = TB_REPLAYS.filter(x => SKIN.id === 'noir' || x.name !== 'curtain').map(x => x.name)
+    const names = [...TB_REPLAYS.filter(x => SKIN.id === 'noir' || x.name !== 'curtain').map(x => x.name), ...playsOf(SKIN.id).map(p => p.name)]
     return `Play which? The Boys has ${names.length}: ${names.join(', ')}`
   }
   const at = await $.clock.now().catch(() => Date.now())
@@ -2696,7 +2751,7 @@ async function setEr2Mode($: EngineInterface, mode: Er2ModeName, auto: boolean):
   await update($, er2Mode, () => er2Pack(ER2))
   if (SKIN.id === 'edgerunners-2') applySkin(EDGERUNNERS2_SKIN)
   if (mode === 'capri') {
-    if (auto) await bumpCred($, c => (c.samurai ? c : { ...c, samurai: true, xp: c.xp + 50 }), true).catch(() => false)
+    if (auto) await bumpCred($, c => withFound(c, 'capricorn'), true).catch(() => false)
     else await foundSecret($, CAPRICORN_SKIN).catch(() => undefined)
   }
   return true
@@ -2707,7 +2762,7 @@ async function setEr2Mode($: EngineInterface, mode: Er2ModeName, auto: boolean):
 const INV_REPLAYS = ['fight', 'showdown', 'think', 'eve', 'oliver', 'cecil', 'newsuit', 'classic'] as const
 async function invReplay($: EngineInterface, egg: string): Promise<string> {
   if (!isInv()) return 'Wear the Invincible skin first.'
-  if (!(INV_REPLAYS as readonly string[]).includes(egg)) return `Play which? ${INV_REPLAYS.join(', ')}`
+  if (!(INV_REPLAYS as readonly string[]).includes(egg)) return `Play which? ${[...INV_REPLAYS, ...playsOf(SKIN.id).map(p => p.name)].join(', ')}`
   const at = await $.clock.now().catch(() => Date.now())
   if (egg === 'newsuit' || egg === 'classic') {
     if (!(await setInvEra($, egg === 'newsuit' ? 2 : 1).catch(() => false))) return `Already in the ${egg === 'newsuit' ? 'new' : 'classic'} suit.`
@@ -2726,7 +2781,7 @@ async function setInvEra($: EngineInterface, era: 1 | 2): Promise<boolean> {
   await $.store.set('invEra', era).catch(() => undefined)
   await update($, invEra, () => invPack(INV_ERA))
   if (SKIN.id === 'invincible') applySkin(SKINS.get('invincible') ?? INVINCIBLE_SKIN)
-  if (era === 2) await bumpCred($, c => (c.samurai ? c : { ...c, samurai: true, xp: c.xp + 50 }), true).catch(() => false)
+  if (era === 2) await bumpCred($, c => withFound(c, 'invincible2'), true).catch(() => false)
   return true
 }
 
@@ -7545,10 +7600,23 @@ export const register: Register = (on, options) => {
       await setFlag($, 'boysSpoilers', spoil[1].toLowerCase() === 'on')
       return { text: BOYS_SPOILERS ? 'Spoilers on: The Boys’ finale eggs can play (S5).' : 'Spoilers off: no finale or death eggs.' }
     }
-    // Unlisted on purpose: `/missioncontrol play <egg>` replays one of Invincible's eggs now (no help text names it).
+    // Unlisted on purpose: `/missioncontrol play <name>` replays one of the worn skin's acts now (no help text names it). The shared
+    // registry first (stage/replay.ts: every skin's fights), then The Boys' and Invincible's own lists.
     const replay = /^play(?:\s+(\S+))?\s*$/i.exec((e.args ?? '').trim())
-    if (replay && isBoys()) return { text: await boysReplay($, (replay[1] ?? '').toLowerCase()) }
-    if (replay) return { text: await invReplay($, (replay[1] ?? '').toLowerCase()) }
+    if (replay) {
+      const name = (replay[1] ?? '').toLowerCase()
+      const at = await $.clock.now().catch(() => Date.now())
+      const shared = name ? await runPlay(SKIN.id, name, at).catch(() => undefined) : undefined
+      if (shared !== undefined) {
+        await update($, bandTick, () => at)
+        await update($, paneTick, () => at)
+        return { text: shared }
+      }
+      if (isBoys()) return { text: await boysReplay($, name) }
+      const own = playsOf(SKIN.id)
+      if (own.length && !isInv()) return { text: `Play which? ${SKIN.name} has ${own.length}: ${own.map(p => p.name).join(', ')}` }
+      return { text: await invReplay($, name) }
+    }
     // Billing: how to pay with API credits instead of the plan, in four steps (nothing is edited).
     if (/^billing$/i.test((e.args ?? '').trim())) {
       await refreshBilling($).catch(() => undefined)
@@ -8252,7 +8320,8 @@ export const register: Register = (on, options) => {
     // Only the cyberpunk skins draw these: elsewhere each tool call's replay beat
     // would draw the pane again for nothing.
     const hasEggs = Boolean(eggOf())
-    const streetCred = hasEggs ? await read($, cred) : BLANK_CRED
+    // The skin's own view: its secret badge only when its own secret is found (credFor).
+    const streetCred = hasEggs ? credFor(await read($, cred), SKIN.cast) : BLANK_CRED
     const beats = hasEggs ? await read($, timeline) : []
     const pick = hasEggs ? await read($, bdPick) : -1
     const report = tokenReport(info, list, boss, tw, clockNow)
@@ -8307,7 +8376,7 @@ export const register: Register = (on, options) => {
     if (isPicture && 'Svg' in ui) {
       const { Svg } = ui
       // Each card keeps its source while it reads the same: no new image, no restart.
-      const keep = <T,>(tree: T): T => steadyTree(modeTree(tree, themeOf(), clockNow, info.contextPct, (boss.celebrateUntil ?? 0) > clockNow), `pane:${e.surface}`, clockNow)
+      const keep = <T,>(tree: T): T => steadyTree(switchTree(modeTree(tree, themeOf(), clockNow, info.contextPct, (boss.celebrateUntil ?? 0) > clockNow), clockNow, !(themeOf()?.paneReserve && (isWorking || boss.isWorking))), `pane:${e.surface}`, clockNow)
       // Drawn wider than the pane's columns suggest, then shrunk to the pane by the app:
       // the cards fill it edge to edge instead of leaving a dark strip at the right.
       const W = Math.max(240, Math.min(1100, Math.round((e.props.bodyColumns || 40) * 10) - 8))
@@ -8411,9 +8480,9 @@ export const register: Register = (on, options) => {
                   source={th ? paneFinish(((src: string) => (th.roamer ? overlayInto(src, th, { at: clockNow, ctxPct: info.contextPct, party: (boss.celebrateUntil ?? 0) > clockNow }) : src))(th.cred.card ? th.cred.card(W, streetCred, SKIN.colors, FONT, cardShape) : credCard(W, streetCred, SKIN.colors, FONT, cardShape, th.cred.title, '', th.cred.ranks, th.cred.words)), th, 'cred', clockNow, info.contextPct, (boss.celebrateUntil ?? 0) > clockNow, boss.isWorking) : credCard(W, streetCred, SKIN.colors, FONT, cardShape, egg === 'samurai' ? 'ROCKERBOY CRED' : 'STREET CRED', 'ストリートクレッド', egg === 'samurai' ? rockerRankOf : rankOf)}
                   alt={`Level ${levelOf(streetCred.xp)} ${(th ? th.cred.ranks : egg === 'samurai' ? rockerRankOf : rankOf)(levelOf(streetCred.xp))}, ${streetCred.xp} XP, ${streetCred.badges.length} badges`}
                 />
-                {th?.era && (streetCred.samurai || th.era === 2) ? <Button key="inv-era" label={th.era === 2 ? '⇄\uFE0E CLASSIC SUIT' : '⇄\uFE0E NEW SUIT'} plain onPress={async () => { await setInvEra($, th.era === 2 ? 1 : 2) }} /> : null}
+                {th?.era && (foundOf(streetCred, 'invincible2') || th.era === 2) ? <Button key="inv-era" label={th.era === 2 ? '⇄\uFE0E CLASSIC SUIT' : '⇄\uFE0E NEW SUIT'} plain onPress={async () => { await setInvEra($, th.era === 2 ? 1 : 2) }} /> : null}
                 {th?.face && SKIN.id === 'caliper' ? <Button key="cal-mode" label={`⇄\uFE0E ${calNext().toUpperCase()}`} plain onPress={async () => { await setCalMode($, calNext()) }} /> : null}
-                {th?.mode && (streetCred.samurai || th.mode === 'capri') ? <Button key="er2-mode" label={th.mode === 'capri' ? '⇄\uFE0E Back to D' : '⇄\uFE0E Let Capri in'} plain onPress={async () => { await setEr2Mode($, th.mode === 'capri' ? 'd' : 'capri', false) }} /> : null}
+                {th?.mode && (foundOf(streetCred, 'capricorn') || th.mode === 'capri') ? <Button key="er2-mode" label={th.mode === 'capri' ? '⇄\uFE0E Back to D' : '⇄\uFE0E Let Capri in'} plain onPress={async () => { await setEr2Mode($, th.mode === 'capri' ? 'd' : 'capri', false) }} /> : null}
               </Box>
             ) : null}
             <Box key="workflow" marginBottom={1}>
@@ -9004,11 +9073,13 @@ export const register: Register = (on, options) => {
     const ui = $.ui.resolve(e)
     const { Box, Text, Button } = ui
     const wear = async (k: Skin) => {
+      const from = SKIN
       applySkin(k)
       await $.store.set('skin', k.id).catch(() => undefined)
       await update($, skin, () => k.id)
       await retitle($)
       await er2ContextRule($, er2Ctx).catch(() => undefined)
+      await noteSwitch($, from).catch(() => undefined)
     }
     const c = SKIN.colors
     const isDark = SKIN.dark
@@ -9634,11 +9705,14 @@ export const register: Register = (on, options) => {
       APP_LIGHT = await readAppLight($)
       await update($, calMode, () => calPack(CAL_MODE, APP_LIGHT))
     }
+    const from = SKIN
     applySkin(worn)
     await $.store.set('skin', worn.id)
     await update($, skin, () => worn.id)
     await retitle($)
     await er2ContextRule($, er2Ctx).catch(() => undefined)
+    // CAPRI's takeover has its own transition; every other `/skin` gets the generic switch.
+    if (!isCapricorn) await noteSwitch($, from).catch(() => undefined)
     if (isCapricorn) {
       if (!(await setEr2Mode($, 'capri', false))) await foundSecret($, CAPRICORN_SKIN).catch(() => undefined)
       return { text: `Skin: ${worn.name} (CAPRI mode).` }
@@ -10092,7 +10166,7 @@ export const register: Register = (on, options) => {
           <Box flexDirection={isRtl() ? 'row-reverse' : 'row'} alignItems="center" gap={1}>
             <Svg source={steady(`band:${e.surface}`, (() => {
               const full = hudBandSvg(Math.round(width / bandScale), hud)
-              return full.length < 120_000 ? full : hudBandSvg(Math.round(width / bandScale), { ...hud, lite: true })
+              return switchBand(full.length < 120_000 ? full : hudBandSvg(Math.round(width / bandScale), { ...hud, lite: true }), bandAt)
             })().replace(/^<svg([^>]*?) width="[^"]*" height="[^"]*"/, `<svg$1 width="${width}" height="${bandH}"`), bandAt)} alt={`${hud.title}: ${hud.status}${hud.activity ? `, ${hud.activity}` : ''}${hud.progress === null ? '' : `, ${Math.round(hud.progress * 100)}%`}, context ${info.contextPct}%${bgCount ? `, ${bgCount} ${tr().bgBand}` : ''}`} />
             <Box flexDirection="column" gap={1} alignItems="center">
               {/* The app draws a Button's children as-is: keep them to a glyph and the count. */}

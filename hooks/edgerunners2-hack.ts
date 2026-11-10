@@ -16,6 +16,7 @@ import { rng } from './edgerunners2'
 import { ROAM_WINDOW_MS } from './roamer'
 import type { RoamPlan } from './roamer'
 import { pin } from './smooth'
+import { perWindow } from './stage/director'
 
 /** One window: the plan is the same for every moment inside it (the roamer's own 30 s). */
 export const HACK_WINDOW_MS = ROAM_WINDOW_MS
@@ -29,13 +30,13 @@ export type HackLine = { /** Seconds after the event starts. */ t: number; on: H
 export type HackPlan = { on: boolean; seed: string; bucket: number; startAt: number; endAt: number; burst: boolean; paneCard: HackCard; lines: HackLine[] }
 
 /**
- * The chance that a 30 s window holds an event. Easy to see at a normal context (0.35 per window; with her own
- * walks and peeks about one event per minute), more often from 85%, nearly always from 95%; her takeover
- * always has one, and a walk, peek or sit makes it likelier.
+ * The chance that a 30 s window holds an event. In D mode rare at a normal context (about one window in twelve; with her
+ * walks and the duets about one Capri event in five windows), more from 85%, most windows from 95%. CAPRI mode (she is in
+ * control) keeps its busier pace. Her takeover always has one, and a walk, peek or sit makes it likelier.
  */
 export const hackChance = (ctxPct: number, sec: boolean, roam: RoamPlan['kind']): number => {
   if (roam === 'takeover') return 1
-  const base = ctxPct >= 95 ? 0.9 : ctxPct >= 85 ? 0.65 : sec ? 0.45 : 0.35
+  const base = sec ? (ctxPct >= 95 ? 0.9 : ctxPct >= 85 ? 0.65 : 0.45) : ctxPct >= 95 ? perWindow(0.8) : ctxPct >= 85 ? perWindow(1.5) : perWindow(6)
   return roam ? Math.min(1, base + 0.3) : base
 }
 
