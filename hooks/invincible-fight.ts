@@ -1,24 +1,39 @@
-// THE FIGHT (Invincible fan homage): Mark vs Omni-Man as a frame-by-frame flipbook, one timeline across the band and the pane.
-// Mark is thrown out of the band's avatar slot, trades blows in the band (5.5 s), and is thrown DOWN into the pane, where the
-// fight goes on over three cards, one act each: COVER STORY "The Catch", THE PAGE "Every Angle", GDA WALL "Think, Mark".
-// Cartoon rules: no red sparks (white / yellow / cyan stars), a 1-frame 35% white flash on the big hits, a 70 ms hit-freeze,
-// the PANEL shakes (1 / 3 / 4 px tiers) and never the sprites, SFX words, 3-5 speed lines and 2 ghost afterimages, a quiet
-// last act, no blood, no gore. Under reduced motion there is no animation: one still "clash" frame.
+// THE FIGHT v2 (Invincible fan homage): Mark vs Omni-Man as a frame-by-frame flipbook on one timeline across the band and the
+// pane, written as BEATS on the shared stage engine (stage/choreo.ts) instead of hand keys. Mark is thrown out of the band's
+// avatar slot, trades blows in the band (5.5 s), and is thrown DOWN toward the viewer into the pane, where the fight goes on
+// over three cards, one act each: COVER STORY "The Catch", GDA WALL "Every Angle", THE PAGE "Think, Mark" (`ACT_OF`).
 //
-// Technique: every pose is cut once per Svg into <defs> (pixel runs merged into rectangles, the palette reduced to K colours) and
-// shown with <use> inside a frame-swap group whose CSS keyframes (steps(1)) toggle its opacity; a separate transform track moves
-// the actor along its path. Every piece runs the SAME duration with its keyframes in percent and one delay, `pin(startAt)`, so a
-// redraw anywhere in the fight resumes it and a draw up to AHEAD_MS before it schedules it (a positive delay).
-/* eslint-disable @typescript-eslint/no-explicit-any */
+// v2, what makes the hits land: a HIT-STOP on every hit (the paths hold 30-100 ms, the shake starts after it), eased moves
+// (an ease-in dash into contact, an ease-out knock-back), anticipation (Omni-Man's backwind before every backhand, a pull-back
+// before Mark's dash), smear frames (Mark's punch smear, Omni-Man's backhand smear), anime impact frames (an ink burst with
+// both fighters as white silhouettes, then inverted), a camera that punches in and pans with the knock-back (the act layer
+// only: the working numbers never move), the panel shake in 1-4 px tiers, dust, debris, a crater and KO stars.
+// The throw toward the viewer: Mark grows S -> M as he leaves the band, then L -> XL as he smashes into COVER STORY.
+// Three versions take turns (`VERSIONS`): the band cut changes, the pane acts are the same fight going on.
+//
+// MARK VS CONQUEST (the new suit only, version 3): the elder warrior's fight shares THE FIGHT's slot (the era-2 director plays
+// them in turns, never both) and its pane reserve (only one fight is ever drawn). Band: he welcomes the fight, catches the
+// punch and SLAMS Mark by the wrist. COVER STORY: Mark swung by the wrist like a club through the blocks, the skid, the goggle
+// wipe. GDA WALL: the comeback (BAM), the flurry against his laugh, the spin and the knock-down, Mark hovering, tired.
+//
+// Cartoon rules: no red in the effects (white / yellow / cyan stars), no blood, no gore, a quiet last act. Under reduced
+// motion there is no animation: one still clash frame per surface.
 import type { Sprite } from './cast'
+import { Camera, SHAKE_CSS } from './stage/camera'
+import { Fight } from './stage/choreo'
+import type { FightLook } from './stage/choreo'
+import { curve } from './stage/ease'
+import * as fx from './stage/fx'
 import { rectPaths } from './stage/frames'
-import { C, COND, PROPS, SP, condW, hash, koStars, pal, pin, r1, speedLines, unit } from './invincible'
+import { Act, r1, r3 } from './stage/timeline'
+import { COND, PROPS, SP, pal, pin } from './invincible'
 import type { Era } from './invincible'
+import * as MS from './invincible-motion-sprites'
 
 export const FIGHT_MS = 18_400
 export const FIGHT_T = FIGHT_MS / 1000
 export const BAND_CUT = 5.5
-/** Where each pane act starts on the timeline (s), and how long it is. The band cut hands Mark down at 4.4 s. */
+/** Where each pane act starts on the timeline (s), and how long it is. The band cut hands Mark down at about 4.3 s. */
 export const ACT_OFF = [4.4, 9.0, 13.8] as const
 export const ACT_LEN = [4.6, 4.8, 4.6] as const
 export const HOLE_END = FIGHT_T + 0.6
@@ -28,359 +43,749 @@ export const HOLE_END = FIGHT_T + 0.6
  * and goes). Tested against the real sizes.
  */
 export const FIGHT_PANE_RESERVE = 100_000
-
-const r3 = (n: number): number => Math.round(n * 1000) / 1000
-const COMBO_NAMES = ['A', 'B', 'C'] as const
+/** The three versions, in the director's turns: `/missioncontrol play <name>` plays one. The band cut is what changes. */
+export const VERSIONS = ['the-catch', 'jet-flick', 'every-angle'] as const
+/** 0-2: THE FIGHT's three band cuts (Omni-Man). 3: MARK VS CONQUEST (the new suit only). */
+export type Version = 0 | 1 | 2 | 3
+export const CONQUEST = 3 as const
+/** The replay name of MARK VS CONQUEST (`/missioncontrol play conquest`). */
+export const CONQUEST_PLAY = 'conquest'
 export type ActIndex = 0 | 1 | 2
+/** MARK VS CONQUEST's timeline: a 4.4 s band cut, then two pane acts (COVER STORY, GDA WALL). */
+export const CQ_MS = 12_800
+export const CQ_BAND = 4.4
+export const CQ_OFF = [3.4, 8.0] as const
+export const CQ_LEN = [4.6, 4.8] as const
+/** One fight's timeline: its length (ms), the band cut (s), where each pane act starts and how long it is, how many acts. */
+export type Timing = { ms: number; band: number; off: readonly number[]; len: readonly number[]; acts: number; hole: number }
+const OMNI_T: Timing = { ms: FIGHT_MS, band: BAND_CUT, off: ACT_OFF, len: ACT_LEN, acts: 3, hole: FIGHT_T + 0.6 }
+const CQ_T: Timing = { ms: CQ_MS, band: CQ_BAND, off: CQ_OFF, len: CQ_LEN, acts: 2, hole: CQ_MS / 1000 + 0.6 }
+/** The timeline of a version: THE FIGHT's for 0-2, MARK VS CONQUEST's for 3. */
+export const timing = (v: Version = 0): Timing => (v === CONQUEST ? CQ_T : OMNI_T)
+/** Hit-stop lengths (s): a jab, a punch, a big hit, a slam. */
+export const STOP = { jab: 0.03, punch: 0.07, big: 0.09, slam: 0.1 } as const
+
+const EASE_IN = 'cubic-bezier(.55,0,1,.45)'
+const EASE_OUT = 'cubic-bezier(0,.55,.45,1)'
+const COMBO_NAMES = ['A', 'B', 'C'] as const
 
 // ---------------------------------------------------------------- the frames
-type FrameInfo = { name: string; ax: number; face: 1 | -1 }
 const OM: Record<string, string> = { O1: 'O1_IDLE', O2: 'O2_CROSS', O3: 'O3_PITCH', O4: 'O4_CATCH', O6: 'O6_BACKWIND', O7: 'O7_BACKHAND', O8: 'O8_JAB', O9: 'O9_HAMMERUP', O9B: 'O9B_HAMMERDOWN', O10: 'O10_GRAB', O11: 'O11_FLINCH', O12: 'O12_HANDS', O13: 'O13_FLY' }
 const MK: Record<string, string> = { M1: 'M1_READY', M2: 'M2_CHARGE', M3: 'M3_PUNCH', M4: 'M4_JABL', M5: 'M5_JABR', M6: 'M6_GRAB', M7: 'M7_BLOCK', M8: 'M8_HIT', M9: 'M9_BALL', M10: 'M10_SKID', M11: 'M11_RECOVER', M12: 'M12_KNEEL' }
+/** v2's frames: Omni-Man's backhand smear, Mark's punch smear (per suit), the four throw-toward-the-viewer sizes. */
+const V2 = ['OS', 'MS', 'T1', 'T2', 'T3', 'T4'] as const
 /** Where the body stands in each frame (a fraction of its width), so a wide frame with an arm out does not shift the body. */
-const AX: Record<string, number> = { O1: 0.5, O2: 0.5, O3: 0.5, O4: 0.38, O6: 0.45, O7: 0.42, O8: 0.42, O9: 0.45, O9B: 0.45, O10: 0.4, O11: 0.5, O12: 0.5, O13: 0.55, M1: 0.45, M2: 0.5, M3: 0.4, M4: 0.35, M5: 0.4, M6: 0.45, M7: 0.5, M8: 0.5, M9: 0.5, M10: 0.6, M11: 0.5, M12: 0.5 }
-export const FRAME_KEYS = [...Object.keys(OM), ...Object.keys(MK)]
+const AX: Record<string, number> = { O1: 0.5, O2: 0.5, O3: 0.5, O4: 0.38, O6: 0.45, O7: 0.42, O8: 0.42, O9: 0.45, O9B: 0.45, O10: 0.4, O11: 0.5, O12: 0.5, O13: 0.55, M1: 0.45, M2: 0.5, M3: 0.4, M4: 0.35, M5: 0.4, M6: 0.45, M7: 0.5, M8: 0.5, M9: 0.5, M10: 0.6, M11: 0.5, M12: 0.5, OS: 0.3, MS: 0.6, T1: 0.5, T2: 0.5, T3: 0.5, T4: 0.5 }
+export const FRAME_KEYS = [...Object.keys(OM), ...Object.keys(MK), ...V2]
 const ALL = SP as unknown as Record<string, Sprite>
-/** The sprite of a frame key (`O4`, `M3`) in an era: Omni-Man's are shared, Mark's follow the suit. */
+/** MARK VS CONQUEST's own frames: the elder warrior's seven, Mark swung by the wrist, the goggle wipe, the tired hover, his spin smear. */
+const CQ: Record<string, Sprite> = { CI0: MS.FXC_CUTIN_CONQUEST_BAM, CI1: MS.FX3_CUTIN_MARK_FINALLY, C1: MS.FXC_C1_IDLE, C2: MS.FXC_C2_WINDUP, C3: MS.FXC_C3_CATCH, C4: MS.FXC_C4_STRIKE, C5: MS.FXC_C5_HIT, C6: MS.FXC_C6_KNOCKBACK, C7: MS.FXC_C7_DOWN, M13: MS.FX3_M13_SWUNG, M14: MS.FX3_M14_WIPE, M15: MS.FX3_M15_HOVER, MSP: MS.FX3_M_SMEAR_SPIN }
+export const CQ_KEYS = Object.keys(CQ)
+/** Where each Conquest-fight frame stands (the cut's pivots: his feet, Mark's grip hand for the swing). */
+Object.assign(AX, { C1: 0.5, C2: 0.55, C3: 0.44, C4: 0.38, C5: 0.35, C6: 0.46, C7: 0.54, M13: 0.71, M14: 0.38, M15: 0.36, MSP: 0.44 })
+/**
+ * The elder warrior's palette, folded to the nine colours that make him HIM at sprite size (ink, the white suit in three greys,
+ * the boots, his skin, the bronze arm in two tones, and the scar's red through the white eye). Kept per pose (`CQ_K`): the
+ * bank's 4 colours would drop the scar and the arm's shading.
+ */
+const CQ_PAL = ['#2E2024', '#E6E0E5', '#BEB8C1', '#9A92A0', '#6B6774', '#DF9F7A', '#C88A4E', '#8E5C34', '#A3262A']
+export const CQ_K = CQ_PAL.length
+const near = (c: string): string => { const a = rgb(c); let best = CQ_PAL[0] as string; let bd = Infinity; for (const t of CQ_PAL) { const b = rgb(t); const d = (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2; if (d < bd) { bd = d; best = t } } return best }
+const CQ_CACHE = new Map<string, Sprite>()
+/** A Conquest frame in his folded palette (cached). */
+export const conq = (sp: Sprite): Sprite => {
+  const k = sp.rows.join('')
+  const hit = CQ_CACHE.get(k)
+  if (hit) return hit
+  const s = { rows: sp.rows, pal: Object.fromEntries(Object.entries(sp.pal).map(([l, c]) => [l, near(c)])) }
+  CQ_CACHE.set(k, s)
+  return s
+}
+
+// The new suit's throw frames: the classic frames recoloured (yellow top -> black, navy legs -> blue, blue gloves -> light blue).
+const rgb = (h: string): [number, number, number] => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)) as [number, number, number]
+const SUIT2 = new Map<string, Sprite>()
+/** A classic-suit sprite in the new suit's colours (cached). */
+export const suit2 = (sp: Sprite): Sprite => {
+  const hit = SUIT2.get(sp.rows.join(''))
+  if (hit) return hit
+  const out: Record<string, string> = {}
+  for (const [k, c] of Object.entries(sp.pal)) {
+    const [r, g, b] = rgb(c)
+    const l = 0.3 * r + 0.59 * g + 0.11 * b
+    if (g > 140 && b < 90 && r > g) out[k] = l > 180 ? '#3A3F4E' : '#2A2D38' // the yellow top: black, lit
+    else if (b > r + 25 && l > 90) out[k] = l > 120 ? '#6FB4F5' : '#4E99C3' // gloves and boots: the light blue
+    else if (b > r && l < 70) out[k] = l > 50 ? '#3E73B0' : '#2F5A90' // the navy legs: blue
+    else out[k] = c
+  }
+  const s = { rows: sp.rows, pal: out }
+  SUIT2.set(sp.rows.join(''), s)
+  return s
+}
+/** The sprite of a frame key (`O4`, `M3`, `MS`, `T4`) in an era: Omni-Man's are shared, Mark's follow the suit. */
 export const frameSprite = (key: string, era: Era): Sprite => {
+  const q = CQ[key]
+  if (q) return /^C\d/.test(key) ? conq(q) : q
   const o = OM[key]
   if (o) return ALL[`FX_${o}`] as Sprite
+  if (key === 'OS') return MS.FX_O_SMEAR_BACKHAND
+  if (key === 'MS') return era === 2 ? MS.FX3_M_SMEAR_PUNCH : MS.FX_M_SMEAR_PUNCH
+  const t = ({ T1: MS.FX_M_THROWN_S, T2: MS.FX_M_THROWN_M, T3: MS.FX_M_THROWN_L, T4: MS.FX_M_THROWN_XL } as Record<string, Sprite>)[key]
+  if (t) return era === 2 ? suit2(t) : t
   return ALL[`${era === 2 ? 'FX3_' : 'FX_'}${MK[key]}`] as Sprite
 }
-const info = (key: string): FrameInfo => ({ name: key, ax: AX[key] ?? 0.5, face: 1 })
+const info = (key: string): { name: string; ax: number; face: 1 } => ({ name: key, ax: AX[key] ?? 0.5, face: 1 })
 
 // Pixel runs merged into rectangles, the palette reduced to the `K` most used colours: the shared stage engine's cutter.
 export { rectPaths }
 
 // ---------------------------------------------------------------- shared CSS (once per Svg that carries a piece of the fight)
-export const FIGHT_CSS = `.dl-c{transform-box:fill-box;transform-origin:50% 50%}.dl-still{display:none}
-@keyframes dl-a{0%,99%{opacity:1}100%{opacity:0}}
-.dl-w{opacity:0;animation:dl-a var(--d,.06s) steps(1) forwards;animation-delay:calc(var(--s) + var(--t,0s))}
-.dl-f{opacity:0;animation-duration:${FIGHT_T}s;animation-timing-function:steps(1);animation-fill-mode:both;animation-delay:var(--q)}
-.dl-m{animation-duration:${FIGHT_T}s;animation-timing-function:linear;animation-fill-mode:both;animation-delay:var(--q)}
-.dl-rs{animation-duration:${FIGHT_T}s;animation-timing-function:steps(1);animation-fill-mode:both;animation-delay:var(--q)}
-.dl-p{opacity:0;animation:dl-pop var(--d,.6s) ease-out forwards;animation-delay:calc(var(--s) + var(--t))}
-.dl-u{opacity:0;animation:dl-burst .45s ease-out forwards;animation-delay:calc(var(--s) + var(--t))}
-.dl-g{opacity:0;animation:dl-ring .5s ease-out forwards;animation-delay:calc(var(--s) + var(--t))}
-.dl-s1,.dl-s2,.dl-s3{opacity:0;animation:dl-a .06s steps(1) forwards;animation-delay:calc(var(--s) + var(--t))}
-.dl-s2{animation-delay:calc(var(--s) + var(--t) + .06s)}.dl-s3{animation:dl-a .08s steps(1) forwards;animation-delay:calc(var(--s) + var(--t) + .12s)}
-text.dl-t{font-family:${COND};font-weight:800;fill:#FFE066;stroke:${PROPS.ink};paint-order:stroke;stroke-linejoin:round;letter-spacing:.5px}
-.dl-pf{fill:${PROPS.paperDark};stroke:${PROPS.ink}}
-@keyframes dl-pop{0%{opacity:1;transform:scale(.6)}16%{transform:scale(1.1)}30%{transform:scale(1)}78%{opacity:1}100%{opacity:0;transform:scale(1)}}
-@keyframes dl-burst{0%{opacity:1;transform:scale(.3)}100%{opacity:0;transform:scale(1.8)}}
-@keyframes dl-ring{0%{opacity:.9;transform:scale(.2)}100%{opacity:0;transform:scale(2.6)}}
-@keyframes dl-sh1{0%{transform:translate(1px,0)}34%{transform:translate(-1px,1px)}67%{transform:translate(1px,-1px)}100%{transform:none}}
-@keyframes dl-sh2{0%{transform:translate(2px,0)}25%{transform:translate(-2px,1px)}50%{transform:translate(1px,-1px)}75%{transform:translate(-1px,0)}100%{transform:none}}
-@keyframes dl-sh3{0%{transform:translate(3px,1px)}20%{transform:translate(-3px,-1px)}40%{transform:translate(2px,1px)}60%{transform:translate(-2px,0)}80%{transform:translate(1px,0)}100%{transform:none}}
-@keyframes dl-sh4{0%{transform:translate(4px,0)}17%{transform:translate(-4px,2px)}34%{transform:translate(3px,-2px)}51%{transform:translate(-2px,1px)}68%{transform:translate(1px,-1px)}85%{transform:translate(-1px,0)}100%{transform:none}}
-@media (prefers-reduced-motion: reduce){.dl-anim{display:none}.dl-cam{animation:none!important}.dl-still{display:block;animation:dl-stay ${FIGHT_T}s steps(1) both}@keyframes dl-stay{0%,96%{opacity:1}100%{opacity:0;visibility:hidden}}}`
+/** The panel shake's keyframes (the engine's four tiers) and the camera wrapper stopped under reduced motion. */
+export const FIGHT_CSS = `${SHAKE_CSS.replace(/\n/g, '')}.dl-c{transform-box:fill-box;transform-origin:50% 50%}.dl-t{font-family:${COND};font-weight:900}@media (prefers-reduced-motion: reduce){.dl-anim{display:none}.dl-cam{animation:none!important}.dl-still{display:block}}`
 
-// ---------------------------------------------------------------- the timeline builder
-type Key = [number, number, number, number?, number?, number?]
-type Seg = [number, number, string, (1 | -1)?]
-export type ActorOpts = { spin?: boolean; ghosts?: [number, number]; trail?: [number, number, 1 | -1, string?][]; lift?: boolean }
-export type Shake = [number, 1 | 2 | 3 | 4, number]
+// ---------------------------------------------------------------- the cut builder
+const STAR = { core: '#FFFFFF', star: '#FFE066', ring: '#9FE8FF' }
+const BLOCK = '#1B2236'
+const look = (sc: number): FightLook => ({ sc, ink: PROPS.ink, star: STAR, spark: '#FFE9A8', dust: '#FFFFFF', lines: '#FFFFFF', word: '#FFE066', font: COND, textClass: 'dl-t', impactBg: PROPS.ink, impactFg: '#FFFFFF' })
+/** Act time at which an eased move reaches progress `v` (0..1). */
+const when = (e: string, v: number): number => { const c = curve(e); let lo = 0; let hi = 1; for (let i = 0; i < 30; i++) { const m = (lo + hi) / 2; if (c(m) < v) lo = m; else hi = m } return (lo + hi) / 2 }
 
-class Tl {
-  css = ''
-  defs = ''
-  body = ''
-  still = ''
-  shakes: Shake[] = []
-  chain: [number, string][] = []
-  private made = new Set<string>()
-  constructor(readonly p: string, readonly start: number, readonly off: number, readonly era: Era, readonly sc: number, readonly K: number, readonly W: number, readonly H: number) {}
-  /** The percent of the whole timeline at act time `t`. */
-  g(t: number): number { return r3(((this.off + t) / FIGHT_T) * 100) }
-  /** A pinned delay: the fight's start plus act time `t` (calc keeps the engine's phase shift off it). */
-  dl(t = 0): string { return `calc(${pin(this.start)} + ${r3(this.off + t)}s)` }
-  private kf(name: string, rows: [number, string][]): void { this.css += `@keyframes ${name}{${rows.map(([p, v]) => `${p}%{${v}}`).join('')}}` }
-  private def(key: string): { id: string; w: number; h: number; ax: number } {
-    const sp = frameSprite(key, this.era)
-    const id = `${this.p}${key}`
-    if (!this.made.has(id)) {
-      this.made.add(id)
-      this.defs += `<g id="${id}">${rectPaths(sp, this.K)}</g>`
-    }
-    return { id, w: sp.rows[0]?.length ?? 1, h: sp.rows.length, ax: info(key).ax }
+/** One surface of the fight: the act, its fight, its camera, and what the skin adds around the engine's beats. */
+class Cut {
+  readonly act: Act
+  readonly f: Fight
+  readonly cam: Camera
+  set = ''
+  /** Drawn over the fighters (the cut-ins). */
+  over = ''
+  stills = ''
+  /** Where each fighter is (kept by the cut's own moves), for impact frames and stills. */
+  readonly at: Record<string, { x: number; y: number; pose: string; face: 1 | -1 }> = {}
+  private filters = false
+  /** The highest a word's baseline may sit (the band keeps its header row clear). */
+  get top(): number { return this.box[2] < this.W ? 54 : 30 }
+  constructor(id: string, readonly start: number, off: number, readonly era: Era, readonly sc: number, readonly W: number, readonly H: number, readonly box: [number, number, number, number], K = 4, ms = FIGHT_MS, cq = false) {
+    this.act = new Act({ id, ms, at: start, W, H, off, K })
+    for (const k of FRAME_KEYS) this.act.cast(k, frameSprite(k, era), info(k).ax)
+    if (cq) for (const k of CQ_KEYS) this.act.cast(k, frameSprite(k, era), info(k).ax, /^C\d/.test(k) ? CQ_K : /^CI/.test(k) ? 5 : undefined)
+    this.act.extraCss.add(FIGHT_CSS)
+    this.cam = new Camera(this.act)
+    this.f = new Fight(this.act, look(sc), this.cam)
   }
-  /** A frame-swap actor: its frames toggled by `segs`, moved along `path` (time, x, y, rotation, opacity, y-squash). */
-  actor(name: string, segs: Seg[], path: Key[], o: ActorOpts = {}): void {
-    const id = `${this.p}${name}`
-    for (const [a, , k] of segs) this.chain.push([a, k])
-    const frames = new Map<string, [number, number][]>()
-    for (const [a, b, k, dir = 1] of segs) { const fk = `${k}|${dir}`; (frames.get(fk) ?? frames.set(fk, []).get(fk))?.push([a, b]) }
-    const rotates = path.some(k => k[3] !== undefined || k[5] !== undefined)
-    const mk = (lag: number, op: number, withTrail: boolean): string => {
-      let uses = ''
-      for (const [fk, wins] of frames) {
-        const [k, dirS] = fk.split('|') as [string, string]
-        const f = this.def(k)
-        const fid = `${id}${k}${dirS === '-1' ? 'l' : 'r'}`
-        if (lag === 0) {
-          const rows: [number, string][] = [[0, 'opacity:0']]
-          for (const [a, b] of [...wins].sort((x, y) => x[0] - y[0])) rows.push([this.g(a), 'opacity:1'], [this.g(b), 'opacity:0'])
-          this.kf(fid, rows)
-        }
-        uses += `<g class="dl-f" style="animation-name:${fid}"><use href="#${f.id}" transform="scale(${r3(Number(dirS) * this.sc)} ${this.sc}) translate(${r3(-f.ax * f.w)} ${r3(-f.h / 2)})"/></g>`
-      }
-      let trail = ''
-      if (withTrail) for (const [a, b, dir, col] of o.trail ?? []) trail += `<g class="dl-w" style="--t:${r3(a)}s;--d:${r3(b - a)}s">${speedLines(-dir * 22 * this.sc / 1.5, 0, 26, 4, dir, col ?? PROPS.white, { gap: 5, op: 0.85 })}</g>`
-      const inner = rotates ? `<g class="dl-c ${o.spin ? 'dl-rs' : 'dl-m'}" style="animation-name:${id}r">${uses}</g>` : uses
-      return `<g class="dl-m" style="${lag ? `--q:calc(var(--p) + ${lag}s);` : ''}${op < 1 ? `opacity:${op};` : ''}animation-name:${id}">${trail}${inner}</g>`
-    }
-    const fades = path.some(k => k[4] !== undefined)
-    this.kf(id, path.map(([t, x, y, , op]) => [this.g(t), `transform:translate(${r1(x)}px,${r1(y)}px)${fades ? `;opacity:${op ?? 1}` : ''}`]))
-    if (rotates) this.kf(`${id}r`, path.map(([t, , , rot, , sy]) => [this.g(t), `transform:rotate(${r1(rot ?? 0)}deg)${sy !== undefined && sy !== 1 ? ` scale(1,${sy})` : ''}`]))
-    this.body += mk(0, 1, true)
-    if (o.ghosts) {
-      const [a, b] = o.ghosts
-      for (const [i, lag] of [0.07, 0.14].entries()) this.body += `<g class="dl-w" style="--t:${r3(a)}s;--d:${r3(b - a + lag)}s">${mk(lag, i ? 0.18 : 0.34, false)}</g>`
-    }
+  fighter(name: string, pose: string, x: number, y: number, face: 1 | -1): this { this.f.fighter(name, pose, x, y, face); this.at[name] = { x, y, pose, face }; return this }
+  /** Keep the cut's own note of where a fighter is (moves through the engine update it there; this mirrors it). */
+  note(name: string, x: number, y: number, pose?: string, face?: 1 | -1): void { const p = this.at[name]; if (p) { p.x = x; p.y = y; if (pose) p.pose = pose; if (face) p.face = face } }
+  /** A full-box flash (the band keeps it off the readouts on its right). */
+  flash(t: number, a = 0.35, cx = 0, cy = 0): void {
+    const [x, y, w, h] = this.box
+    if (w >= this.W) { this.set += this.act.cue('show', t, `<rect x="${r1(x)}" y="${r1(y)}" width="${r1(w)}" height="${r1(h)}" fill="#FFFFFF" opacity="${a}"/>`, { d: 0.06 }); return }
+    const rx = Math.max(40, Math.min(150, x + w - cx))
+    const pts = Array.from({ length: 20 }, (_, i) => { const q = (Math.PI * i) / 10; const k = i % 2 ? 0.55 : 1; return `${Math.round(cx + Math.cos(q) * rx * k)},${Math.round(cy + Math.sin(q) * h * 0.42 * k)}` }).join(' ')
+    this.set += this.act.cue('show', t, `<polygon points="${pts}" fill="#FFFFFF" opacity="${a}"/>`, { d: 0.06 })
   }
-  win(a: number, b: number, inner: string): void { this.body += `<g class="dl-w" style="--t:${r3(a)}s;--d:${r3(b - a)}s">${inner}</g>` }
-  private at(t: number): string { return `--t:${r3(t)}s` }
-  /** The 3-frame impact star: a white 4-point core, a yellow 8-point star, a cyan ring. Never red. */
-  star3(t: number, x: number, y: number, r: number): void {
-    const pts = (n: number, ro: number, ri: number): string => Array.from({ length: n * 2 }, (_, i) => { const a = (Math.PI * i) / n - Math.PI / 2; const rr = i % 2 ? ri : ro; return `${r1(x + Math.cos(a) * rr)},${r1(y + Math.sin(a) * rr)}` }).join(' ')
-    this.body += `<g style="${this.at(t)}"><polygon class="dl-s1" points="${pts(4, r * 0.5, r * 0.14)}" fill="#FFF"/><polygon class="dl-s2" points="${pts(8, r, r * 0.42)}" fill="#FFE066" stroke="${PROPS.ink}"/><circle class="dl-s3" cx="${r1(x)}" cy="${r1(y)}" r="${r1(r * 1.15)}" fill="none" stroke="#9FE8FF"/></g>`
+  /**
+   * The anime IMPACT FRAME at `t`: an ink burst round (cx, cy) with both fighters as white silhouettes (40 ms), then the same
+   * inverted (40 ms). Local, so the card's text around it never goes dark.
+   */
+  impact(t: number, cx: number, cy: number, rx: number, ry: number): void {
+    const [bx, , bw] = this.box
+    const RX = Math.max(30, Math.min(rx, cx - bx, bx + bw - cx))
+    const pts = Array.from({ length: 24 }, (_, i) => { const a = (Math.PI * i) / 12; const k = i % 2 ? 0.72 : 1; return `${Math.round(cx + Math.cos(a) * RX * k)},${Math.round(cy + Math.sin(a) * ry * k)}` }).join(' ')
+    // The silhouettes are the poses themselves through a flat-colour filter (no second copy of any pose in the defs).
+    const p = this.act.p
+    if (!this.filters) { this.filters = true; this.set += `<defs><filter id="${p}iw"><feColorMatrix values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1 0"/></filter><filter id="${p}ik"><feColorMatrix values="0 0 0 0 .04 0 0 0 0 .05 0 0 0 0 .08 0 0 0 1 0"/></filter></defs>` }
+    const figs = (k: string): string => `<g filter="url(#${p}${k})">${Object.values(this.at).map(q => this.act.bank.use(q.pose, r1(q.x), r1(q.y), q.face, this.sc)).join('')}</g>`
+    this.set += this.act.win(t, t + 0.04, `<polygon points="${pts}" fill="${PROPS.ink}" opacity=".92"/>${figs('iw')}`)
+    this.set += this.act.win(t + 0.04, t + 0.08, `<polygon points="${pts}" fill="#FFFFFF" opacity=".9"/>${figs('ik')}`)
   }
-  flash(t: number, a = 0.35): void { this.win(t, t + 0.06, `<rect width="${this.W}" height="${this.H}" fill="#FFF" opacity="${a}"/>`) }
-  /** An SFX word: yellow with an ink outline, tilted, popping 0.6 -> 1.1 -> 1.0. */
-  pop(t: number, x: number, y: number, word: string, size: number, tilt: number, dur = 0.6): void {
-    this.body += `<g transform="translate(${r1(x)} ${r1(y)}) rotate(${tilt})"><g class="dl-c dl-p" style="${this.at(t)};--d:${dur}s"><text class="dl-t" text-anchor="middle" font-size="${size}" stroke-width="${r1(size * 0.2)}">${word}</text></g></g>`
+  /** A hit, the v2 way: the engine's hit (star, sparks, word, HIT-STOP), then the shake AFTER the freeze, and a punch-in. */
+  hit(target: string, o: { pose?: string; word?: string; r?: number; stop: number; sparks?: boolean; shake: 1 | 2 | 3 | 4; flash?: number; impact?: [number, number]; push?: number; x?: number; y?: number; wx?: number; wy?: number }): void {
+    const t = this.f.t
+    const p = this.at[target]
+    if (o.pose && p) p.pose = o.pose
+    const hx = o.x ?? (p ? p.x + p.face * 8 * this.sc : 0)
+    const hy = o.y ?? (p ? p.y - 4 * this.sc : 0)
+    if (o.impact) this.impact(t, hx, hy, o.impact[0], o.impact[1])
+    this.f.hit(target, { ...(o.pose ? { pose: o.pose } : {}), ...(o.r !== undefined ? { r: o.r } : {}), x: hx, y: hy, flash: false, shake: false, freeze: o.stop, sparks: o.sparks ?? o.shake > 2 })
+    if (o.word) this.f.sfx(o.word, o.wx ?? hx + 6 * this.sc, Math.max(this.top, o.wy ?? hy - 14 * this.sc), { size: o.shake > 2 ? 19 : 15, tilt: o.shake % 2 ? -6 : 7 })
+    if (o.flash) this.flash(t + (o.impact ? 0.08 : 0), o.flash, hx, hy)
+    this.cam.shake(t + 0.001, o.shake, o.shake > 2 ? 0.22 : 0.12)
+    if (o.push) this.cam.push(t + 0.001, t + 0.12, o.push, hx, hy, 'snap').reset(t + 0.13, t + 0.5, 'settle')
   }
-  puff(t: number, x: number, y: number, s = 1): void {
-    this.body += `<g transform="translate(${r1(x)} ${r1(y)})"><g class="dl-c dl-u" style="${this.at(t)}"><g class="dl-pf" transform="scale(${s})"><circle cx="-8" cy="1" r="5"/><circle cy="-3" r="6.5"/><circle cx="8" cy="1" r="4.5"/></g></g></g>`
+  /** A jab: one small star blink, an optional word, a short hit-stop and a 1 px tap after it (cheaper than a full hit). */
+  jab(x: number, y: number, word?: string, wx = x, wy = y - 20): void {
+    const t = this.f.t
+    this.set += this.act.cue('blink', t, `<polygon points="${Array.from({ length: 12 }, (_, i) => { const a = (Math.PI * i) / 6; const r = i % 2 ? 2.5 : 7; return `${Math.round(x + Math.cos(a) * r)},${Math.round(y + Math.sin(a) * r)}` }).join(' ')}" fill="#FFE066" stroke="${PROPS.ink}"/>`)
+    if (word) this.f.sfx(word, wx, Math.max(this.top, wy), { size: 14, tilt: x % 2 > 1 ? 8 : -8, d: 0.3 })
+    this.f.freeze(STOP.jab)
+    this.cam.shake(t + 0.001, 1, 0.08)
   }
-  /** Square pixel confetti thrown outward (white, yellow, cyan). */
-  confetti(t: number, x: number, y: number, n = 6): void {
-    const cols = ['#FFF', '#FFE066', '#9FE8FF']
-    const sq = Array.from({ length: n }, (_, i) => { const a = (Math.PI * 2 * i) / n + unit(`${this.p}c${t}${i}`); const r = 7 + unit(`${this.p}d${t}${i}`) * 5; return `<rect x="${r1(Math.cos(a) * r - 1)}" y="${r1(Math.sin(a) * r - 1)}" width="2.5" height="2.5" fill="${cols[i % 3]}"/>` }).join('')
-    this.body += `<g transform="translate(${r1(x)} ${r1(y)})"><g class="dl-c dl-u" style="${this.at(t)}">${sq}</g></g>`
+  /** A skyline block that stands until `t`, then breaks: debris, glass glints, a puff, confetti, KRAK, a short hit-stop. */
+  block(t0: number, t: number, bx: number, top: number, bh: number, word = true): void {
+    const a = this.act
+    this.set += a.win(t0, t, `<rect x="${r1(bx - 13)}" y="${r1(top)}" width="26" height="${r1(bh)}" fill="${BLOCK}" stroke="${PROPS.ink}" stroke-width="1.5"/><rect x="${r1(bx - 8)}" y="${r1(top + 6)}" width="4" height="4" fill="#FFE066" opacity=".7"/><rect x="${r1(bx + 3)}" y="${r1(top + 6)}" width="4" height="4" fill="#9FE8FF" opacity=".7"/>`)
+    const gy = top + bh
+    this.set += fx.debris(a, t, bx, top + bh * 0.4, { n: 3, seed: `kb${bx}${t}`, colors: [BLOCK, '#2A3350', '#9FE8FF'], spread: 30 })
+    if (this.sc > 1.5) this.set += a.win(t, t + 0.12, `<rect x="${r1(bx - 9)}" y="${r1(top + 3)}" width="2" height="5" fill="#9FE8FF"/><rect x="${r1(bx + 7)}" y="${r1(top + 10)}" width="2" height="4" fill="#FFFFFF"/>`)
+    this.set += fx.puff(a, t, bx, gy - 8, { s: 1.1, fill: PROPS.paperDark, ink: PROPS.ink })
+    this.f.at(t)
+    if (word) this.f.sfx('KRAK!', bx, Math.max(this.top, top - 6), { size: 15, tilt: bx % 2 > 1 ? 7 : -7 })
+    this.f.freeze(0.04)
+    this.cam.shake(t + 0.001, 2, 0.12)
   }
-  /** The dust donut: a flat ring that spreads. */
-  ring(t: number, x: number, y: number, rx = 16): void {
-    this.body += `<g transform="translate(${r1(x)} ${r1(y)})"><g class="dl-c dl-g" style="${this.at(t)}"><ellipse rx="${rx}" ry="${r1(rx * 0.3)}" fill="none" stroke="#FFF" stroke-width="2"/></g></g>`
+  /** A crater where something slammed down: a dark dish with a lit rim and cracks, from `t` to `t1`. */
+  crater(t: number, t1: number, x: number, y: number, rx: number): void {
+    this.set += this.act.win(t, t1, `<ellipse cx="${r1(x)}" cy="${r1(y)}" rx="${r1(rx)}" ry="${r1(rx * 0.28)}" fill="${PROPS.ink}" opacity=".55"/><ellipse cx="${r1(x)}" cy="${r1(y - 1)}" rx="${r1(rx)}" ry="${r1(rx * 0.28)}" fill="none" stroke="${PROPS.paperDark}" stroke-width="1.5"/><path d="M${r1(x - rx)} ${r1(y)}l-8 3m${r1(rx * 2)} -3l9 4m${r1(-rx)} ${r1(rx * 0.28)}l2 6" stroke="${PROPS.ink}" stroke-width="1.2"/>`)
   }
-  bubble(a: number, b: number, x: number, y: number, text: string, left = false): void {
-    const w = Math.round(condW(text, 10, 0.6) + 16)
-    const bx = left ? x - w : x
-    this.win(a, b, `<rect x="${r1(bx)}" y="${r1(y - 22)}" width="${w}" height="20" rx="3" fill="#FFFFFF" stroke="${PROPS.ink}" stroke-width="1.5"/><path d="M${r1(left ? x - 10 : x + 8)} ${r1(y - 3)}l${left ? 5 : -5} 8 ${left ? 5 : 10}-8z" fill="#FFFFFF" stroke="${PROPS.ink}" stroke-width="1.5" stroke-linejoin="round"/><rect x="${r1(left ? x - 14 : x + 6)}" y="${r1(y - 4)}" width="9" height="3" fill="#FFFFFF"/>${C(bx + 8, y - 8, text, 10, PROPS.ink, 'letter-spacing=".6"')}`)
+  /** Everything shown from act time 0 to `until` (timeline seconds, freezes included): the cut's own life. */
+  life(svg: string, until: number): string {
+    const k = this.act.k()
+    this.act.rows(k, [[0, 'opacity:1'], [this.act.pcw(until), 'opacity:1'], [Math.min(100, r3(this.act.pcw(until) + 0.01)), 'opacity:0'], [100, 'opacity:0']])
+    return `<g class="${this.act.p}k" style="animation-name:${k};animation-timing-function:steps(1,end)">${svg}</g>`
   }
-  shake(t: number, tier: 1 | 2 | 3 | 4, ms: number): void { this.shakes.push([this.off + t, tier, ms]) }
-  /** A still pose (reduced motion): the frame at (x, y). */
-  actorStill(key: string, x: number, y: number, dir: 1 | -1): string {
-    const f = this.def(key)
-    return `<use href="#${f.id}" transform="translate(${r1(x)} ${r1(y)}) scale(${r3(dir * this.sc)} ${this.sc}) translate(${r3(-f.ax * f.w)} ${r3(-f.h / 2)})"/>`
+  /** The layer: the camera (zoom and pan only) round the scenery and the fight, the still for reduced motion. */
+  done(until: number): string {
+    const body = this.life(this.cam.wrap(this.set + this.f.body() + this.over, { shake: false }), until)
+    return this.act.done(`<g class="dl-anim">${body}</g>`, `<g class="dl-still">${this.stills}</g>`)
   }
-  /** Pose chain in time order (consecutive repeats once). */
-  chainKeys(): string[] { return this.chain.sort((a, b) => a[0] - b[0]).map(c => c[1]).filter((k, i, a) => a[i - 1] !== k) }
-  out(): { css: string; defs: string; body: string; still: string } { return { css: this.css, defs: this.defs, body: this.body, still: this.still } }
+  /** The panel shake for this surface (engine longhands: every shake plays, not just the first). */
+  shake(): string { return this.cam.shakeStyle() }
+  still(key: string, x: number, y: number, face: 1 | -1): void { this.stills += this.act.still(key, x, y, face, this.sc) }
+  starStill(x: number, y: number, r = 14): void { this.stills += `<polygon points="${Array.from({ length: 16 }, (_, i) => { const a = (Math.PI * i) / 8 - Math.PI / 2; const rr = i % 2 ? r * 0.43 : r; return `${r1(x + Math.cos(a) * rr)},${r1(y + Math.sin(a) * rr)}` }).join(' ')}" fill="#FFE066" stroke="${PROPS.ink}"/>` }
 }
 
-// ---------------------------------------------------------------- the choreography
-type Built = { tl: Tl; chain: string[] }
-const spin = (t0: number, t1: number, x0: number, y0: number, x1: number, y1: number, n = 5, arc = 0): Key[] =>
-  Array.from({ length: n + 1 }, (_, i) => { const u = i / n; return [t0 + (t1 - t0) * u, x0 + (x1 - x0) * u, y0 + (y1 - y0) * u - arc * 4 * u * (1 - u), (i % 4) * 90 + Math.floor(i / 4) * 360] as Key })
-/** Jabs alternated every 90 ms from `t0` to `t1`. */
-const alt = (t0: number, t1: number, a: string, b: string, dir: 1 | -1 = 1): Seg[] => {
-  const out: Seg[] = []
-  for (let t = t0, i = 0; t < t1 - 0.001; t += 0.09, i++) out.push([r3(t), r3(Math.min(t + 0.09, t1)), i % 2 ? b : a, dir])
-  return out
+// ---------------------------------------------------------------- beats shared by the versions
+/** Mark's dash into contact: an ease-in run (the M2 charge), one SMEAR frame, the punch frame at `x`. */
+const dash = (c: Cut, who: string, x: number, d: number, o: { y?: number; from?: string; lines?: boolean; smear?: boolean } = {}): void => {
+  const p = c.at[who] as { x: number; y: number; face: 1 | -1 }
+  const pre = x - p.face * 10 * c.sc
+  c.f.approach(who, pre, d, { pose: o.from ?? 'M2', ease: EASE_IN, ghosts: false, lines: o.lines ?? false, ...(o.y !== undefined ? { y: o.y } : {}) })
+  if (o.smear !== false) c.f.pose(who, 'MS')
+  c.f.approach(who, x, 0.06, { ease: 'linear', lines: false, ghosts: false }).pose(who, 'M3')
+  c.note(who, x, o.y ?? p.y, 'M3')
+}
+/** Anticipation: a quick pull-back of `px` against the facing before a move (settles in `d`). */
+const pull = (c: Cut, who: string, px: number, d = 0.1): void => {
+  const p = c.at[who] as { x: number; y: number; face: 1 | -1 }
+  c.f.approach(who, p.x - p.face * px, d, { ease: 'settle', lines: false, ghosts: false })
+  c.note(who, p.x - p.face * px, p.y)
+}
+/** Omni-Man's backhand with its anticipation: backwind (120 ms), the smear (60 ms), the release. The cursor ends on the release. */
+const backhand = (c: Cut, who = 'o'): void => {
+  c.f.pose(who, 'O6').wait(0.12).pose(who, 'OS').wait(0.06).pose(who, 'O7')
+  const p = c.at[who]
+  if (p) p.pose = 'O7'
+}
+/** A knock-back through skyline blocks, ease-out, Mark as a spinning ball; each block breaks as he passes it. */
+const throughBlocks = (c: Cut, x1: number, y1: number, d: number, blocks: [number, number, number][], o: { land?: 'skid' | 'none'; pan?: number } = {}): void => {
+  const p = c.at['m'] as { x: number; y: number; face: 1 | -1 }
+  const t0 = c.f.t
+  const x0 = p.x
+  // The blocks first: their hit-stops must exist before the knock-back's own cues (the landing dust) are timed.
+  blocks.forEach(([bx, top, bh], i) => c.block(Math.max(0, t0 - 0.3), r3(t0 + d * when(EASE_OUT, (x0 - bx) / (x0 - x1))), bx, top, bh, i === 0 || c.sc > 1.5))
+  c.f.at(t0)
+  c.cam.pan(t0, t0 + d * 0.6, o.pan ?? 16, 0, 'settle')
+  c.f.knockback('m', x0 - x1, { d, dy: y1 - p.y, pose: 'M9', rot: 900, arc: 0, ease: EASE_OUT, land: o.land ?? 'skid' })
+  c.note('m', x1, y1, 'M9')
+  c.cam.reset(c.f.t, c.f.t + 0.15, 'snap')
+}
+/** The skid to a stop: M10 braced (sliding left), dust kicked along, SKRRT. */
+const skid = (c: Cut, dx: number, d: number, gy: number, pose = 'M10'): void => {
+  const p = c.at['m'] as { x: number; y: number }
+  const t = c.f.t
+  c.f.pose('m', pose, -1).approach('m', p.x - dx, d, { ease: 'settle', lines: false, ghosts: false })
+  c.note('m', p.x - dx, p.y, pose, -1)
+  c.set += fx.dust(c.act, t, p.x + dx, gy, { n: 3, seed: `sk${t}`, color: PROPS.paperDark, dx: -dx / 4, s: c.sc / 1.6 })
+  if (c.sc > 1.5) c.f.at(t + 0.04).sfx('SKRRT', p.x, p.y - 26 * (c.sc / 1.45), { size: 12, tilt: 5, d: 0.5 })
+  c.f.at(t + d)
+}
+/** The end of every band cut: Omni-Man flings Mark DOWN toward the viewer: he grows S -> M as he falls out of the band. */
+const throwDown = (c: Cut, x: number): void => {
+  const t = c.f.t
+  c.f.pose('m', 'T1', 1)
+  c.f.approach('m', x + 12, 0.2, { y: c.H * 0.78, ease: EASE_IN, lines: false, ghosts: false })
+  c.f.pose('m', 'T2').approach('m', x + 22, 0.18, { y: c.H + 46, ease: EASE_IN, lines: false, ghosts: false })
+  c.note('m', x + 22, c.H + 46, 'T2')
+  c.set += c.act.win(t + 0.05, t + 0.38, `<g opacity=".85" stroke="#FFFFFF" stroke-linecap="round"><path d="M${r1(x - 10)} ${r1(c.H * 0.45)}v-18M${r1(x + 4)} ${r1(c.H * 0.5)}v-24M${r1(x + 18)} ${r1(c.H * 0.42)}v-14"/></g>`)
+  c.f.at(t + 0.38)
+}
+/** Omni-Man folds his arms, hovers, a glint on his cape, then leaves upward (faded). */
+const outro = (c: Cut, from: number, pose?: string): void => {
+  const p = c.at['o'] as { x: number; y: number }
+  c.f.at(from)
+  if (pose) c.f.pose('o', pose)
+  c.f.approach('o', p.x, 0.3, { y: p.y - 2, ease: 'settle', lines: false, ghosts: false })
+  c.set += c.act.cue('blink', from + 0.25, `<path d="M${r1(p.x + 10)} ${r1(p.y - 22)}l1.5 4.5 4.5 1.5 -4.5 1.5 -1.5 4.5 -1.5 -4.5 -4.5 -1.5 4.5 -1.5z" fill="#FFFFFF"/>`)
+  c.f.approach('o', p.x + 20, 0.4, { y: -60, ease: EASE_IN, lines: false, ghosts: false })
 }
 
-/** The band cut: 5.5 s, H about 134, all the action left of 0.7 W. `big` keeps the ghosts and the extra frames. */
-const bandCut = (tl: Tl, big: boolean): void => {
-  const { W, H, sc } = tl
+// ---------------------------------------------------------------- the band cuts (5.5 s, H about 134, the action left of 0.67 W)
+const bandCut = (c: Cut, v: 0 | 1 | 2): void => {
+  const { W, H, sc, f } = c
   const yc = Math.round(H * 0.5) + 4
   const ox = Math.round(W * 0.62)
   const hit = ox - 34 * sc
   const gy = H - 16
   const slot: [number, number] = [37, 62]
-  // Omni-Man: drops in arms crossed, catches, backhands, watches, throws, folds his arms again.
-  tl.actor('o', [[0, 0.6, 'O2', -1], [0.6, 1.0, 'O4', -1], [1.0, 1.5, 'O7', -1], [1.5, 3.95, 'O2', -1], [3.95, 4.5, 'O7', -1], [4.5, 5.45, 'O2', -1]], [
-    [0, ox, -50], [0.4, ox, yc], [0.6, ox, yc], [1.0, ox - 3, yc], [1.5, ox, yc], [3.95, ox, yc], [4.0, ox - 3, yc], [4.5, ox, yc - 1], [5.0, ox, yc + 1], [5.4, ox, yc], [5.5, ox, yc - 30, undefined, 0],
-  ])
-  // Mark: out of the slot, the flying punch, the hit; later the skid, the dash back, the flurry, grabbed and thrown.
-  tl.actor('m', [[0, 0.55, 'M2'], [0.55, 1.0, 'M3'], [1.0, 1.32, 'M8'], [2.6, 3.0, 'M8', -1], [3.0, 3.3, 'M2'], ...alt(3.3, 4.0, 'M4', 'M3'), [4.0, 4.22, 'M8']], [
-    [0, slot[0], slot[1]], [0.55, hit, yc], [1.0, hit, yc], [1.0, hit, yc], [1.32, hit - 22, yc - 4],
-    [2.6, W * 0.16, gy - 8], [3.0, W * 0.16 - 20, gy - 8], [3.0, W * 0.1, yc + 8], [3.3, hit, yc], [4.0, hit, yc], [4.22, hit - 8, yc - 2],
-  ], { trail: [[0, 0.5, -1, '#FFE066'], [3.0, 3.3, -1, '#FFE066']], ...(big ? { ghosts: [0.05, 0.6] as [number, number] } : {}) })
-  // The ball: knocked through three skyline blocks, then thrown down out of the band toward the pane.
-  tl.actor('b', [[1.32, 2.6, 'M9'], [4.22, 4.8, 'M9']], [
-    [1.3, hit - 22, yc - 4, 0], [1.65, W * 0.5, gy - 30, 90], [1.95, W * 0.36, gy - 22, 180], [2.3, W * 0.22, gy - 18, 270], [2.6, W * 0.16, gy - 10, 360],
-    [4.2, hit - 8, yc - 2, 0], [4.5, hit + W * 0.03, H * 0.7, 180], [4.8, hit + W * 0.06, H + 40, 360],
-  ], { spin: true, trail: [[4.3, 4.7, -1, '#FFFFFF']] })
-  // Skyline blocks: they stand from the backhand, each pops into a puff and confetti as Mark goes through.
-  const blocks: [number, number, number][] = [[W * 0.5, 40, 1.65], [W * 0.36, 52, 1.95], [W * 0.22, 34, 2.3]]
-  blocks.forEach(([bx, bh, t], i) => {
-    tl.win(1.1, t, `<rect x="${r1(bx - 13)}" y="${r1(H - 8 - bh)}" width="26" height="${bh}" fill="#1B2236" stroke="${PROPS.ink}" stroke-width="1.5"/><rect x="${r1(bx - 8)}" y="${r1(H - 8 - bh + 6)}" width="4" height="4" fill="#FFE066" opacity=".7"/><rect x="${r1(bx + 3)}" y="${r1(H - 8 - bh + 6)}" width="4" height="4" fill="#9FE8FF" opacity=".7"/>`)
-    tl.puff(t, bx, gy - 8, 1.1)
-    tl.confetti(t, bx, gy - 18, 8)
-    tl.pop(t + 0.02, bx, gy - 40 - i * 4, 'KRAK!', 15, i % 2 ? 7 : -7)
-    tl.shake(t, 2, 0.12)
-  })
-  // Hits.
-  tl.star3(0, slot[0], slot[1], 22)
-  tl.star3(0.55, hit + 20 * sc, yc - 8, 16)
-  tl.pop(0.58, hit + 8, yc - 44, 'TAK!', 15, -6)
-  tl.shake(0.55, 1, 0.1)
-  tl.flash(1.0, 0.35)
-  tl.star3(1.0, hit + 26 * sc, yc - 6, 26)
-  tl.pop(1.04, ox - 6, yc - 50, 'WHAM!', 19, 7)
-  tl.shake(1.0, 3, 0.22)
-  tl.pop(0.1, 90, yc - 22, 'FWOOSH', 12, -5, 0.5)
-  tl.pop(2.65, W * 0.16, gy - 34, 'SKRRT', 12, 5, 0.5)
-  for (const i of [0, 1, 2, 3]) tl.puff(2.62 + i * 0.09, W * 0.16 + 14 - i * 9, gy - 2, 0.55)
-  tl.pop(3.4, hit + 16, yc - 46, 'POW', 14, -8, 0.4)
-  tl.pop(3.7, hit + 30, yc - 36, 'BAM', 14, 8, 0.4)
-  tl.star3(3.42, hit + 22 * sc, yc - 10, 9)
-  tl.star3(3.78, hit + 22 * sc, yc - 14, 9)
-  tl.shake(3.4, 1, 0.1)
-  tl.shake(3.7, 1, 0.1)
-  tl.flash(4.3, 0.3)
-  tl.pop(4.45, hit + 40, yc + 4, 'BOOM', 18, -6, 0.6)
-  tl.shake(4.45, 3, 0.22)
-  // The outro: a glint on his cape.
-  tl.star3(5.0, ox + 10, yc - 16, 7)
-  // The clash still (reduced motion): the catch frame and the punch frame with the star between.
-  const so = tl.actorStill('O4', ox, yc, -1)
-  const sm = tl.actorStill('M3', hit, yc, 1)
-  tl.still = `<g class="dl-still" style="animation-delay:var(--s)">${sm}${so}<polygon points="${Array.from({ length: 16 }, (_, i) => { const a = (Math.PI * i) / 8 - Math.PI / 2; const r = i % 2 ? 6 : 14; return `${r1(hit + 20 * sc + Math.cos(a) * r)},${r1(yc - 8 + Math.sin(a) * r)}` }).join(' ')}" fill="#FFE066" stroke="${PROPS.ink}" stroke-width="1"/></g>`
-}
-
-/** Pane acts. `cx` positions are fractions of W. */
-const actCut = (tl: Tl, act: ActIndex): void => {
-  const { W, H, sc } = tl
-  const yc = Math.round(H * (act === 1 ? 0.5 : act === 0 ? 0.42 : 0.5))
-  const ox = Math.round(W * (act === 2 ? 0.68 : 0.72))
-  const mx = Math.round(W * 0.28)
-  const hit = ox - 34 * sc
-  const gy = yc + 70
-  if (act === 0) {
-    // ---- Combo A, "The Catch" (cover: 4.6 s)
-    tl.actor('o', [[0, 0.8, 'O2', -1], [0.8, 1.4, 'O3', -1], [1.4, 2.0, 'O2', -1], [2.0, 2.95, 'O4', -1], [2.95, 3.4, 'O7', -1], [3.4, 4.6, 'O2', -1]], [
-      [0, ox, yc], [0.4, ox, yc - 1], [0.8, ox, yc + 1], [2.0, ox, yc], [2.95, ox + 4, yc], [3.4, ox, yc], [4.6, ox, yc],
-    ])
-    tl.actor('m', [[0.35, 0.8, 'M1'], [0.8, 1.4, 'M1'], [1.4, 1.7, 'M2'], [1.7, 3.0, 'M3'], [3.0, 3.1, 'M8'], [4.0, 4.4, 'M10', -1]], [
-      [0.35, mx, yc], [1.4, mx, yc], [1.4, mx, yc], [0.8, mx - 1, yc], [1.7, mx + (hit - mx) * 0.55, yc], [2.0, hit, yc], [2.2, hit, yc], [2.3, hit - 1, yc], [2.4, hit + 1, yc], [2.5, hit - 1, yc], [2.6, hit + 1, yc], [2.7, hit - 1, yc], [2.8, hit, yc], [3.0, hit, yc], [3.1, hit - 14, yc - 2],
-      [4.0, W * 0.2, gy - 20], [4.6, W * 0.2 - 30, gy - 20],
-    ].sort((a, b) => (a[0] as number) - (b[0] as number)) as Key[], { trail: [[1.4, 2.0, -1, '#FFE066']], ghosts: [1.4, 2.05] })
-    tl.actor('b', [[0, 0.35, 'M9'], [3.1, 4.0, 'M9'], [4.4, 4.6, 'M9']], [
-      [0, mx, -30, 0], [0.35, mx, yc, 270],
-      [3.1, hit - 14, yc - 2, 0], [3.35, W * 0.46, yc + 44, 90], [3.65, W * 0.3, yc + 62, 180], [3.95, W * 0.2, gy - 20, 270], [4.0, W * 0.2, gy - 20, 360],
-      [4.4, W * 0.2 - 30, gy - 20, 0], [4.6, W * 0.2 - 30, H + 30, 180],
-    ], { spin: true })
-    tl.pop(1.45, mx + 40, yc - 40, 'FWOOSH', 13, -6, 0.5)
-    tl.bubble(0.8, 1.4, ox - 24, yc - 46, 'JOIN ME', true)
-    tl.star3(2.0, hit + 18 * sc, yc - 6, 12)
-    tl.pop(2.04, hit, yc - 46, 'TAK!', 15, -6)
-    tl.shake(2.0, 1, 0.1)
-    for (const [i, dx] of [[0, -6], [1, 2], [2, 9]] as [number, number][]) tl.win(2.2 + i * 0.12, 2.8, `<rect x="${r1(hit + dx)}" y="${r1(yc - 34 + i * 4)}" width="2" height="3" fill="#FFFFFF"/>`)
-    tl.flash(3.0, 0.35)
-    tl.star3(3.0, hit + 28 * sc, yc - 6, 24)
-    tl.pop(3.04, ox - 10, yc - 50, 'WHAM!', 19, 7)
-    tl.shake(3.0, 3, 0.22)
-    for (const [bx, bh, t, w] of [[W * 0.46, 54, 3.35, 'KRAK!'], [W * 0.3, 40, 3.65, 'KRAK!']] as [number, number, number, string][]) {
-      tl.win(3.0, t, `<rect x="${r1(bx - 13)}" y="${r1(gy + 14 - bh)}" width="26" height="${bh}" fill="#1B2236" stroke="${PROPS.ink}" stroke-width="1.5"/><rect x="${r1(bx - 7)}" y="${r1(gy + 14 - bh + 6)}" width="4" height="4" fill="#FFE066" opacity=".7"/>`)
-      tl.puff(t, bx, gy, 1.2)
-      tl.confetti(t, bx, gy - 14, 8)
-      tl.pop(t + 0.02, bx, gy - 34, w, 14, bx > W * 0.4 ? 7 : -7, 0.5)
-      tl.shake(t, 2, 0.12)
-    }
-    tl.pop(4.0, W * 0.2, gy - 36, 'SKRRT', 12, 5, 0.5)
-    for (const i of [0, 1, 2, 3]) tl.puff(4.0 + i * 0.1, W * 0.2 - i * 9, gy + 4, 0.55)
-    const so = tl.actorStill('O4', ox, yc, -1)
-    const sm = tl.actorStill('M3', hit, yc, 1)
-    tl.still = `<g class="dl-still" style="animation-delay:var(--s)">${sm}${so}<polygon points="${Array.from({ length: 16 }, (_, i) => { const a = (Math.PI * i) / 8 - Math.PI / 2; const r = i % 2 ? 7 : 16; return `${r1(hit + 18 * sc + Math.cos(a) * r)},${r1(yc - 6 + Math.sin(a) * r)}` }).join(' ')}" fill="#FFE066" stroke="${PROPS.ink}" stroke-width="1"/></g>`
-  } else if (act === 1) {
-    // ---- Combo B, "Every Angle" (page: 4.8 s)
-    const spots: [number, number][] = [[-52, -10], [-34, -40], [-54, 22], [-36, 34], [-56, -26], [-30, 6]]
-    const mpath: Key[] = [[0.3, mx, yc], [0.6, mx, yc], [1.1, hit, yc]]
-    const jab: Seg[] = alt(1.1, 2.6, 'M4', 'M5')
-    for (let t = 1.1, i = 0; t < 2.6; t += 0.3, i++) { const s = spots[i % spots.length] as [number, number]; mpath.push([r3(t), ox + s[0] * sc / 1.5, yc + s[1] * sc / 1.5], [r3(t + 0.29), ox + s[0] * sc / 1.5, yc + s[1] * sc / 1.5]) }
-    mpath.push([2.6, hit, yc], [3.0, hit, yc], [3.4, hit, yc - 6])
-    tl.actor('m', [[0.3, 0.6, 'M11'], [0.6, 0.62, 'M2'], [0.62, 1.1, 'M2'], ...jab, [2.6, 3.0, 'M6'], [3.0, 3.45, 'M6']], mpath, { trail: [[0.62, 1.1, -1, '#FFE066']], ghosts: [0.62, 1.15] })
-    const oseg: Seg[] = [[0, 1.1, 'O1', -1]]
-    for (let t = 1.1, i = 0; t < 2.6; t += 0.18, i++) oseg.push([r3(t), r3(Math.min(t + 0.09, 2.6)), 'O11', -1], [r3(t + 0.09), r3(Math.min(t + 0.18, 2.6)), 'O1', -1])
-    oseg.push([2.6, 3.0, 'O1', -1], [3.0, 3.4, 'O10', -1], [3.4, 3.9, 'O7', -1], [3.9, 4.8, 'O1', -1])
-    tl.actor('o', oseg, [[0, ox, yc], [0.6, ox, yc], [3.0, ox, yc], [3.4, ox + 3, yc], [3.9, ox, yc], [4.8, ox, yc]])
-    tl.actor('b', [[0, 0.3, 'M9'], [3.45, 4.5, 'M9'], [4.5, 4.8, 'M9']], [
-      [0, mx, -30, 0], [0.3, mx, yc, 270],
-      [3.45, hit - 4, yc - 6, 0], [3.8, hit - 40, yc + 20, 180], [4.15, W * 0.26, gy - 8, 360], [4.3, W * 0.26, gy - 8, 450], [4.5, W * 0.26, gy - 8, 450], [4.8, W * 0.26, H + 30, 540],
-    ], { spin: true })
-    tl.win(0.3, 0.7, koStars(mx, yc - 36))
-    tl.pop(0.64, mx + 40, yc - 36, 'FWOOSH', 13, -6, 0.5)
-    ;(['POW', 'BAM', 'BIFF'] as const).forEach((w, i) => tl.pop(1.3 + i * 0.5, ox - 60 + i * 12, yc - 52 + (i % 2) * 8, w, 14, i % 2 ? 8 : -8, 0.4))
-    for (let i = 0; i < 8; i++) tl.star3(1.2 + i * 0.18, ox - 40 - (i % 3) * 6, yc - 18 + ((i * 17) % 40), 7)
-    for (let t = 1.1; t < 2.6; t += 0.18) tl.shake(t, 1, 0.09)
-    tl.shake(3.0, 1, 0.3)
-    tl.pop(3.05, hit + 14, yc - 44, 'GRAB', 13, -6, 0.4)
-    tl.flash(4.15, 0.35)
-    tl.ring(4.15, W * 0.26, gy + 6, 22)
-    tl.puff(4.15, W * 0.26, gy + 4, 1.1)
-    tl.pop(4.2, W * 0.26, gy - 30, 'BOOM!', 20, -6, 0.7)
-    tl.shake(4.15, 4, 0.3)
+  const blocks3: [number, number, number][] = [[W * 0.5, H - 8 - 40, 40], [W * 0.36, H - 8 - 52, 52], [W * 0.22, H - 8 - 34, 34]]
+  const burst = (t: number): void => {
+    c.set += fx.star3(c.act, t, slot[0], slot[1], 22, STAR)
+  }
+  if (v === 0) {
+    // ---- THE CATCH: the punch caught, the backhand through three blocks, the skid, the flurry, thrown down.
+    c.fighter('o', 'O4', ox, -50, -1).fighter('m', 'M2', slot[0], slot[1], 1)
+    f.at(0).approach('o', ox, 0.4, { y: yc, ease: 'settle', lines: false, ghosts: false })
+    c.note('o', ox, yc)
+    burst(0)
+    f.at(0)
+    dash(c, 'm', hit, 0.45, { y: yc, lines: true, smear: false })
+    c.hit('o', { word: 'TAK!', r: 16, stop: STOP.punch, shake: 1 })
+    for (const t of [0.62, 0.72, 0.82]) f.at(t).flinch('m', { px: 1, d: 0.06 })
+    f.at(0.88).approach('o', ox + 5, 0.12, { ease: 'settle', lines: false, ghosts: false }).pose('o', 'O7')
+    f.approach('o', ox - 3, 0.05, { ease: 'snap', lines: false, ghosts: false })
+    c.note('o', ox - 3, yc, 'O7')
+    c.hit('m', { pose: 'M8', word: 'WHAM!', r: 24, stop: STOP.big, shake: 3, flash: 0.35, impact: [80, 34], push: 1.1, wx: ox - 6, wy: yc - 46 })
+    f.wait(0.05)
+    throughBlocks(c, W * 0.16, gy - 10, 1.0, [blocks3[0], blocks3[2]] as [number, number, number][], { land: 'none', pan: 16 })
+    skid(c, 18, 0.3, gy, 'M8')
+    f.wait(0.04).pose('m', 'M2', 1)
+    c.note('m', W * 0.16 - 18, gy - 10, 'M2', 1)
+    pull(c, 'm', 6, 0.08)
+    dash(c, 'm', hit, 0.3, { y: yc, smear: false })
+    c.jab(hit + 20 * sc, yc - 8, 'POW', hit + 16, yc - 46)
+    f.flinch('o', { px: 2, d: 0.08 }).wait(0.14)
+    f.pose('o', 'O7')
+    c.note('o', ox, yc, 'O7')
+    c.hit('m', { pose: 'M8', word: 'BOOM', r: 14, stop: STOP.punch, shake: 3, flash: 0.3, wx: hit - 26, wy: yc + 24 })
+    f.wait(0.06)
+    throwDown(c, hit)
+    outro(c, f.t + 0.1)
+    c.still('M3', hit, yc, 1); c.still('O4', ox, yc, -1); c.starStill(hit + 20 * sc, yc - 8)
+  } else if (v === 1) {
+    // ---- JET FLICK: Omni-Man flicks a jet away (the pilot's chute pops), then a lazy jab sends Mark through two blocks.
+    c.fighter('o', 'O1', ox, yc, -1).fighter('m', 'M2', slot[0], -80, 1)
+    const jet = `<g fill="#9AA3AD" stroke="${PROPS.ink}" stroke-width="1"><path d="M0 0l22 -3 6 3 -6 3z"/><path d="M8 -1l-5 -7h4l7 7zM8 1l-5 7h4l7 -7z"/></g>`
+    const jy = yc - 16
+    // The jet streaks in from the left to his fist, is flicked up-right tumbling; a chute pops and drifts.
+    c.set += c.act.mv(jet, [[0, -40, jy], [0.5, ox - 50, jy], [0.53, ox - 46, jy - 4, 1, 'rotate(-40deg)'], [1.1, ox + 120, -40, 1, 'rotate(-400deg)']], { c: true })
+    f.at(0.42).pose('o', 'O8')
+    c.note('o', ox, yc, 'O8')
+    f.at(0.5)
+    c.hit('o', { r: 10, stop: STOP.jab, shake: 1, x: ox - 46, y: jy, word: 'FLICK!', wx: ox - 70, wy: jy - 8 })
+    c.set += c.act.mv(`<g stroke="${PROPS.ink}" stroke-width="1"><path d="M-12 0q12 -14 24 0z" fill="#FFFFFF"/><path d="M-11 0l11 13M11 0l-11 13" fill="none"/><rect x="-2" y="12" width="4" height="5" fill="${PROPS.ink}"/></g>`, [[0, ox + 40, 14, 0], [0.75, ox + 40, 14, 0], [0.8, ox + 40, 16, 1], [2.6, ox - 20, 50, 1], [2.9, ox - 30, 58, 0]])
+    f.at(0.7).pose('o', 'O1')
+    c.note('o', ox, yc, 'O1')
+    burst(0.95)
+    f.at(0.93).approach('m', slot[0], 0.02, { y: slot[1], ease: 'linear', lines: false, ghosts: false })
+    c.note('m', slot[0], slot[1])
+    dash(c, 'm', hit + 4, 0.45, { y: yc })
+    f.at(f.t - 0.08).pose('o', 'O8').wait(0.08)
+    c.note('o', ox, yc, 'O8')
+    c.hit('m', { pose: 'M8', word: 'TAK!', r: 18, stop: STOP.big, shake: 3, flash: 0.35, impact: [70, 32], push: 1.08, x: hit + 14, y: yc - 4 })
+    f.wait(0.05)
+    throughBlocks(c, W * 0.2, gy - 10, 0.9, blocks3.slice(1, 2), { land: 'none', pan: 14 })
+    f.pose('o', 'O1')
+    skid(c, 16, 0.3, gy, 'M8')
+    f.wait(0.05).pose('m', 'M2', 1)
+    c.note('m', W * 0.2 - 16, gy - 10, 'M2', 1)
+    pull(c, 'm', 6, 0.08)
+    dash(c, 'm', hit, 0.3, { y: yc })
+    c.jab(hit + 20 * sc, yc - 8)
+    f.flinch('o', { px: 2, d: 0.08 }).wait(0.1)
+    f.pose('o', 'O8')
+    c.note('o', ox, yc, 'O8')
+    c.hit('m', { pose: 'M8', word: 'BOOM', r: 14, stop: STOP.punch, shake: 3, flash: 0.3, wx: hit - 26, wy: yc + 24 })
+    f.wait(0.06)
+    throwDown(c, hit)
+    f.at(f.t + 0.05).pose('o', 'O1')
+    c.f.exit('o', { dir: -1, d: 0.5, fade: true })
+    c.still('M8', hit + 4, yc, 1); c.still('O8', ox, yc, -1); c.starStill(hit + 14, yc - 4)
   } else {
-    // ---- Combo C, "Think, Mark" (wall: 4.6 s): a quiet beat
-    const kx = mx + 4
-    tl.actor('o', [[0, 0.8, 'O1', -1], [0.8, 1.0, 'O9', -1], [1.0, 1.3, 'O9B', -1], [1.3, 2.5, 'O3', -1], [2.5, 3.3, 'O12', -1], [3.3, 4.6, 'O13', -1]], [
-      [0, ox, yc - 46], [0.8, ox, yc - 26], [1.0, ox, yc - 28], [1.3, ox, yc - 22], [2.5, ox, yc - 22], [3.3, ox, yc - 22], [4.0, ox - 26, yc - 70], [4.6, ox - 70, -70, undefined, 0],
-    ])
-    tl.actor('m', [[0.35, 0.6, 'M11'], [0.6, 1.3, 'M7'], [1.3, 4.6, 'M12']], [[0.35, kx, yc + 6], [0.6, kx, yc + 6], [1.0, kx, yc + 6, 0, 1, 1], [1.05, kx, yc + 8, 0, 1, 0.85], [1.3, kx, yc + 8, 0, 1, 0.85], [1.35, kx, yc + 6, 0, 1, 1], [4.6, kx, yc + 6, 0, 1, 1]])
-    tl.actor('b', [[0, 0.35, 'M9']], [[0, kx, -30, 0], [0.35, kx, yc + 6, 270]], { spin: true })
-    tl.flash(1.0, 0.35)
-    tl.star3(1.0, kx + 10, yc - 4, 26)
-    tl.pop(1.04, kx + 30, yc - 44, 'KRAK!', 18, -6, 0.5)
-    tl.shake(1.0, 4, 0.25)
-    tl.bubble(1.3, 1.9, ox - 24, yc - 48, 'THINK, MARK!', true)
-    tl.bubble(1.9, 2.5, kx + 26, yc - 34, "I'D STILL HAVE YOU, DAD.")
-    tl.win(2.7, 3.3, `<rect x="${r1(ox - 30)}" y="${r1(yc - 52)}" width="2" height="3" fill="#9FE8FF"/>`)
-    tl.pop(3.5, ox - 10, yc - 60, 'FWOOSH', 12, -6, 0.5)
-    tl.win(3.3, 4.2, `<g opacity=".8">${speedLines(ox - 20, yc + 6, 22, 4, -1, '#FFFFFF', { gap: 5 })}</g>`)
-    const sm = tl.actorStill('M12', kx, yc + 6, 1)
-    const so = tl.actorStill('O3', ox, yc - 22, -1)
-    tl.still = `<g class="dl-still" style="animation-delay:var(--s)">${sm}${so}</g>`
+    // ---- EVERY ANGLE: Mark lands the first punch, eats the backhand, then comes back from above, below and the side.
+    c.fighter('o', 'O2', ox, -50, -1).fighter('m', 'M2', slot[0], slot[1], 1)
+    f.at(0).approach('o', ox, 0.35, { y: yc, ease: 'settle', lines: false, ghosts: false })
+    c.note('o', ox, yc)
+    burst(0)
+    f.at(0.05)
+    dash(c, 'm', hit + 6, 0.45, { y: yc })
+    c.hit('o', { word: 'BAM!', r: 14, stop: STOP.punch, shake: 2, push: 1.06 })
+    f.approach('o', ox + 6, 0.12, { ease: EASE_OUT, lines: false, ghosts: false })
+    c.note('o', ox + 6, yc)
+    f.wait(0.1).approach('o', ox + 11, 0.12, { ease: 'settle', lines: false, ghosts: false }).pose('o', 'O7')
+    f.approach('o', ox + 2, 0.05, { ease: 'snap', lines: false, ghosts: false })
+    c.note('o', ox + 2, yc, 'O7')
+    c.hit('m', { pose: 'M8', word: 'WHAM!', r: 24, stop: STOP.big, shake: 3, flash: 0.35, impact: [80, 34], push: 1.1, wx: ox - 6, wy: yc - 46 })
+    f.wait(0.05)
+    throughBlocks(c, W * 0.2, gy - 10, 1.0, blocks3.slice(0, 1), { land: 'skid', pan: 16 })
+    f.pose('o', 'O2').wait(0.12).pose('m', 'M2', 1)
+    c.note('m', W * 0.2, gy - 10, 'M2', 1)
+    // From above, from below, from the side: three dives, each a smear and a jab.
+    const spots: [number, number, string][] = [[hit - 6, yc - 26, 'POW'], [hit + 2, yc + 18, 'BIFF']]
+    for (const [i, [sx, sy, w]] of spots.entries()) {
+      dash(c, 'm', sx, i ? 0.18 : 0.3, { y: sy })
+      c.jab(sx + 20 * sc, sy - 6, i === 1 ? w : undefined, ox - 30 + i * 14, yc - 48 + (i % 2) * 8)
+      f.flinch('o', { px: 2, d: 0.08 })
+      if (i < spots.length - 1) { f.wait(0.04).pose('m', 'M2'); pull(c, 'm', 14, 0.08) }
+    }
+    f.wait(0.08).pose('o', 'O7')
+    c.note('o', ox + 6, yc, 'O7')
+    c.hit('m', { pose: 'M8', word: 'BOOM', r: 14, stop: STOP.punch, shake: 3, flash: 0.3, wx: hit - 26, wy: yc + 24 })
+    f.wait(0.06)
+    throwDown(c, hit)
+    outro(c, f.t + 0.1, 'O2')
+    c.still('M3', hit + 6, yc, 1); c.still('O2', ox, yc, -1); c.starStill(ox - 12, yc - 6)
   }
 }
 
-export type FightArgs = { W: number; H: number; era: Era; startAt: number; /** Colours kept per frame; ghosts only when true. */ K?: number; big?: boolean }
-const pid = (s: string, a: FightArgs, k: string): string => `f${(hash(`${s}${a.W}${a.H}${a.era}${k}`) % 46656).toString(36)}`
-const assemble = (tl: Tl, extra = ''): string => {
-  const o = tl.out()
-  return `<!--dl--><g pointer-events="none" style="--p:${pin(tl.start)};--q:var(--p);--s:${tl.dl(0)}"><style>${FIGHT_CSS}${o.css}</style><defs>${o.defs}</defs><g class="dl-anim">${o.body}${extra}</g>${o.still}</g><!--/dl-->`
+// ---------------------------------------------------------------- the pane acts (one per card)
+const actCut = (c: Cut, act: ActIndex): void => {
+  const { W, H, sc, f } = c
+  const yc = Math.round(H * (act === 0 ? 0.42 : 0.5))
+  const ox = Math.round(W * (act === 2 ? 0.68 : 0.72))
+  const mx = Math.round(W * 0.28)
+  const hit = ox - 34 * sc
+  const gy = Math.min(H - 10, yc + 70)
+  if (act === 0) {
+    // ---- "The Catch" (COVER STORY): Mark smashes in at full size (L -> XL, a crater), the punch caught, the backhand.
+    c.fighter('m', 'T4', mx, -60, 1).fighter('o', 'O4', ox, -60, -1)
+    f.at(0).approach('m', mx, 0.26, { y: yc + 12, ease: EASE_IN, lines: false, ghosts: false })
+    c.note('m', mx, yc + 12, 'T4')
+    c.crater(f.t, 1.5, mx, gy - 30, 34)
+    c.set += fx.ring(c.act, f.t, mx, gy - 30, { rx: 26, color: '#FFFFFF' }) + fx.dust(c.act, f.t, mx + 20, gy - 30, { n: 5, seed: 'smash', color: PROPS.paperDark, dx: -10, s: 1.4 }) + fx.debris(c.act, f.t, mx, gy - 36, { n: 4, seed: 'smashd', colors: [PROPS.ink, '#2A3350', PROPS.paperDark], spread: 60 })
+    c.hit('m', { word: 'BOOM!', r: 22, stop: STOP.slam, shake: 4, flash: 0.3, x: mx, y: gy - 34, wx: mx + 40, wy: yc - 40 })
+    f.wait(0.12).pose('m', 'M2')
+    f.approach('m', mx, 0.25, { y: yc, ease: 'settle', lines: false, ghosts: false })
+    c.note('m', mx, yc, 'M2')
+    f.at(0.3).approach('o', ox, 0.5, { y: yc, ease: 'settle', lines: false, ghosts: false })
+    c.note('o', ox, yc)
+    f.at(1.0).say('o', 'JOIN ME', 0.6, { fill: '#FFFFFF', ink: PROPS.ink })
+    f.at(1.55)
+    pull(c, 'm', 8, 0.12)
+    f.sfx('FWOOSH', mx + 40, yc - 40, { size: 13 })
+    dash(c, 'm', hit, 0.3, { y: yc, smear: false })
+    c.hit('o', { word: 'TAK!', r: 12, stop: STOP.punch, shake: 1, wx: hit, wy: yc - 46 })
+    for (const t of [0.2, 0.4, 0.6]) f.at(2.12 + t).flinch('m', { px: 1, d: 0.1 })
+    f.at(2.75)
+    backhand(c)
+    c.hit('m', { pose: 'M9', word: 'WHAM!', r: 24, stop: STOP.big, shake: 3, flash: 0.35, impact: [110, 60], push: 1.1, wx: ox - 10, wy: yc - 50 })
+    f.wait(0.06)
+    throughBlocks(c, W * 0.16, gy - 6, 0.8, [[W * 0.46, gy + 14 - 54, 54], [W * 0.3, gy + 14 - 40, 40]], { land: 'none', pan: 18 })
+    f.at(f.t).pose('o', 'O4')
+    f.at(f.t).throw('m', W * 0.12, H + 40, { d: 0.25, arc: 10, turns: 1, pose: 'M9' })
+    c.still('M3', hit, yc, 1); c.still('O4', ox, yc, -1); c.starStill(hit + 18 * sc, yc - 6, 16)
+  } else if (act === 1) {
+    // ---- "Every Angle" (GDA WALL): the flurry from every side, Omni-Man's lazy jab, the grab and the slam (a crater, KO stars).
+    c.fighter('m', 'M9', mx, -30, 1).fighter('o', 'O1', ox, yc, -1)
+    f.at(0).throw('m', mx, yc, { d: 0.3, arc: 0, turns: 0.75 })
+    c.note('m', mx, yc, 'M9')
+    f.pose('m', 'M2')
+    c.set += fx.koStars(c.act, 0.3, 0.75, mx, yc - 36, { color: '#FFE066', ink: PROPS.ink })
+    f.at(0.6)
+    pull(c, 'm', 8, 0.1)
+    f.sfx('FWOOSH', mx + 40, yc - 36, { size: 13 })
+    f.approach('m', hit - 10, 0.3, { ease: EASE_IN })
+    c.note('m', hit - 10, yc, 'M2')
+    const spots: [number, number][] = [[-52, -10], [-34, -40], [-54, 22], [-36, 34], [-56, -26], [-30, 6]]
+    const words = ['POW', '', 'BAM', '', 'BIFF', '']
+    spots.forEach(([dx, dy], i) => {
+      const sx = ox + (dx * sc) / 1.5
+      const sy = yc + (dy * sc) / 1.5
+      f.pose('m', i % 2 ? 'M5' : 'M4').approach('m', sx, 0.07, { y: sy, ease: EASE_IN, lines: false, ghosts: false })
+      c.note('m', sx, sy, i % 2 ? 'M5' : 'M4')
+      f.pose('o', 'O11')
+      c.note('o', ox, yc, 'O11')
+      c.jab(ox - 40 - (i % 3) * 6, yc - 18 + ((i * 17) % 40), words[i] || undefined, ox - 60 + i * 6, yc - 52 + (i % 2) * 8)
+      f.wait(0.07).pose('o', 'O1').wait(0.05)
+    })
+    // The answer: one lazy jab. Mark recoils, comes back for a grab; Omni-Man lifts him and slams him down.
+    f.pose('o', 'O8')
+    c.note('o', ox, yc, 'O8')
+    c.hit('m', { pose: 'M5', word: 'TAK!', r: 12, stop: STOP.punch, shake: 2, push: 1.05 })
+    f.approach('m', (c.at['m'] as { x: number }).x - 24, 0.2, { y: yc, ease: EASE_OUT, lines: false, ghosts: false })
+    c.note('m', (c.at['m'] as { x: number }).x - 24, yc)
+    f.pose('o', 'O1').wait(0.1).pose('m', 'M6')
+    f.approach('m', hit, 0.18, { ease: EASE_IN, lines: false, ghosts: false })
+    c.note('m', hit, yc, 'M6')
+    f.sfx('GRAB', hit + 14, yc - 44, { size: 13, d: 0.4 })
+    f.pose('o', 'O8').wait(0.3).pose('o', 'O7')
+    const lx = W * 0.26
+    f.throw('m', lx, gy - 8, { d: 0.32, arc: -20, turns: 1, pose: 'M9' })
+    c.note('m', lx, gy - 8, 'M9')
+    c.crater(f.t, f.t + 1.2, lx, gy + 4, 28)
+    c.set += fx.ring(c.act, f.t, lx, gy + 6, { rx: 22, color: '#FFFFFF' }) + fx.puff(c.act, f.t, lx, gy + 4, { s: 1.1, fill: PROPS.paperDark, ink: PROPS.ink }) + fx.debris(c.act, f.t, lx, gy - 2, { n: 6, seed: 'slam1', colors: [PROPS.ink, PROPS.paperDark], spread: 40 })
+    c.hit('m', { word: 'BOOM!', r: 18, stop: STOP.slam, shake: 4, flash: 0.35, impact: [90, 46], x: lx, y: gy - 6, wx: lx, wy: gy - 34 })
+    c.set += fx.koStars(c.act, f.t + 0.1, f.t + 0.7, lx, gy - 30, { color: '#FFE066', ink: PROPS.ink })
+    f.wait(0.15).pose('o', 'O1').wait(0.45)
+    f.throw('m', lx, H + 30, { d: 0.25, arc: 0, turns: 0.5 })
+    c.still('M4', ox - 52 * sc / 1.5, yc - 10 * sc / 1.5, 1); c.still('O11', ox, yc, -1); c.starStill(ox - 40, yc - 18, 10)
+  } else {
+    // ---- "Think, Mark" (THE PAGE): a quiet beat. One hammer blow on Mark's block, the words, the hands, the flight.
+    const kx = mx + 4
+    c.fighter('m', 'M9', kx, -30, 1).fighter('o', 'O1', ox, yc - 46, -1)
+    f.at(0).throw('m', kx, yc + 6, { d: 0.35, arc: 0, turns: 0.75 })
+    c.note('m', kx, yc + 6, 'M9')
+    f.pose('m', 'M11').wait(0.25).pose('m', 'M7')
+    c.note('m', kx, yc + 6, 'M7')
+    f.at(0.3).approach('o', ox, 0.5, { y: yc - 26, ease: 'settle', lines: false, ghosts: false })
+    c.note('o', ox, yc - 26)
+    f.pose('o', 'O9').wait(0.2).pose('o', 'O9B')
+    c.note('o', ox, yc - 26, 'O9B')
+    c.crater(f.t, 2.4, kx, yc + 52, 30)
+    c.hit('m', { word: 'KRAK!', r: 26, stop: STOP.slam, shake: 4, flash: 0.35, x: kx + 10, y: yc - 4, wx: kx + 30, wy: yc - 44 })
+    c.set += fx.ring(c.act, f.t, kx, yc + 52, { rx: 24, color: '#FFFFFF' }) + fx.dust(c.act, f.t, kx + 22, yc + 50, { n: 4, seed: 'hammer', color: PROPS.paperDark, dx: -14, s: 1.2 })
+    f.approach('m', kx, 0.06, { y: yc + 9, ease: 'snap', lines: false, ghosts: false }).wait(0.24).approach('m', kx, 0.1, { y: yc + 6, ease: 'settle', lines: false, ghosts: false })
+    f.wait(0.05).pose('o', 'O3').pose('m', 'M12')
+    c.note('m', kx, yc + 6, 'M12')
+    f.say('o', 'THINK, MARK!', 0.65, { fill: '#FFFFFF', ink: PROPS.ink }).wait(0.65)
+    f.say('m', "I'D STILL HAVE YOU, DAD.", 0.7, { fill: '#FFFFFF', ink: PROPS.ink }).wait(0.75)
+    f.pose('o', 'O12')
+    c.set += c.act.win(f.t + 0.2, f.t + 0.7, `<rect x="${r1(ox - 30)}" y="${r1(yc - 52)}" width="2" height="3" fill="#9FE8FF"/>`)
+    f.wait(0.8).pose('o', 'O13')
+    f.sfx('FWOOSH', ox - 10, yc - 60, { size: 12, d: 0.5 })
+    f.approach('o', ox - 70, 0.6, { y: -70, ease: EASE_IN, lines: true, ghosts: false })
+    c.still('M12', kx, yc + 6, 1); c.still('O3', ox, yc - 26, -1)
+  }
+}
+
+// ---------------------------------------------------------------- MARK VS CONQUEST (the new suit only)
+/** A laugh: the elder warrior bobs 1.5 px, `n` times, from `t` (the 2-frame laugh, in code). */
+const laugh = (c: Cut, who: string, t: number, n = 2, px = 1.5): void => {
+  const p = c.at[who] as { x: number; y: number }
+  c.f.at(t)
+  for (let i = 0; i < n; i++) c.f.approach(who, p.x, 0.11, { y: p.y - px, ease: 'snap', lines: false, ghosts: false }).approach(who, p.x, 0.11, { y: p.y, ease: 'snap', lines: false, ghosts: false })
+}
+/**
+ * The CUT-IN: a close-up strip (80x20, Chin's art) slides in on a letterbox band across the card for `d` s while the fighters
+ * hold under it, with an optional line under the strip. One per act (budget).
+ */
+const cutin = (c: Cut, key: string, t: number, side: 1 | -1, line = '', d = 0.45): void => {
+  const s = Math.max(2, Math.min(4, Math.floor((c.W - 32) / 80)))
+  const h = 20 * s
+  const cy = Math.round(c.H * 0.32)
+  const sub = line ? `<text x="${r1(c.W / 2)}" y="${r1(cy + h / 2 + 15)}" text-anchor="middle" class="dl-t" font-size="12" fill="#FFE066">${line}</text>` : ''
+  c.over += c.act.win(t, t + d, `<rect x="0" y="${r1(cy - h / 2 - 5)}" width="${c.W}" height="${r1(h + 10 + (line ? 16 : 0))}" fill="${PROPS.ink}" opacity=".92"/><rect x="0" y="${r1(cy - h / 2 - 2)}" width="${c.W}" height="1.5" fill="#FFFFFF"/>${sub}`)
+  const off = `transform:translateX(${side * c.W}px)`
+  c.over += c.act.kf(c.act.bank.use(key, c.W / 2, cy, 1, s), [[0, `opacity:0;${off}`], [t, `opacity:0;${off}`], [t + 0.01, `opacity:1;${off}`], [t + 0.08, 'opacity:1;transform:translateX(0px)'], [t + d - 0.02, `opacity:1;transform:translateX(${-side * 6}px)`], [t + d, 'opacity:0'], [999, 'opacity:0']])
+}
+/** Where an orbiting figure's middle is, `r` from the pivot at angle `a` (stage/choreo `orbit`'s rule). */
+const orbitAt = (px: number, py: number, r: number, a: number): [number, number] => { const q = (a * Math.PI) / 180; return [px - r * Math.sin(q), py + r * Math.cos(q)] }
+/** The catch hand of C3 facing left (his open glove on the left edge, a quarter down), for a fighter standing at (x, y). */
+const catchHand = (x: number, y: number, sc: number): [number, number] => [x - Math.round(0.56 * 39 * sc) + 3, y - Math.round(12 * sc)]
+/** M13 (swung by the wrist): the grip hand to the middle of the body. */
+const swingR = (sc: number): number => Math.round(25 * sc)
+
+/** The band (4.4 s): he drops in laughing, FINALLY.; the punch caught in his open hand; hauled over his head and SLAMMED. */
+const conquestBand = (c: Cut): void => {
+  const { W, H, sc, f } = c
+  const yc = Math.round(H * 0.5) + 4
+  const ox = Math.round(W * 0.6)
+  const gy = H - 16
+  const slot: [number, number] = [37, 62]
+  const [hx, hy] = catchHand(ox, yc, sc)
+  c.fighter('c', 'C1', ox + 30, -70, -1).fighter('m', 'M2', slot[0], slot[1], 1)
+  f.at(0).approach('c', ox, 0.45, { y: yc, ease: 'settle', lines: false, ghosts: false })
+  c.note('c', ox, yc)
+  c.set += fx.star3(c.act, 0, slot[0], slot[1], 22, STAR)
+  laugh(c, 'c', 0.5, 2)
+  // His laugh as a word beside him (the band keeps its header row clear: no bubble above his head).
+  f.at(0.55).sfx('HA HA!', ox - Math.round(46 * sc), Math.max(c.top, yc - 6), { size: 13, tilt: -6, d: 0.6 })
+  // The charge: caught. His open hand stops the fist dead (TAK), Mark hangs there for a beat.
+  f.at(1.2)
+  pull(c, 'm', 6, 0.1)
+  const mx = hx - Math.round(0.6 * 29 * sc)
+  dash(c, 'm', mx, 0.34, { y: hy, lines: true, smear: false })
+  f.pose('c', 'C3')
+  c.note('c', ox, yc, 'C3')
+  c.hit('c', { word: 'TAK!', r: 12, stop: STOP.punch, shake: 1, x: hx, y: hy, wx: hx + 4, wy: hy - 20 })
+  f.wait(0.08).flinch('m', { px: 1, d: 0.06 }).wait(0.06).flinch('m', { px: 1, d: 0.06 })
+  // THE SLAM: up by the wrist, over his head, and down into the street in front of him.
+  const r = swingR(sc)
+  f.pose('m', 'M13', 1)
+  f.orbit('m', hx + 6, hy - 6, r, 90, 230, 0.26, { ease: 'settle' })
+  f.wait(0.05)
+  f.orbit('m', hx - 2, hy + 4, r, 230, 22, 0.15, { ease: EASE_IN })
+  const [ex, ey] = orbitAt(hx - 2, hy + 4, r, 22)
+  c.note('m', ex, ey, 'M13')
+  const sx = Math.round(hx - 2 - 2 * r * Math.sin((22 * Math.PI) / 180))
+  c.crater(f.t, f.t + 1.0, sx, gy, 30)
+  c.set += fx.ring(c.act, f.t, sx, gy, { rx: 24, color: '#FFFFFF' }) + fx.dust(c.act, f.t, sx + 14, gy - 2, { n: 4, seed: 'cqslam', color: PROPS.paperDark, dx: -10, s: 1.1 }) + fx.debris(c.act, f.t, sx, gy - 8, { n: 4, seed: 'cqslamd', colors: [PROPS.ink, BLOCK, PROPS.paperDark], spread: 40 })
+  c.hit('m', { word: 'WHAM!', r: 24, stop: STOP.slam, shake: 4, flash: 0.35, impact: [80, 34], push: 1.1, x: sx, y: gy - 12, wx: sx - 34, wy: gy - 52 })
+  // Down he goes, toward the viewer: S -> M out of the band's bottom (COVER STORY catches him at full size).
+  f.wait(0.16)
+  throwDown(c, sx)
+  f.at(f.t - 0.2).pose('c', 'C1')
+  c.note('c', ox, yc, 'C1')
+  laugh(c, 'c', f.t, 1)
+  f.approach('c', ox - 16, 0.4, { y: H + 70, ease: EASE_IN, lines: true, ghosts: false })
+  c.still('M3', mx, hy, 1); c.still('C3', ox, yc, -1); c.starStill(hx, hy, 12)
+}
+
+/** The pane acts: 0 COVER STORY (swung by the wrist, the skid, the goggle wipe), 1 GDA WALL (the comeback and the knock-down). */
+const conquestAct = (c: Cut, act: ActIndex): void => {
+  const { W, H, sc, f } = c
+  const yc = Math.round(H * (act === 0 ? 0.42 : 0.5))
+  const ox = Math.round(W * 0.72)
+  const mx = Math.round(W * 0.28)
+  const gy = Math.min(H - 10, yc + 70)
+  if (act === 0) {
+    // ---- COVER STORY: Mark smashes in at full size (L -> XL, a crater); he lands after him, laughing.
+    // (He stands in his catch pose all act: one Conquest frame here keeps COVER STORY inside its share of the reserve.)
+    c.fighter('m', 'T4', mx, -60, 1).fighter('c', 'C3', ox + 20, -90, -1)
+    f.at(0).approach('m', mx, 0.26, { y: yc + 12, ease: EASE_IN, lines: false, ghosts: false })
+    c.note('m', mx, yc + 12, 'T4')
+    c.crater(f.t, 1.6, mx, gy - 30, 34)
+    c.set += fx.ring(c.act, f.t, mx, gy - 30, { rx: 26, color: '#FFFFFF' }) + fx.dust(c.act, f.t, mx + 20, gy - 30, { n: 5, seed: 'cqsmash', color: PROPS.paperDark, dx: -10, s: 1.4 }) + fx.debris(c.act, f.t, mx, gy - 36, { n: 4, seed: 'cqsmashd', colors: [PROPS.ink, '#2A3350', PROPS.paperDark], spread: 60 })
+    c.hit('m', { word: 'BOOM!', r: 22, stop: STOP.slam, shake: 4, flash: 0.3, x: mx, y: gy - 34, wx: mx + 40, wy: yc - 40 })
+    f.wait(0.12).pose('m', 'M2')
+    f.approach('m', mx, 0.25, { y: yc, ease: 'settle', lines: false, ghosts: false })
+    c.note('m', mx, yc, 'M2')
+    f.at(0.35).approach('c', ox, 0.5, { y: yc, ease: 'settle', lines: false, ghosts: false })
+    c.note('c', ox, yc)
+    laugh(c, 'c', 0.9, 2)
+    // The close-up: his scarred eye, the grin. FINALLY.
+    cutin(c, 'CI0', 1.0, -1, 'FINALLY.')
+    // The charge again: he catches him by the wrist this time.
+    const [hx, hy] = catchHand(ox, yc, sc)
+    const r = swingR(sc)
+    f.at(1.6)
+    pull(c, 'm', 8, 0.12)
+    f.sfx('FWOOSH', mx + 40, yc - 40, { size: 13 })
+    f.approach('m', hx - r, 0.26, { y: hy, ease: EASE_IN, lines: true, ghosts: false })
+    c.note('m', hx - r, hy, 'M2')
+    f.pose('c', 'C3')
+    c.note('c', ox, yc, 'C3')
+    c.hit('c', { word: 'GRAB', r: 10, stop: STOP.punch, shake: 1, x: hx, y: hy, wx: hx + 8, wy: hy - 34 })
+    f.wait(0.12)
+    // SWUNG BY THE WRIST: a full turn round his fist like a club; Mark's body smashes the two blocks on the way down.
+    f.pose('m', 'M13', 1)
+    const t0 = f.t
+    const d = 0.5
+    const blocks: [number, number][] = [[hx - Math.round(1.1 * r), 58], [hx - Math.round(1.75 * r), 44]]
+    blocks.forEach(([bx, bh], i) => c.block(0, r3(t0 + d * when('whip', (395 + i * 14 - 90) / 360)), bx, gy + 14 - bh, bh, i === 0))
+    f.at(t0).orbit('m', hx, hy, r, 90, 450, d, { ease: 'whip' })
+    const [rx, ry] = orbitAt(hx, hy, r, 450)
+    c.note('m', rx, ry, 'M13')
+    // Let go: WHAM, Mark a spinning ball across the street, the skid, then he wipes his goggles.
+    c.hit('m', { pose: 'M9', word: 'WHAM!', r: 22, stop: STOP.big, shake: 3, flash: 0.3, impact: [100, 50], push: 1.08, x: rx, y: ry, wx: rx + 10, wy: ry - 50 })
+    f.wait(0.04)
+    throughBlocks(c, W * 0.12, gy - 6, 0.55, [], { land: 'skid', pan: 14 })
+    laugh(c, 'c', f.t, 1)
+    f.wait(0.06).pose('m', 'M14', 1)
+    c.note('m', W * 0.12, gy - 6, 'M14', 1)
+    f.wait(0.36).pose('m', 'M2', 1)
+    // Up and at him again: down out of the card (GDA WALL picks it up), and he follows.
+    f.approach('m', mx + 30, 0.26, { y: H + 60, ease: EASE_IN, lines: true, ghosts: false })
+    f.with().approach('c', ox - 10, 0.34, { y: H + 80, ease: EASE_IN, lines: false, ghosts: false })
+    c.still('M13', hx - r, hy, 1); c.still('C3', ox, yc, -1); c.starStill(hx, hy, 14)
+  } else {
+    // ---- GDA WALL: the comeback. BAM; four jabs against his laugh; the spin; the slam; Mark hovers, tired.
+    c.fighter('m', 'M2', mx - 20, -50, 1).fighter('c', 'C1', ox + 20, -80, -1)
+    f.at(0).approach('m', mx, 0.3, { y: yc, ease: EASE_IN, lines: false, ghosts: false })
+    c.note('m', mx, yc)
+    f.at(0.1).approach('c', ox, 0.45, { y: yc, ease: 'settle', lines: false, ghosts: false })
+    c.note('c', ox, yc)
+    laugh(c, 'c', 0.6, 2)
+    // The close-up before the comeback: Mark's eyes behind the goggles.
+    cutin(c, 'CI1', 0.62, 1)
+    f.at(1.1)
+    pull(c, 'm', 8, 0.12)
+    f.sfx('FWOOSH', mx + 40, yc - 36, { size: 13 })
+    const hit = Math.round(ox - 36 * sc)
+    dash(c, 'm', hit, 0.3, { y: yc - 12 })
+    f.pose('c', 'C5')
+    c.note('c', ox, yc, 'C5')
+    c.hit('c', { word: 'BAM!', r: 22, stop: STOP.big, shake: 3, flash: 0.35, impact: [110, 56], push: 1.1, x: hit + 18 * sc, y: yc - 22, wx: ox - 30, wy: yc - 60 })
+    f.approach('c', ox + 14, 0.14, { ease: EASE_OUT, lines: false, ghosts: false })
+    c.note('c', ox + 14, yc, 'C5')
+    // The trade: four jabs, his laugh between them.
+    const words = ['POW', '', 'BIFF', '']
+    for (let i = 0; i < 4; i++) {
+      const jx = hit + 6 + (i % 2) * 6
+      const jy = yc - 18 + ((i * 13) % 26)
+      f.pose('m', i % 2 ? 'M3' : 'MS').approach('m', jx, 0.07, { y: jy, ease: EASE_IN, lines: false, ghosts: false }).pose('m', 'M3')
+      c.note('m', jx, jy, 'M3')
+      f.pose('c', i % 2 ? 'C1' : 'C5')
+      c.jab(ox - 16, yc - 24 + ((i * 11) % 30), words[i] || undefined, ox - 48 + i * 8, yc - 58 + (i % 2) * 8)
+      f.wait(0.08)
+    }
+    // THE SPIN: Mark takes his arm and spins him round (the spin smear), then hurls him DOWN into the street.
+    const px = hit + Math.round(0.6 * 29 * sc)
+    const py = yc - 12
+    const rc = Math.max(24, ox + 14 - px)
+    f.pose('m', 'MSP', 1).pose('c', 'C6')
+    f.orbit('c', px, py, rc, 270, 720, 0.46, { ease: 'whip' })
+    f.at(f.t - 0.1).pose('m', 'M3')
+    f.at(f.t + 0.1)
+    const lx = Math.round(px - 6)
+    const ly = Math.round(gy - 5.5 * sc)
+    f.approach('c', lx, 0.14, { y: ly, ease: EASE_IN, lines: false, ghosts: false }).pose('c', 'C7')
+    c.note('c', lx, ly, 'C7')
+    c.note('m', hit, py, 'M3')
+    c.crater(f.t, f.t + 1.6, lx, gy + 4, 36)
+    c.set += fx.ring(c.act, f.t, lx, gy + 6, { rx: 28, color: '#FFFFFF' }) + fx.puff(c.act, f.t, lx, gy + 2, { s: 1.2, fill: PROPS.paperDark, ink: PROPS.ink }) + fx.debris(c.act, f.t, lx, gy - 2, { n: 6, seed: 'cqdown', colors: [PROPS.ink, PROPS.paperDark, BLOCK], spread: 46 })
+    c.hit('c', { word: 'BOOM!', r: 20, stop: STOP.slam, shake: 4, flash: 0.35, impact: [96, 46], x: lx, y: gy - 6, wx: lx + 30, wy: gy - 46 })
+    c.set += fx.koStars(c.act, f.t + 0.15, f.t + 1.0, lx - 10, ly - 18, { color: '#FFE066', ink: PROPS.ink })
+    // The quiet beat: Mark hovers, tired (a slow breath); from the crater, a grin: NOT DONE.
+    f.wait(0.2).pose('m', 'M15', 1)
+    const hx2 = Math.round(lx + 70)
+    const hy2 = Math.round(yc - 30)
+    f.approach('m', hx2, 0.4, { y: hy2, ease: 'settle', lines: false, ghosts: false })
+    c.note('m', hx2, hy2, 'M15')
+    for (let i = 0; i < 2; i++) f.approach('m', hx2, 0.32, { y: hy2 + 1.5, ease: 'settle', lines: false, ghosts: false }).approach('m', hx2, 0.32, { y: hy2, ease: 'settle', lines: false, ghosts: false })
+    f.at(f.t - 0.9).say('c', 'NOT DONE.', 0.8, { fill: '#FFFFFF', ink: PROPS.ink })
+    c.still('M15', hx2, hy2, 1); c.still('C7', lx, ly, -1)
+  }
+}
+
+// ---------------------------------------------------------------- surfaces
+export type FightArgs = { W: number; H: number; era: Era; startAt: number; /** Colours kept per frame. */ K?: number; big?: boolean; /** Which version (default 0). */ v?: Version }
+type Built = { svg: string; chain: string[]; frames: number; shake: string; cut: Cut }
+const CACHE = new Map<string, Built>()
+const build = (a: FightArgs, surface: 'band' | ActIndex): Built => {
+  const v = a.v ?? 0
+  const T = timing(v)
+  const key = `${surface}|${v}|${a.era}|${a.W}|${a.H}|${a.startAt}|${a.K ?? 4}`
+  const hit = CACHE.get(key)
+  if (hit) return hit
+  const band = surface === 'band'
+  const off = band ? 0 : (T.off[surface] as number)
+  const box: [number, number, number, number] = band ? [0, 0, Math.round(a.W * 0.67), a.H] : [0, 0, a.W, a.H]
+  const cq = v === CONQUEST
+  const c = new Cut(`invf-${band ? 'b' : `p${surface}`}-${v}-${a.era}-${a.W}x${a.H}`, a.startAt, off, a.era, band ? 1.45 : 1.9, a.W, a.H, box, a.K ?? 4, T.ms, cq)
+  if (band) { if (cq) conquestBand(c); else bandCut(c, v as 0 | 1 | 2) }
+  else if (cq) conquestAct(c, surface)
+  else actCut(c, surface)
+  const svg = c.done(band ? T.band : (T.len[surface] as number))
+  const chain = c.act.chainKeys()
+  const out: Built = { svg, chain, frames: c.act.bank.count(), shake: c.shake(), cut: c }
+  if (CACHE.size > 24) CACHE.delete(CACHE.keys().next().value as string)
+  CACHE.set(key, out)
+  return out
 }
 
 /** The band's layer of THE FIGHT (the 5.5 s cut, from `startAt`). */
-export const fightBand = (a: FightArgs): { svg: string; chain: string[]; frames: number } => {
-  const tl = new Tl(pid('b', a, 'b'), a.startAt, 0, a.era, 1.45, a.K ?? 5, a.W, a.H)
-  bandCut(tl, a.big ?? false)
-  return { svg: assemble(tl), chain: tl.chainKeys(), frames: new Set(tl.chain.map(c => c[1])).size }
-}
-/** One pane act (0 COVER STORY, 1 THE PAGE, 2 GDA WALL) as a layer to splice into that card. */
+export const fightBand = (a: FightArgs): { svg: string; chain: string[]; frames: number } => { const b = build(a, 'band'); return { svg: b.svg, chain: b.chain, frames: b.frames } }
+/** One pane act (0 COVER STORY, 1 GDA WALL, 2 THE PAGE) as a layer to splice into that card. */
 export const fightAct = (a: FightArgs, act: ActIndex): { svg: string; chain: string[]; frames: number } => {
-  const tl = new Tl(pid('p', a, String(act)), a.startAt, ACT_OFF[act], a.era, 1.9, a.K ?? 5, a.W, a.H)
-  actCut(tl, act)
-  return { svg: assemble(tl), chain: tl.chainKeys(), frames: new Set(tl.chain.map(c => c[1])).size }
+  if (act >= timing(a.v ?? 0).acts) return { svg: '', chain: [], frames: 0 }
+  const b = build(a, act)
+  return { svg: b.svg, chain: b.chain, frames: b.frames }
 }
-/** The panel's shake for a surface: the CSS animation list (none overlap; fill none so a later one never cancels an earlier). */
-export const fightShake = (surface: 'band' | 'pane', startAt: number, W: number, H: number, era: Era, act?: ActIndex): string => {
-  const a: FightArgs = { W, H, era, startAt }
-  const tl = surface === 'band' ? new Tl('s', startAt, 0, era, 1.45, 5, W, H) : new Tl('s', startAt, ACT_OFF[act ?? 0], era, 1.9, 5, W, H)
-  if (surface === 'band') bandCut(tl, false)
-  else actCut(tl, act ?? 0)
-  void a
-  return tl.shakes.sort((x, y) => x[0] - y[0]).map(([t, tier, ms]) => `dl-sh${tier} ${ms}s steps(1) none;animation-delay:calc(${pin(startAt)} + ${r3(t)}s)`).join(',')
-}
+/**
+ * The panel's shake for a surface, as animation LONGHANDS (`animation-name:a,b;...;animation-delay:x,y`): every shake of the
+ * cut plays. (v1 glued a delay list to an `animation:` shorthand, so only one shake ever played.)
+ */
+export const fightShake = (surface: 'band' | 'pane', startAt: number, W: number, H: number, era: Era, act?: ActIndex, v: Version = 0): string => surface === 'pane' && (act ?? 0) >= timing(v).acts ? '' : build({ W, H, era, startAt, v }, surface === 'band' ? 'band' : act ?? 0).shake
+/** The cut itself (tests: hits, freezes, the script). */
+export const fightCut = (a: FightArgs, surface: 'band' | ActIndex): { act: Act; f: Fight; cam: Camera } => { const c = build(a, surface).cut; return { act: c.act, f: c.f, cam: c.cam } }
 /** The chains of poses each act plays, in time order (the three combos). */
 export const COMBOS = COMBO_NAMES
-export const chainOfAct = (act: ActIndex | 'band', era: Era = 1): string[] => (act === 'band' ? fightBand({ W: 900, H: 134, era, startAt: 0 }).chain : fightAct({ W: 480, H: act === 0 ? 434 : act === 1 ? 236 : 260, era, startAt: 0 }, act).chain)
+export const chainOfAct = (act: ActIndex | 'band', era: Era = 1, v: Version = 0): string[] => (act === 'band' ? fightBand({ W: 900, H: 134, era, startAt: 0, v }).chain : fightAct({ W: 480, H: act === 0 ? 434 : act === 1 ? 236 : 260, era, startAt: 0, v }, act).chain)
 /** The slot's hole while Mark is out (the whole fight), sealed by a burst at the end. */
-export const fightHole = (era: Era, startAt: number, tile: string): string => {
+export const fightHole = (era: Era, startAt: number, tile: string, v: Version = 0): string => {
   const P = pal(era)
   const d = (t: number): string => `calc(${pin(startAt)} + ${r3(t)}s)`
   const hole = `<rect x="14" y="34" width="44" height="46" fill="${tile}"/><path d="M36 40l-6 10 5 6-8 9 6 6m4-31l7 8-6 7 9 8" fill="none" stroke="${P.muted}" stroke-width="1.2"/><ellipse cx="36" cy="58" rx="13" ry="15" fill="${PROPS.ink}"/>`
-  return `<g pointer-events="none" style="opacity:0;animation:dl-a ${r3(FIGHT_T)}s steps(1) forwards;animation-delay:${d(0)}">${hole}</g>`
+  return `<g pointer-events="none" style="opacity:0;animation:dl-hole ${r3(timing(v).ms / 1000)}s steps(1) forwards;animation-delay:${d(0)}"><style>@keyframes dl-hole{0%,99%{opacity:1}100%{opacity:0}}</style>${hole}</g>`
 }
 export { info as frameInfo }

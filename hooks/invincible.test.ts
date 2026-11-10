@@ -4,14 +4,16 @@ import type { Engine } from 'claude-code/testing'
 import { CASTS } from './cast'
 import type { Sprite } from './cast'
 import { BADGES, RANKS, VERBS, coverCard, coverHeight, pageCard, rankOf, tierOf, wallCard } from './invincible-cards'
-import { ACT_LEN, ACT_OFF, BAND_CUT, FIGHT_CSS, FIGHT_MS, FIGHT_PANE_RESERVE, FRAME_KEYS, chainOfAct, fightAct, fightBand, frameSprite } from './invincible-fight'
+import { ACT_LEN, ACT_OFF, BAND_CUT, CONQUEST, CONQUEST_PLAY, CQ_K, CQ_LEN, CQ_MS, CQ_OFF, FIGHT_CSS, FIGHT_MS, FIGHT_PANE_RESERVE, FRAME_KEYS, STOP, VERSIONS, chainOfAct, fightAct, fightBand, fightCut, fightShake, frameSprite, suit2, timing } from './invincible-fight'
 import { CAMEO_CSS, CAM_JITTER_MS, CAM_SLOT_MS, CECIL_LINES, DUR_MS, EVE_LINE, OLIVER_LINE, camBlocked, camDue, camExtras, camPlanOfSlot, camReplay } from './invincible-cameos'
 import type { CamPlan } from './invincible-cameos'
-import { AHEAD_MS, CLASSIC_RE, DUEL_MS, GUARDIANS_RE, NEW_SUIT_RE, SHOWDOWN_MS, SWAP_MS, THINK_RE, VARIANTS_MS, VARIANTS_RE, VARIANTS_SOLO_RE, duelPlan, fightDue, isVariantsAsk, opOnly, showdown, showdownDue, showdownPlan, slotPlan, variantsDue, variantsPlan } from './invincible-eggs'
+import { AHEAD_MS, CLASSIC_RE, CQ_DUEL_MS, DUEL_MS, GUARDIANS_RE, TURN, swap, versionOf, NEW_SUIT_RE, SHOWDOWN_MS, SWAP_MS, THINK_RE, VARIANTS_MS, VARIANTS_RE, VARIANTS_SOLO_RE, duelPlan, fightDirector, fightDue, fightOf, isVariantsAsk, opOnly, showdown, showdownDue, showdownPlan, slotPlan, variantsDue, variantsPlan } from './invincible-eggs'
 import { VARIANTS_CSS, variants } from './invincible-variants'
 import * as VS from './invincible-variants-sprites'
-import { CSS, EPISODES, ERA1, ERA2, PROPS, SP, TITLE_WORDS, condW, contrast, episodeAt, lum, monoW, sansW, unit as unitOf } from './invincible'
+import { CSS, DONE_TURN, EPISODES, ERA1, ERA2, PROPS, SP, cheer, TITLE_WORDS, condW, contrast, episodeAt, lum, monoW, sansW, unit as unitOf } from './invincible'
 import { THEMES } from './themes'
+import * as MOTION from './invincible-motion-sprites'
+import { audit, doc } from './stage/budget'
 
 const pane = { title: '', isFocused: false, bodyColumns: 100, placement: 'dock', scroll: { offset: 0, bodyRows: 60 }, view: {} } as const
 const NOW = Date.parse('2026-10-20T10:00:00Z')
@@ -374,33 +376,56 @@ test('think, mark: the 95% context warning has the same 3 s drop-in: Omni-Man wi
   for (const c of ['inv-think', 'inv-tbub', 'inv-tdrop', 'inv-cheer', 'inv-slam']) expect(reduced).toContain(c)
 })
 // --- the fight ---------------------------------------------------------------------------------------------------------
-test('fight: deterministic, about one per 12-15 minutes, never two within 6 minutes', () => {
+test('fight: on the director: rare (30-45 min apart, about 1.3-2 an hour), working only, the three cuts in turns', () => {
   expect(duelPlan(NOW, 1)).toEqual(duelPlan(NOW, 1))
   expect(slotPlan('x', NOW, 6, 0.8, DUEL_MS)).toEqual(slotPlan('x', NOW, 6, 0.8, DUEL_MS))
   expect(duelPlan(NOW, 1)).not.toEqual(duelPlan(NOW, 2))
   for (const era of [1, 2] as const) {
-    const starts: number[] = []
-    for (let t = NOW; t < NOW + 48 * HOUR; t += 10_000) {
+    const starts: { at: number; v: number }[] = []
+    for (let t = NOW; t < NOW + 48 * HOUR; t += 30_000) {
       const p = duelPlan(t, era)
-      if (p.on && !starts.includes(p.startAt)) starts.push(p.startAt)
+      if (p.on && !starts.some(x => x.at === p.startAt)) starts.push({ at: p.startAt, v: p.v })
     }
     const perHour = starts.length / 48
-    expect(perHour).toBeGreaterThan(3.2)
-    expect(perHour).toBeLessThan(5.4)
-    for (const [i, s] of starts.slice(1).entries()) expect(s - (starts[i] as number)).toBeGreaterThanOrEqual(6 * 60_000)
+    expect(perHour).toBeGreaterThan(1.3)
+    expect(perHour).toBeLessThan(2.05)
+    for (const [i, s] of starts.slice(1).entries()) {
+      const gap = s.at - (starts[i] as { at: number }).at
+      expect(gap).toBeGreaterThanOrEqual(30 * 60_000)
+      expect(gap).toBeLessThanOrEqual(45 * 60_000)
+      const prev = (starts[i] as { v: number }).v
+      // Never the same cut twice in a row: 0, 1, 2, 0, ... (the new suit puts MARK VS CONQUEST between them: 0, 3, 1, 3, 2, 3).
+      if (era === 1) expect(s.v).toBe((prev + 1) % 3)
+      else if (prev === 3) expect(s.v).not.toBe(3)
+      else expect(s.v).toBe(3)
+    }
+    expect(new Set(starts.map(x => x.v)).size).toBe(era === 1 ? 3 : 4)
+    // Working only: the same moment draws nothing at rest.
+    const first = starts[0] as { at: number }
+    expect(fightDue(first.at + 1000, era, true)).toBe(first.at)
+    expect(fightDue(first.at + 1000, era, false)).toBeUndefined()
   }
   expect(DUEL_MS).toBeGreaterThanOrEqual(FIGHT_MS)
+  // The director names every cut for `/missioncontrol play`.
+  expect(fightDirector(1).replays()).toEqual([...VERSIONS])
+  // A replay picks its cut: `fight` the classic, `fight:2` the third.
+  expect(fightOf(NOW + 500, 1, false, { kind: 'fight', at: NOW })).toEqual({ startAt: NOW, v: 0 })
+  expect(fightOf(NOW + 500, 1, false, { kind: 'fight:2', at: NOW })).toEqual({ startAt: NOW, v: 2 })
 })
 test('fight: the three combos chain their poses frame by frame', () => {
   const chain = (a: 0 | 1 | 2 | 'band', era: 1 | 2 = 1) => chainOfAct(a, era).join('>')
-  // A, "The Catch": the dash, the punch, the palm catch, the backhand, the hit, the ball, the skid.
-  expect(chain(0)).toMatch(/M2>M3>O4>O7>M8>M9.*M10/)
-  // B, "Every Angle": recover, charge, jabs, flinches, the grab-lift and the throw.
-  expect(chain(1)).toMatch(/M11>M2>M4.*O11.*M5.*M6.*O10>O7>M9/)
+  // A, "The Catch": Mark smashes in at full size (XL), the dash, the punch, the catch, the BACKWIND, the smear, the backhand, the ball.
+  expect(chain(0)).toMatch(/^T4>O4>M2>M3>O6>OS>M9>O7/)
+  // B, "Every Angle": the ball, the charge, jabs from every side with flinches, the lazy jab (O8), the grab and the throw.
+  expect(chain(1)).toMatch(/^M9>O1>M2>M4>O11.*M5>O11.*O8.*M6>O8>M9>O7/)
   // C, "Think, Mark": recover, block, hammer up and down, pitch, kneel, hands, flight.
-  expect(chain(2)).toMatch(/M11>M7>O9>O9B>O3>M12>O12>O13/)
-  // The band cut ends with Mark thrown down.
-  expect(chain('band')).toMatch(/O2>M2>M3>O4>O7>M8>M9.*M4.*O7>M8>M9/)
+  expect(chain(2)).toMatch(/M11>M7>O9>O9B>M12>O3>O12>O13/)
+  // Every band cut ends with Mark thrown DOWN toward the viewer: S then M.
+  expect(chain('band')).toMatch(/^O4>M2>M3>O7>M8>M9.*M8>T1>T2$/)
+  expect(chainOfAct('band', 1, 1).join('>')).toMatch(/^O1>M2>O8>O1>O8>MS>M8>M9.*T1>T2>O1$/)
+  expect(chainOfAct('band', 1, 2).join('>')).toMatch(/^O2>M2>MS>M3>O7>M8>M9.*M2>MS>M3>M2>MS>M3>O7>M8>T1>T2>O2$/)
+  // The three cuts differ.
+  expect(new Set([0, 1, 2].map(v => chainOfAct('band', 1, v as 0 | 1 | 2).join('>'))).size).toBe(3)
   expect(chainOfAct(0, 2).join('>')).toBe(chainOfAct(0, 1).join('>'))
   for (const k of FRAME_KEYS) {
     for (const era of [1, 2] as const) expect(frameSprite(k, era).rows.length).toBeGreaterThan(10)
@@ -421,7 +446,7 @@ test('fight: each frame once per Svg in defs, shown with use; one pinned delay; 
   for (const red of [PROPS.red, PROPS.redDeep, ERA1.alert, '#FF0000', '#E8453C']) expect(fxOnly.toUpperCase()).not.toContain((red as string).toUpperCase())
   expect(a).toContain('class="dl-still"')
   expect(FIGHT_CSS).toMatch(/prefers-reduced-motion: reduce\)\{\.dl-anim\{display:none\}\.dl-cam\{animation:none!important\}\.dl-still\{display:block/)
-  for (const w of ['TAK!', 'WHAM!', 'KRAK!', 'BOOM', 'FWOOSH', 'SKRRT']) expect(a).toContain(w)
+  for (const w of ['TAK!', 'WHAM!', 'KRAK!', 'BOOM', 'POW']) expect(a).toContain(w)
   for (const w of ['blood', 'gore', 'train']) expect(a.toLowerCase()).not.toContain(w)
   const p0 = fightAct({ W: 480, H: 434, era: 1, startAt: 5_000 }, 0).svg
   const p1 = fightAct({ W: 480, H: 260, era: 1, startAt: 5_000 }, 1).svg
@@ -461,12 +486,19 @@ test('fight: the panel shakes (1, 3 and 4 px tiers), the sprites do not; the cam
   await jobIn($)
   await four($)
   const band = await bandAt($, 1250)
-  expect(band).toMatch(/class="dl-cam" style="animation:dl-sh1 [\d.]+s steps\(1\) none;animation-delay:calc\(-?[\d.]+s \+ [\d.]+s\)/)
-  expect(band).toContain('dl-sh3 ')
+  // Longhands: one name, duration and delay per shake, so EVERY shake plays (v1 glued a delay list to a shorthand: one shake).
+  const cam = /class="dl-cam" style="([^"]+)"/.exec(band)?.[1] ?? ''
+  expect(cam).toMatch(/^animation-name:sg-sh\d(,sg-sh\d)+;animation-duration:[\d.s,]+;animation-timing-function:steps\(1\);animation-fill-mode:none;animation-delay:calc\(/)
+  const names = (/animation-name:([^;]+)/.exec(cam)?.[1] ?? '').split(',')
+  expect(names.length).toBeGreaterThan(4)
+  expect((/animation-duration:([^;]+)/.exec(cam)?.[1] ?? '').split(',').length).toBe(names.length)
+  expect(((/animation-delay:(.+)$/.exec(cam)?.[1] ?? '').match(/calc\(/g) ?? []).length).toBe(names.length)
+  expect(names).toContain('sg-sh3')
+  expect(cam).not.toContain('animation:')
   for (const px of ['translate(1px', 'translate(3px', 'translate(4px']) expect(FIGHT_CSS).toContain(px)
   expect(FIGHT_CSS).toContain('.dl-cam{animation:none!important}')
   const pn = (await svgs($, 'Pane')).filter(s => s.includes('class="dl-cam"')).join('')
-  expect(pn).toContain('dl-sh4 ')
+  expect(pn).toContain('sg-sh4')
 })
 test('fight: no fight while idle, in another skin, or during the showdown', async ($, on) => {
   const st = fightStart(1, quietAt(1) + 3_600_000)
@@ -506,9 +538,113 @@ test('fight: sizes of the pieces, and the pane reserve covers the three acts at 
     let all = 0
     for (const [act, H] of [[0, 434], [1, 296], [2, 236]] as const) all += fightAct({ W: 600, H, era, startAt: 0 }, act).svg.length
     expect(all).toBeLessThan(FIGHT_PANE_RESERVE)
-    expect(fightBand({ W: 1250, H: 134, era, startAt: 0 }).svg.length).toBeLessThan(32_000)
-    expect(fightBand({ W: 1250, H: 134, era, startAt: 0 }).frames).toBeLessThanOrEqual(8)
+    for (const v of [0, 1, 2] as const) {
+      for (const W of [750, 900, 1250]) expect(fightBand({ W, H: 134, era, startAt: 0, v }).svg.length).toBeLessThan(32_000)
+      expect(fightBand({ W: 1250, H: 134, era, startAt: 0, v }).frames).toBeLessThanOrEqual(9)
+    }
+    for (const [act, H] of [[0, 434], [1, 296], [2, 236]] as const) expect(fightAct({ W: 600, H, era, startAt: 0 }, act).frames).toBeLessThanOrEqual(10)
     for (const [act, H] of [[0, 434], [1, 260], [2, 236]] as const) expect(fightAct({ W: 496, H, era, startAt: 0 }, act).svg.length).toBeLessThan(36_000)
+  }
+})
+// --- THE FIGHT v2: hit-stop, easing, smears, impact frames, the camera, the three cuts --------------------------------------
+const SURFACES = [['band', 900, 134], [0, 480, 434], [1, 480, 260], [2, 480, 236]] as const
+test('fight v2: a HIT-STOP on every hit: each hit holds the paths, and its shake starts after the freeze', () => {
+  for (const v of [0, 1, 2] as const) {
+    for (const [sf, W, H] of SURFACES) {
+      if (sf !== 'band' && v) continue
+      const { f, act } = fightCut({ W, H, era: 1, startAt: 0, v }, sf)
+      const hits = f.script.filter(b => b[0] === 'hit').map(b => b[1])
+      const freezes = f.script.filter(b => b[0] === 'freeze').map(b => b[1])
+      expect(hits.length).toBeGreaterThan(0)
+      for (const t of hits) expect(freezes).toContain(t)
+      // The act really waits: a moment after the last hit is later on the timeline than in the script.
+      const last = Math.max(...hits)
+      expect(act.warp(last + 0.01) - (last + 0.01)).toBeGreaterThanOrEqual(STOP.jab)
+    }
+  }
+  // The shakes of the classic band cut start after their freezes (a hit at 0.51 s with a 70 ms stop shakes from 0.58 s).
+  const delays = [...fightShake('band', 0, 900, 134, 1).matchAll(/calc\(@@T0@@ \+ ([\d.]+)s\)/g)].map(m => Number(m[1]))
+  expect(delays.some(d => d >= 0.58 && d < 0.6)).toBe(true)
+  expect(delays.some(d => Math.abs(d - 0.51) < 0.005)).toBe(true) // the 1 px tap rides the freeze itself
+})
+test('fight v2: smears, anticipation, impact frames and the throw toward the viewer', () => {
+  const band1 = chainOfAct('band', 1, 1)
+  expect(band1).toContain('MS')
+  const a0 = chainOfAct(0, 1).join('>')
+  // The backhand winds up (O6, 120 ms), smears (OS, 60 ms), then lands; Mark smashes in at full size first.
+  expect(a0).toMatch(/O6>OS>.*O7/)
+  expect(a0.startsWith('T4')).toBe(true)
+  for (const v of [0, 1, 2] as const) expect(chainOfAct('band', 1, v).join('>')).toMatch(/T1>T2/)
+  const p0 = fightAct({ W: 480, H: 434, era: 1, startAt: 0 }, 0).svg
+  // The impact frame: an ink burst with both fighters through a flat-colour filter, then inverted.
+  expect(p0).toMatch(/<filter id="\w+iw"><feColorMatrix/)
+  expect(p0).toMatch(/<filter id="\w+ik"><feColorMatrix/)
+  expect(p0).toContain('filter="url(#')
+  // The camera punches in (a scale about the hit) and pans with the knock-back, on the act layer only.
+  expect(p0).toMatch(/scale\(1\.1\)/)
+  expect(p0).toMatch(/translate\(18px,0px\)/)
+  // Debris, a crater, dust.
+  expect(p0).toContain('sg-drop')
+  expect(p0).toContain('sg-rise')
+  // Real easing: the dash into contact is sampled from an ease-in (its first step is short, its last long).
+  const { f } = fightCut({ W: 900, H: 134, era: 1, startAt: 0 }, 'band')
+  expect(f.script.filter(b => b[0] === 'approach').length).toBeGreaterThan(5)
+})
+test('fight v2: both suits: Mark in his suit for every frame, the throw frames recoloured for the new suit, Omni-Man the same', () => {
+  expect(frameSprite('MS', 1)).toBe(MOTION.FX_M_SMEAR_PUNCH)
+  expect(frameSprite('MS', 2)).toBe(MOTION.FX3_M_SMEAR_PUNCH)
+  expect(frameSprite('OS', 2)).toBe(MOTION.FX_O_SMEAR_BACKHAND)
+  expect(frameSprite('T4', 1)).toBe(MOTION.FX_M_THROWN_XL)
+  const t2 = frameSprite('T4', 2)
+  expect(t2).toBe(suit2(MOTION.FX_M_THROWN_XL))
+  expect(t2.rows).toEqual(MOTION.FX_M_THROWN_XL.rows)
+  // No classic yellow left on the new suit's throw.
+  for (const c of Object.values(t2.pal)) { const [r, g, b] = [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16)) as [number, number, number]; expect(g > 140 && b < 90 && r > g).toBe(false) }
+  for (const sp of Object.values(MOTION)) for (const row of sp.rows) for (const ch of row) if (ch !== '.') expect(sp.pal[ch]).toBeTruthy()
+  // The two eras draw the same fight in their own colours.
+  expect(chainOfAct(1, 2).join('>')).toBe(chainOfAct(1, 1).join('>'))
+  expect(fightBand({ W: 900, H: 134, era: 2, startAt: 0 }).svg).not.toBe(fightBand({ W: 900, H: 134, era: 1, startAt: 0 }).svg)
+})
+test('fight v2: every layer is clean (no duplicate attribute, id or raw text), inside its budget, with a still for reduced motion', () => {
+  for (const era of [1, 2] as const) {
+    let pane = 0
+    for (const [sf, W, H] of [...SURFACES, ['band', 1250, 134], [0, 600, 434], [1, 600, 296], [2, 600, 236]] as const) {
+      for (const v of (sf === 'band' ? [0, 1, 2] : [0]) as (0 | 1 | 2)[]) {
+        const svg = sf === 'band' ? fightBand({ W, H, era, startAt: NOW, v }).svg : fightAct({ W, H, era, startAt: NOW, v }, sf).svg
+        const a = audit(doc(W, H, svg))
+        expect(a.dupes).toEqual([])
+        expect(a.dupeIds).toEqual([])
+        expect(a.badText).toEqual([])
+        expect(a.reduced).toBe(true)
+        expect(svg.length).toBeLessThan(sf === 'band' ? 32_000 : 36_000)
+        if (sf !== 'band' && W === 600) pane += svg.length
+        // The reduced-motion still: the fighters at the clash, in place of the animation.
+        const still = /<g class="dl-still">([\s\S]*?)<\/g><\/g><!--\/dl-->/.exec(svg)?.[1] ?? ''
+        expect((still.match(/<use /g) ?? []).length).toBeGreaterThanOrEqual(2)
+        expect(svg).toMatch(/@media \(prefers-reduced-motion: reduce\)\{\.\w+-a\{display:none\}\.\w+-s\{display:inline\}\}/)
+      }
+    }
+    expect(pane).toBeLessThan(FIGHT_PANE_RESERVE)
+  }
+})
+test('idle: the band bust breathes (1 px, 2.6 s, steps) and stands still under reduced motion', async ($, on) => {
+  base(on, 100_000, quietAt())
+  await start($, 'invincible')
+  expect(await bandAt($, 1250, false)).toContain('<g class="inv-breath">')
+  expect(CSS).toContain('.inv-breath{animation:inv-breath 2.6s steps(1) infinite}')
+  expect(/@media \(prefers-reduced-motion: reduce\)\{[^}]*\.inv-breath[,{]/.test(CSS)).toBe(true)
+})
+test('fight v2: the act layer never outlives its card, and no beat runs past its act', () => {
+  for (const act of [0, 1, 2] as const) {
+    const { f, act: a } = fightCut({ W: 480, H: 434, era: 1, startAt: 0 }, act)
+    const last = Math.max(...f.script.map(b => b[1]))
+    expect(a.warp(last)).toBeLessThan(ACT_LEN[act])
+  }
+  for (const v of [0, 1, 2] as const) {
+    const { f, act: a } = fightCut({ W: 900, H: 134, era: 1, startAt: 0, v }, 'band')
+    // Mark leaves the band (thrown down) before the first pane act starts.
+    const t2 = f.script.filter(b => b[0] === 'approach').map(b => b[1])
+    expect(a.warp(Math.max(...t2))).toBeLessThan(BAND_CUT)
   }
 })
 // --- the showdown --------------------------------------------------------------------------------------------------------
@@ -676,7 +812,7 @@ test('sprites: rectangular rows, every letter in the palette, the cast, the figh
   expect(frameSprite('M3', 2)).toBe(SP.FX3_M3_PUNCH)
   expect(frameSprite('O4', 2)).toBe(SP.FX_O4_CATCH)
 })
-test('layout: 130 redraws over ~43 minutes keep one layout signature', { timeoutMs: 180_000 }, async ($, on) => {
+test('layout: 150 redraws over 50 minutes (one fight at the most a 45 min gap) keep one layout signature', { timeoutMs: 240_000 }, async ($, on) => {
   const clock = base(on, 100_000, quietAt(1))
   await start($, 'invincible')
   await jobIn($)
@@ -689,7 +825,7 @@ test('layout: 130 redraws over ~43 minutes keep one layout signature', { timeout
   }
   const seen = new Set([await sig()])
   let fights = 0
-  for (let i = 0; i < 130; i++) {
+  for (let i = 0; i < 150; i++) {
     await clock.advance(20_000)
     seen.add(await sig())
     if ((await svgs($, 'Pane')).join('').includes('class="dl-anim"')) fights++
@@ -1113,6 +1249,22 @@ test('replay: a fight replay draws in its own time and ends on its own', async (
   expect((await bandAt($, 1250, false)).includes('dl-c')).toBe(false)
 })
 
+test('replay: the three cuts by name (the-catch, jet-flick, every-angle), and `fight` still plays the classic', async ($, on) => {
+  const clock = base(on, 100_000, calmAt(NOW))
+  await start($, 'invincible')
+  expect(await play($, 'jet-flick')).toBe('▶ jet-flick')
+  const b = await bandAt($, 1250, false)
+  expect(b).toContain('FLICK!')
+  expect(b).toContain('class="dl-anim"')
+  await clock.advance(FIGHT_MS + 5000)
+  expect(await bandAt($, 1250, false)).not.toContain('class="dl-anim"')
+  expect(await play($, 'every-angle')).toBe('▶ every-angle')
+  expect(await bandAt($, 1250, false)).toContain('BIFF')
+  await clock.advance(FIGHT_MS + 5000)
+  expect(await play($, 'fight')).toBe('▶ fight')
+  expect(await bandAt($, 1250, false)).toContain('WHAM!')
+  expect(await play($, 'nope')).toMatch(/the-catch.*jet-flick.*every-angle/)
+})
 test('replay: play think has Omni-Man drop in on the band for 3 s, ending on its own', async ($, on) => {
   const clock = base(on, 100_000, calmAt(NOW))
   await start($, 'invincible')
@@ -1360,4 +1512,187 @@ test('multiverse: layout: 130 redraws across the act keep one layout signature',
   }
   expect(shown).toBeGreaterThan(90)
   expect([...seen]).toHaveLength(1)
+})
+
+// --- MARK VS CONQUEST (phase B): the new suit's own fight, sharing THE FIGHT's slot and pane reserve -----------------------
+test('conquest: the new suit only, every other new-suit fight, still one fight per 30-45 min while working', () => {
+  const era2: number[] = []
+  for (const era of [1, 2] as const) {
+    let last = 0
+    for (let t = NOW; t < NOW + 72 * HOUR; t += 30_000) {
+      const p = duelPlan(t, era)
+      if (!p.on || p.startAt === last) continue
+      if (last) expect(p.startAt - last).toBeGreaterThanOrEqual(30 * 60_000)
+      last = p.startAt
+      if (era === 1) expect(p.v).not.toBe(CONQUEST)
+      else era2.push(p.v)
+      if (p.v === CONQUEST) {
+        expect(p.endAt - p.startAt).toBe(CQ_DUEL_MS)
+        expect(fightOf(p.startAt + 1000, 2, true)).toEqual({ startAt: p.startAt, v: CONQUEST })
+        expect(fightOf(p.startAt + 1000, 2, false)).toBeUndefined()
+      }
+    }
+  }
+  const cq = era2.filter(v => v === CONQUEST).length
+  expect(cq).toBeGreaterThan(era2.length * 0.4)
+  expect(cq).toBeLessThan(era2.length * 0.6)
+  // Shorter than THE FIGHT: two acts.
+  expect(CQ_DUEL_MS).toBeLessThan(DUEL_MS)
+  expect(timing(CONQUEST).acts).toBe(2)
+  expect(Math.abs(CQ_OFF[1] + CQ_LEN[1] - CQ_MS / 1000)).toBeLessThan(1e-9)
+  // Its replay: the era-2 director names it; `fight:3` replays it in the new suit only.
+  expect(fightDirector(2).replays()).toContain(CONQUEST_PLAY)
+  expect(fightDirector(1).replays()).not.toContain(CONQUEST_PLAY)
+  expect(versionOf(CONQUEST_PLAY)).toBe(CONQUEST)
+  expect(fightOf(NOW + 500, 2, false, { kind: 'fight:3', at: NOW })).toEqual({ startAt: NOW, v: CONQUEST })
+  expect(fightOf(NOW + 500, 1, false, { kind: 'fight:3', at: NOW })).toBeUndefined()
+  expect(fightOf(NOW + CQ_MS + 700, 2, false, { kind: 'fight:3', at: NOW })).toBeUndefined()
+})
+test('conquest: the beats: welcome, the catch, the slam, swung by the wrist, the comeback, the knock-down; every hit a hit-stop', () => {
+  const band = fightCut({ W: 900, H: 134, era: 2, startAt: 0, v: CONQUEST }, 'band')
+  const a0 = fightCut({ W: 480, H: 434, era: 2, startAt: 0, v: CONQUEST }, 0)
+  const a1 = fightCut({ W: 480, H: 260, era: 2, startAt: 0, v: CONQUEST }, 1)
+  for (const { f, act } of [band, a0, a1]) {
+    expect(f.hits.length).toBeGreaterThan(0)
+    // Each hit holds the paths: the act's clock runs later than its script after it.
+    for (const h of f.hits) expect(act.warp(h.t + 0.001)).toBeGreaterThan(h.t + 0.02)
+  }
+  const beats = (c: typeof band) => c.f.script.map(b => b[0])
+  expect(beats(band)).toContain('orbit')
+  expect(beats(a0)).toContain('orbit')
+  expect(beats(a1)).toContain('orbit')
+  // The band: he arrives (C1), catches (C3), Mark swung (M13) and thrown down toward the viewer (T1, T2).
+  const cb = chainOfAct('band', 2, CONQUEST)
+  for (const k of ['C1', 'M2', 'M3', 'C3', 'M13', 'T1', 'T2']) expect(cb).toContain(k)
+  expect(cb.indexOf('C3')).toBeLessThan(cb.indexOf('M13'))
+  // COVER STORY: smashes in at full size, swung by the wrist, the goggle wipe. GDA WALL: BAM, the spin, he goes down, Mark hovers.
+  const c0 = chainOfAct(0, 2, CONQUEST)
+  for (const k of ['T4', 'C3', 'M13', 'M9', 'M14']) expect(c0).toContain(k)
+  const c1 = fightAct({ W: 480, H: 236, era: 2, startAt: 0, v: CONQUEST }, 1).chain
+  for (const k of ['MS', 'M3', 'C5', 'MSP', 'C6', 'C7', 'M15']) expect(c1).toContain(k)
+  expect(c1.indexOf('C6')).toBeLessThan(c1.indexOf('C7'))
+  expect(c1[c1.length - 1]).toBe('M15')
+  const s0 = fightAct({ W: 480, H: 434, era: 2, startAt: 0, v: CONQUEST }, 0).svg
+  const s1 = fightAct({ W: 480, H: 260, era: 2, startAt: 0, v: CONQUEST }, 1).svg
+  for (const w of ['BOOM!', 'GRAB', 'WHAM!', 'FINALLY.']) expect(s0).toContain(w)
+  for (const w of ['BAM!', 'POW', 'BIFF', 'BOOM!', 'NOT DONE.']) expect(s1).toContain(w)
+  // The cut-ins: his scarred eye on COVER STORY, Mark's goggles on GDA WALL.
+  expect(s0).toMatch(/id="\w+fCI0"/)
+  expect(s1).toMatch(/id="\w+fCI1"/)
+  for (const w of ['blood', 'gore', 'kill']) expect((s0 + s1).toLowerCase()).not.toContain(w)
+  // No beat runs past its surface: Mark leaves the band before COVER STORY starts.
+  const last = (c: typeof band) => c.act.warp(Math.max(...c.f.script.map(b => b[1])))
+  expect(last(band)).toBeLessThan(CQ_OFF[0])
+  expect(last(a0)).toBeLessThan(CQ_LEN[0])
+  expect(last(a1)).toBeLessThan(CQ_LEN[1])
+})
+test('conquest: the elder warrior reads as himself: his folded palette keeps the scar, the white eye, the bronze arm and the grey suit', () => {
+  const sp = frameSprite('C1', 2)
+  const cols = new Set(Object.values(sp.pal))
+  expect(cols.size).toBeLessThanOrEqual(CQ_K)
+  for (const c of ['#A3262A', '#E6E0E5', '#C88A4E', '#8E5C34', '#BEB8C1', '#DF9F7A']) expect(cols.has(c)).toBe(true)
+  const svg = fightBand({ W: 900, H: 134, era: 2, startAt: 0, v: CONQUEST }).svg
+  const defs = /<defs>([\s\S]*?)<\/defs>/.exec(svg)?.[1] ?? ''
+  expect(defs).toContain('fill="#A3262A"')
+  expect(defs).toContain('fill="#C88A4E"')
+})
+test('conquest: sizes: band cut under 32 k, each act under 44 k, both acts inside the pane reserve THE FIGHT already keeps (one fight at a time)', () => {
+  for (const W of [750, 900, 1250]) {
+    const b = fightBand({ W, H: 134, era: 2, startAt: NOW, v: CONQUEST })
+    expect(b.svg.length).toBeLessThan(32_000)
+    expect(b.frames).toBeLessThanOrEqual(9)
+  }
+  let omni = 0
+  let cq = 0
+  for (const [act, H] of [[0, 434], [1, 296], [2, 236]] as const) omni += fightAct({ W: 600, H, era: 2, startAt: NOW }, act).svg.length
+  for (const [sf, W, H] of [[0, 600, 434], [1, 600, 296], [0, 480, 434], [1, 480, 260], [1, 480, 236]] as const) {
+    const a = fightAct({ W, H, era: 2, startAt: NOW, v: CONQUEST }, sf)
+    expect(a.svg.length).toBeLessThan(44_000)
+    expect(a.frames).toBeLessThanOrEqual(10)
+    if (W === 600) cq += a.svg.length
+    const au = audit(doc(W, H, a.svg))
+    expect(au.dupes).toEqual([])
+    expect(au.dupeIds).toEqual([])
+    expect(au.badText).toEqual([])
+    expect(au.reduced).toBe(true)
+    const still = /<g class="dl-still">([\s\S]*?)<\/g><\/g><!--\/dl-->/.exec(a.svg)?.[1] ?? ''
+    expect((still.match(/<use /g) ?? []).length).toBeGreaterThanOrEqual(2)
+  }
+  // The two fights never draw together (one lane), so the reserve is the larger of the two, and both fit it.
+  expect(cq).toBeLessThan(FIGHT_PANE_RESERVE)
+  expect(Math.max(omni, cq)).toBeLessThan(FIGHT_PANE_RESERVE)
+  const ba = audit(doc(900, 134, fightBand({ W: 900, H: 134, era: 2, startAt: NOW, v: CONQUEST }).svg))
+  expect(ba.dupes).toEqual([])
+  expect(ba.dupeIds).toEqual([])
+  expect(ba.reduced).toBe(true)
+  // THE PAGE keeps no reserve for him: no shake, no act.
+  expect(fightShake('pane', NOW, 480, 236, 2, 2, CONQUEST)).toBe('')
+})
+test('conquest: replayed as `/missioncontrol play conquest` in the new suit only; the real band and cards stay inside their sizes', async ($, on) => {
+  const now = calmAt(NOW)
+  const clock = base(on, 880_000, now)
+  await start($, 'invincible')
+  expect(await play($, 'conquest')).toContain('new suit')
+  await $.prompt.submit({ text: 'new suit', cursor: 0 } as never)
+  await clock.advance(5_000)
+  await jobIn($)
+  await four($)
+  expect(await play($, 'conquest')).toBe('▶ conquest')
+  await clock.advance(1_800)
+  for (const W of [750, 900, 1250]) {
+    const b = await bandAt($, W)
+    expect(b).toMatch(/id="\w+fC3"/)
+    expect(b.length).toBeLessThan(70_000)
+  }
+  await clock.advance(3_000)
+  const p = await svgs($, 'Pane')
+  expect(p.join('')).toMatch(/id="\w+fCI0"/)
+  for (const s of p) expect(s.length).toBeLessThan(60_000)
+  expect(p.filter(s => s.includes('class="dl-anim"')).length).toBeLessThanOrEqual(2)
+  expect(p.reduce((n, s) => n + s.length, 0)).toBeLessThan(260_000)
+  await clock.advance(5_000)
+  const p2 = await svgs($, 'Pane')
+  expect(p2.join('')).toMatch(/id="\w+fC7"/)
+  for (const s of p2) expect(s.length).toBeLessThan(60_000)
+  await clock.advance(6_000)
+  expect((await svgs($, 'Pane')).join('')).not.toContain('class="dl-anim"')
+})
+// --- the head turns (phase B): the suit swap and the done cheer -------------------------------------------------------------
+test('head turn: the suit swap turns the bust away in one suit and round in the other (9 views, stepped), none under reduced motion', () => {
+  for (const to of [1, 2] as const) {
+    const sw = swap(900, 134, 'band', to, { delay: '0s' })
+    const from = to === 2 ? 1 : 2
+    // The old suit's views come first (a0..a4), then the new suit's back and mirrored views (b4, b3..b1 flipped).
+    const uses = [...sw.matchAll(/<use href="#(\w+)"[^>]*transform="([^"]+)"/g)].map(m => [m[1] as string, m[2] as string])
+    const views = uses.filter(([id]) => /v[ab]\d$/.test(id))
+    expect(views.map(([id]) => id.slice(-2))).toEqual(['a0', 'a1', 'a2', 'a3', 'a4', 'b4', 'b3', 'b2', 'b1'])
+    expect(views.slice(6).every(([, tr]) => tr.includes('scale(-1 1)'))).toBe(true)
+    expect(TURN[from]).not.toBe(TURN[to])
+    const a = audit(doc(900, 134, sw))
+    expect(a.dupes).toEqual([])
+    expect(a.dupeIds).toEqual([])
+    expect(sw).toContain('class="sw-anim"')
+    expect(sw.length).toBeLessThan(32_000)
+    // Stepped, one view at a time, pinned to the swap's delay.
+    expect((sw.match(/steps\(1\) both;animation-delay:0s/g) ?? []).length).toBeGreaterThanOrEqual(10)
+  }
+  // The pane's swap has no bust to turn.
+  expect(swap(480, 300, 'pane', 2, { delay: '0s' })).not.toMatch(/v[ab]\d"/)
+})
+test('head turn: the done cheer: the band bust glances round (front, 3/4, side, 3/4, front); front view under reduced motion; band only', () => {
+  for (const era of [1, 2] as const) {
+    const ch = cheer(1250, 134, era, { delay: 'calc(@@T5000@@ + 0s)' })
+    expect(ch).toContain('class="inv-dt"')
+    expect(ch).toContain('animation-delay:var(--cd,0s)')
+    expect(ch).toMatch(/@media \(prefers-reduced-motion: reduce\)\{\.inv-dt\{animation:none!important\}\}/)
+    // Front first and visible by itself (the reduced-motion frame); the others start hidden.
+    const g = [...ch.matchAll(/<g class="inv-dt" style="animation-name:inv-dt(v\d)"( opacity="0")?>/g)].map(m => `${m[1]}${m[2] ? ':0' : ''}`)
+    expect(g).toEqual(['v0', 'v1:0', 'v2:0'])
+    expect(DONE_TURN.map(w => w[2])).toEqual(['v0', 'v1', 'v2', 'v1', 'v0'])
+    const a = audit(doc(1250, 134, ch))
+    expect(a.dupes).toEqual([])
+    expect(a.dupeIds).toEqual([])
+    expect(ch.length).toBeLessThan(12_000)
+    expect(cheer(480, 400, era)).not.toContain('inv-dt')
+  }
 })

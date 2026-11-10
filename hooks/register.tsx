@@ -10,7 +10,7 @@ import { BB_REVEAL_MS, BB_RIGHT, BB_SKIN_WORDS, BB_TOOLS, SAY_MY_NAME_RE } from 
 import { bbRightLine } from './breakingbad-cards'
 import { THEMES, themeKeyOf } from './themes'
 import { SWITCH_CARDS, SWITCH_MS, into as switchInto, sizeOf as svgSizeOf, skinSwitch } from './stage/wipe'
-import { playsOf, runPlay } from './stage/replay'
+import { playsFrom, playsOf, registerPlay, runPlay } from './stage/replay'
 import type { SwitchLook } from './stage/wipe'
 import { ramStatus, settingsTagline, settingsTones } from './settingslook'
 import type { SettingsSection } from './settingslook'
@@ -22,7 +22,8 @@ import { BCS_SKIN_WORDS, BCS_TOOLS, SAUL_GOODMAN_RE, TAKAVIC_RE } from './better
 import { TOASTS, bashToast, cmdKind, fxOf, mcgillNow, resultFailed, toastDue } from './bettercallsaul-fx'
 import type { BashState, Fx, ToastKey } from './bettercallsaul-fx'
 import { UNPLUG_GAP_MS, shouldUnplug } from './bettercallsaul-extra'
-import { CLASSIC_RE, GUARDIANS_RE, NEW_SUIT_RE, SWAP_MS, THINK_RE, isVariantsAsk } from './invincible-eggs'
+import { CLASSIC_RE, GUARDIANS_RE, NEW_SUIT_RE, SWAP_MS, THINK_RE, fightDirector, isVariantsAsk, versionOf } from './invincible-eggs'
+import { CONQUEST, CONQUEST_PLAY } from './invincible-fight'
 import { ERA1, ERA2, TITLE_WORDS as INV_WORDS } from './invincible'
 import { BOOK as TB_BOOK, BRAND as TB_BRAND, GOLD as TB_GOLD, NOIR as TB_NOIR } from './theboys'
 import type { Mode as BoysMode } from './theboys'
@@ -2139,6 +2140,11 @@ const calNext = (): CalMode => (CAL_MODE.mode === 'dark' ? 'light' : CAL_MODE.mo
 let INV_FX: { kind: string; at: number } | undefined
 let INV_CTX = 0
 const isInv = (): boolean => SKIN.id === 'invincible'
+// THE FIGHT's three cuts in the shared replay registry (`/missioncontrol play the-catch | jet-flick | every-angle`); `play fight`
+// (the older list below) still plays the classic cut. Each is stored as the typed act `fight:<version>`, pinned to now.
+playsFrom('invincible', fightDirector(1), s => { INV_FX = { kind: `fight:${versionOf(s.id)}`, at: s.startAt } }, n => `THE FIGHT: ${n}`)
+// MARK VS CONQUEST (`/missioncontrol play conquest`): the new suit's fight, so only in the new suit.
+registerPlay('invincible', { name: CONQUEST_PLAY, what: 'MARK VS CONQUEST (new suit)', run: at => { if (INV_ERA.era !== 2) return 'Conquest fights the new suit: say "new suit" first.'; INV_FX = { kind: `fight:${CONQUEST}`, at } } })
 const activeFx = (): { kind: string; at: number } | undefined => (isInv() ? INV_FX : isBoys() ? boysState().fx : BCS_FX)
 // When the phrase turned Breaking Bad into Heisenberg (0: it did not): the band's "You're goddamn right!" is drawn from it for
 // BB_REVEAL_MS, pinned to this time, so a redraw keeps it and it ends on its own. Also kept in the store as bbRevealAt.

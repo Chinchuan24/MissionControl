@@ -104,23 +104,26 @@ export type Pose = { id: string; w: number; h: number; ax: number }
  * `dir` (-1 mirrors), scaled `sc` pixels per sprite pixel.
  */
 export class FrameBank {
-  private poses = new Map<string, Pose & { sp: Sprite }>()
+  private poses = new Map<string, Pose & { sp: Sprite; K?: number }>()
   private made = new Set<string>()
   private out = ''
   constructor(readonly prefix: string, readonly K = 6) {}
-  /** Register a pose under `key` (cheap: nothing is cut until it is used). */
-  add(key: string, sp: Sprite, ax = 0.5): this {
+  /**
+   * Register a pose under `key` (cheap: nothing is cut until it is used). `K` keeps more (or fewer) colours for this pose
+   * than the bank's: a face with a one-pixel scar needs its scar colour, the crowd around it does not.
+   */
+  add(key: string, sp: Sprite, ax = 0.5, K?: number): this {
     const { w, h } = size(sp)
-    this.poses.set(key, { id: `${this.prefix}${key.replace(/[^\w-]/g, '_')}`, w, h, ax, sp })
+    this.poses.set(key, { id: `${this.prefix}${key.replace(/[^\w-]/g, '_')}`, w, h, ax, sp, ...(K !== undefined ? { K } : {}) })
     return this
   }
   has(key: string): boolean { return this.poses.has(key) }
   /** The pose, cut into the defs on first ask. Throws for an unknown key: a typo must fail a test, not draw nothing. */
   pose(key: string): Pose { return this.entry(key) }
-  private entry(key: string): Pose & { sp: Sprite } {
+  private entry(key: string): Pose & { sp: Sprite; K?: number } {
     const p = this.poses.get(key)
     if (!p) throw new Error(`stage/frames: no pose "${key}" in bank ${this.prefix}`)
-    if (!this.made.has(p.id)) { this.made.add(p.id); this.out += `<g id="${p.id}">${rectPaths(p.sp, this.K)}</g>` }
+    if (!this.made.has(p.id)) { this.made.add(p.id); this.out += `<g id="${p.id}">${rectPaths(p.sp, p.K ?? this.K)}</g>` }
     return p
   }
   /** The silhouette path of a pose as a def (id `<pose id>-k`): a `<use>` of it is valid inside a clipPath or mask. */

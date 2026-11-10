@@ -4,8 +4,14 @@
 // anywhere in the act resumes it, and a draw up to AHEAD_MS before it schedules it (the delay is then positive). Cartoon, never
 // gory: impact stars, flashes, KO swirl stars.
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { ACT_LEN, ACT_OFF, BAND_CUT, FIGHT_MS, HOLE_END, fightAct, fightBand, fightHole, fightShake } from './invincible-fight'
-import type { ActIndex } from './invincible-fight'
+import { CONQUEST, CONQUEST_PLAY, HOLE_END, VERSIONS, fightAct, fightBand, fightHole, fightShake, timing } from './invincible-fight'
+import type { ActIndex, Version } from './invincible-fight'
+import { fightLane } from './stage/choreo'
+import { FrameBank } from './stage/frames'
+import type { Sprite } from './cast'
+import * as MS from './invincible-motion-sprites'
+import { Director, cadence } from './stage/director'
+import type { Slot } from './stage/director'
 import { thinkMark } from './invincible'
 import type { Era } from './invincible'
 import type { ExtraArgs, PaneCard } from './themes'
@@ -21,12 +27,48 @@ export const slotPlan = (seed: any, at: any, gapMin: any, chance: any, durMs: an
 export const live = (p: any, at: any) => p.on && at >= p.startAt && at < p.endAt
 export const AHEAD_MS = 75_000
 export const DUEL_MS = Math.round(HOLE_END * 1000)
+/** MARK VS CONQUEST's slot length (its two acts are shorter than THE FIGHT's three). */
+export const CQ_DUEL_MS = Math.round(timing(CONQUEST).hole * 1000)
+/** How long a version's slot holds the stage. */
+export const duelMs = (v: Version): number => (v === CONQUEST ? CQ_DUEL_MS : DUEL_MS)
+/** Era 2's director bits for MARK VS CONQUEST: one after each of THE FIGHT's cuts, so every other new-suit fight is his. */
+export const CQ_BITS = ['inv-conquest-a', 'inv-conquest-b', 'inv-conquest-c'] as const
 export const SHOWDOWN_MS = 7_400
 export const SWAP_MS = 2_200
 export const THINK_MS = 3_200
 export const VARIANTS_MS = 8_000
-/** THE FIGHT: at most once per 6 minutes, 80 % of slots, so about one per 12-15 min; only drawn while a job is working. */
-export const duelPlan = (at: any, era: any) => slotPlan(era === 2 ? 'inv-duel-2' : 'inv-duel', at, 6, 0.8, DUEL_MS)
+/**
+ * THE FIGHT on the shared director: one fight lane, 30-45 min between two fights (the crew's rule), only while a job works,
+ * the versions in turns, each with a `/missioncontrol play <name>` replay. One director per era (each suit has its own seed,
+ * as before). The classic suit plays THE FIGHT's three cuts (slot n: cut n mod 3). The new suit alternates them with MARK VS
+ * CONQUEST: the-catch, conquest, jet-flick, conquest, every-angle, conquest. Still ONE lane: never two fights at once, never
+ * closer than 30 min.
+ */
+export const fightDirector = (era: Era): Director => FIGHT_DIRS[era]
+const mkDir = (era: Era): Director => fightLane(new Director(era === 2 ? 'inv-fight-2' : 'inv-fight'), VERSIONS.flatMap((name, i) => [{ id: `inv-fight-${i}`, ms: DUEL_MS, replay: name }, ...(era === 2 ? [{ id: CQ_BITS[i] as string, ms: CQ_DUEL_MS, replay: CONQUEST_PLAY }] : [])]))
+const FIGHT_DIRS: Record<Era, Director> = { 1: mkDir(1), 2: mkDir(2) }
+const FIGHT_SLOT = cadence('fight').slotMs
+const DUELS = new Map<string, { on: boolean; startAt: number; endAt: number; bucket: number; v: Version }>()
+/** The version a director bit (or a replay name) plays. */
+export const versionOf = (id: string): Version => {
+  if (id === CONQUEST_PLAY || id.startsWith('inv-conquest')) return CONQUEST
+  const i = VERSIONS.indexOf(id as (typeof VERSIONS)[number])
+  return (i >= 0 ? i : Math.max(0, Math.min(2, Number(id.slice(-1)) || 0))) as Version
+}
+/** THE FIGHT's slot holding `at` (one per 30-45 min, working only): its start, end and version. Pure: same at, same plan. */
+export const duelPlan = (at: any, era: any) => {
+  const e: Era = era === 2 ? 2 : 1
+  const n = Math.floor(at / FIGHT_SLOT)
+  const key = `${e}|${n}`
+  const hit = DUELS.get(key)
+  if (hit) return hit
+  const s: Slot | undefined = FIGHT_DIRS[e].plan(n * FIGHT_SLOT, (n + 1) * FIGHT_SLOT, { working: true })[0]
+  const v = s ? versionOf(s.id) : (0 as Version)
+  const p = s ? { on: true, startAt: s.startAt, endAt: s.startAt + duelMs(v), bucket: n, v } : { on: false, startAt: n * FIGHT_SLOT, endAt: n * FIGHT_SLOT, bucket: n, v }
+  if (DUELS.size > 400) DUELS.clear()
+  DUELS.set(key, p)
+  return p
+}
 /** The LOCAL date's day number, the seed for a once-a-day act: a UTC day number flips mid-evening west of UTC (morning east
  *  of +10), re-rolling the day's time halfway through it, so the act played twice or not at all. Same number as a UTC day
  *  number wherever that never happened. */
@@ -136,6 +178,32 @@ export const showdown = (W: any, H: any, era: any, tm: any = {}) => {
 }
 
 // ---------------------------------------------------------------- THE ERA SWAP (2.2 s, over a panel already drawn in the new era)
+/** Mark's head-turn views per suit (0 front, 1 3/4, 2 side, 3 back 3/4, 4 back; 5-7 are 3-1 mirrored). */
+export const TURN: Record<Era, Sprite[]> = {
+  1: [MS.FX_MARK_TURN_0, MS.FX_MARK_TURN_1, MS.FX_MARK_TURN_2, MS.FX_MARK_TURN_3, MS.FX_MARK_TURN_4],
+  2: [MS.FX3_MARK_TURN_0, MS.FX3_MARK_TURN_1, MS.FX3_MARK_TURN_2, MS.FX3_MARK_TURN_3, MS.FX3_MARK_TURN_4],
+}
+/** The swap's bust turn: the views of `from` turning away, then `to` coming round. Starts 0.5 s in, 0.1 s a view. */
+export const TURN_AT = 0.5
+export const TURN_STEP = 0.1
+/** Where the band's bust sits (its slot's middle) and its scale. */
+const BUST = { x: 34, y: 56, sc: 1 }
+const eraTurn = (id: string, from: Era, to: Era, tile: string, keys: (name: string, ons: [number, number][]) => void, S: (name: string, timing?: string) => string): string => {
+  const bank = new FrameBank(`${id}v`, 6)
+  TURN[from].forEach((sp, i) => bank.add(`a${i}`, sp))
+  TURN[to].forEach((sp, i) => bank.add(`b${i}`, sp))
+  const views: [string, 1 | -1][] = [['a0', 1], ['a1', 1], ['a2', 1], ['a3', 1], ['a4', 1], ['b4', 1], ['b3', -1], ['b2', -1], ['b1', -1]]
+  const end = TURN_AT + views.length * TURN_STEP
+  let out = ''
+  keys(`${id}tc`, [[0, end]])
+  out += `<rect x="14" y="34" width="44" height="46" fill="${tile}" ${S(`${id}tc`, 'steps(1)')}/>`
+  views.forEach(([k, dir], i) => {
+    const a = i ? TURN_AT + i * TURN_STEP : 0
+    keys(`${id}t${i}`, [[a, TURN_AT + (i + 1) * TURN_STEP]])
+    out += `<g ${S(`${id}t${i}`, 'steps(1)')}>${bank.use(k, BUST.x, BUST.y, dir, BUST.sc)}</g>`
+  })
+  return `<defs>${bank.defs()}</defs>${out}`
+}
 export const SW = (t: any) => (t / 2.2) * 100
 export const swap = (W: any, H: any, surface: any, toEra: any, tm: any = {}) => {
   const NU = pal(toEra)
@@ -160,24 +228,10 @@ export const swap = (W: any, H: any, surface: any, toEra: any, tm: any = {}) => 
   s += `<rect width="${W}" height="${H}" fill="${PROPS.flash}" ${S(`${id}fl`, 'steps(2)')}/>`
   s += `<g class="sw-veil" ${S(`${id}vl`, 'cubic-bezier(.7,0,.3,1)')}><rect width="${W}" height="${H}" fill="${OLD.hero}"/></g>`
   s += `<g ${S(`${id}fr`, 'cubic-bezier(.7,0,.3,1)')}><rect x="-6" y="0" width="12" height="${H}" fill="${NU.hero}" opacity=".5"/><rect x="-1" y="0" width="2" height="${H}" fill="${PROPS.white}"/></g>`
-  // the band's avatar morph: the old bust over the new one, in six row slices that go one by one
-  if (band) {
-    const oldSp = toEra === 2 ? SP.INV_MARK_BUST : SP.INV_MARK_S3_BUST
-    const ox = toEra === 2 ? 18 : 19
-    const rows = spH(oldSp)
-    const sliceH = Math.ceil(rows / 6)
-    let defs = `<defs><g id="${id}b">${px(oldSp, ox, 38, 0.9)}</g>`
-    let slices = ''
-    for (let i = 0; i < 6; i++) {
-      const y0 = r1(38 + i * sliceH * 0.9)
-      const hh = r1(sliceH * 0.9 + 0.5)
-      const at = 0.7 + unit(`${id}|${i}`) * 0.6
-      css += kf(`${id}s${i}`, [[0, 'opacity:1'], [SW(at), 'opacity:1'], [SW(at) + 0.5, 'opacity:0'], [100, 'opacity:0']])
-      defs += `<clipPath id="${id}k${i}"><rect x="16" y="${y0}" width="40" height="${hh}"/></clipPath>`
-      slices += `<g ${S(`${id}s${i}`, 'steps(1)')}><rect x="16" y="${y0}" width="40" height="${hh}" fill="${NU.tile}"/><use href="#${id}b" clip-path="url(#${id}k${i})"/><rect x="14" y="${r1(y0 + hh - 1)}" width="44" height="1.5" fill="${NU.hero}"/></g>`
-    }
-    s += `${defs}</defs>${slices}`
-  }
+  // the band's avatar TURNS (3D, Chin's 8-view head turns): the old suit turns away (front, 3/4, side, back 3/4, back), the
+  // new suit comes round the other side (back, back 3/4, side, 3/4: views 5-7 are 3-1 mirrored) and lands on the panel's own
+  // bust under it. One frame every 100 ms, stepped; a tile hides the new bust until the turn is done.
+  if (band) s += `${eraTurn(id, toEra === 2 ? 1 : 2, toEra, NU.tile, (n, ons) => { css += opOnly(n, ons.map(([a, b]) => [SW(a), SW(b), 1])) }, S)}`
   s += `<g ${S(`${id}sh`, 'steps(1)')}><g ${CTR} ${S(`${id}sl`, 'cubic-bezier(.2,1.2,.3,1)')}>${sfx(cx, cy + size * 0.32, 'INVINCIBLE', size, NU.hero, { anchor: 'middle', skew: -12, ls: 1.5 })}</g>`
   const cap = caption(0, 0, sub, band ? 9.5 : 8.5, NU.hero, { ink: NU.heroInk })
   s += `<g ${S(`${id}sb`, 'steps(1)')}><g transform="translate(${r1(cx - cap.w / 2)} ${r1(cy + size * 0.32 + 8)})">${cap.svg}</g></g></g></g>`
@@ -210,9 +264,16 @@ export const showdownDue = (at: number, era: Era, fx?: { kind: string; at: numbe
   return due(p, at) ? p.startAt : undefined
 }
 /** The fight's plan for a draw, or undefined: only while a job works, never with the swap, THINK, MARK, the showdown or THE MULTIVERSE. */
-export const fightDue = (at: number, era: Era, working: boolean | undefined, fx?: { kind: string; at: number }, swapAt?: number): number | undefined => {
-  // A replay (`fx` kind 'fight') plays now, job or no job.
-  if (fx?.kind === 'fight' && liveAt(fx.at, at, FIGHT_MS + 600)) return fx.at
+export const fightDue = (at: number, era: Era, working: boolean | undefined, fx?: { kind: string; at: number }, swapAt?: number): number | undefined => fightOf(at, era, working, fx, swapAt)?.startAt
+/** A replay's version: `fight` plays the classic cut, `fight:1` / `fight:2` the others, `fight:3` MARK VS CONQUEST (what `/missioncontrol play` stores). */
+export const FIGHT_FX = /^fight(?::([0-3]))?$/
+/** The fight for a draw (its start and version), or undefined. Same rules as `fightDue`. */
+export const fightOf = (at: number, era: Era, working: boolean | undefined, fx?: { kind: string; at: number }, swapAt?: number): { startAt: number; v: Version } | undefined => {
+  // A replay (`fx` kind 'fight' or 'fight:<version>') plays now, job or no job.
+  const rp = fx ? FIGHT_FX.exec(fx.kind) : null
+  const rv = Number(rp?.[1] ?? 0) as Version
+  // MARK VS CONQUEST is the new suit's: in the classic suit (a swap mid-fight, a stale replay) it never draws.
+  if (fx && rp && liveAt(fx.at, at, timing(rv).ms + 600)) return rv === CONQUEST && era !== 2 ? undefined : { startAt: fx.at, v: rv }
   if (!working) return undefined
   if (liveAt(swapAt, at, SWAP_MS + 500) || (fx && liveAt(fx.at, at, fx.kind === 'think' ? THINK_MS : fx.kind === 'showdown' ? SHOWDOWN_MS : fx.kind === 'variants' ? VARIANTS_MS : 0))) return undefined
   const p = duelPlan(at, era)
@@ -220,7 +281,8 @@ export const fightDue = (at: number, era: Era, working: boolean | undefined, fx?
   if (showdownPlan(at, era).startAt < p.endAt + 5000 && showdownPlan(at, era).endAt > p.startAt - 5000) return undefined
   const v = variantsPlan(p.startAt)
   if (v.on && v.startAt < p.endAt + 5000 && v.endAt > p.startAt - 5000) return undefined
-  return p.startAt
+  if (p.v === CONQUEST && era !== 2) return undefined
+  return { startAt: p.startAt, v: p.v }
 }
 /**
  * THE MULTIVERSE's start for a draw, or undefined: typed (`fx`; a draw up to 3 s before it already holds it, as when it waits for
@@ -243,22 +305,25 @@ export const invExtras = (era: Era, tile: string) => (o: ExtraArgs): string => {
   if (liveAt(o.swapAt, o.at, SWAP_MS)) out.push(swap(o.W, o.H, o.surface, era, { delay: dly((o.swapAt as number) + (o.surface === 'pane' ? 60 * idx : 0)) }))
   if (o.surface === 'band') {
     if (o.fx?.kind === 'think' && liveAt(o.fx.at, o.at, THINK_MS)) out.push(thinkMark(o.W, o.H, era, dly(o.fx.at)))
-    const f = fightDue(o.at, era, o.working, o.fx, o.swapAt)
+    const f = fightOf(o.at, era, o.working, o.fx, o.swapAt)
     if (f !== undefined) {
-      out.push(fightHole(era, f, tile))
-      if (o.at < f + BAND_CUT * 1000 + 600) out.push(fightBand({ W: o.W, H: o.H, era, startAt: f }).svg)
+      out.push(fightHole(era, f.startAt, tile, f.v))
+      if (o.at < f.startAt + timing(f.v).band * 1000 + 600) out.push(fightBand({ W: o.W, H: o.H, era, startAt: f.startAt, v: f.v }).svg)
     }
   } else {
     const sd = showdownDue(o.at, era, o.fx)
     if (o.card === 'task' && sd !== undefined && !(o.working && fightDue(o.at, era, true, o.fx, o.swapAt) !== undefined)) out.push(`<!--dl-->${showdown(o.W, o.H, era, { delay: dly(sd) })}<!--/dl-->`)
-    const f = fightDue(o.at, era, o.working, o.fx, o.swapAt)
-    if (f !== undefined && o.card && o.at < f + (ACT_OFF[idx] + ACT_LEN[idx]) * 1000 + 600) out.push(fightAct({ W: o.W, H: o.H, era, startAt: f }, idx).svg)
+    const f = fightOf(o.at, era, o.working, o.fx, o.swapAt)
+    const T = f ? timing(f.v) : undefined
+    // MARK VS CONQUEST has two acts (COVER STORY, GDA WALL): THE PAGE stays as it is.
+    if (f !== undefined && T && o.card && idx < T.acts && o.at < f.startAt + ((T.off[idx] as number) + (T.len[idx] as number)) * 1000 + 600) out.push(fightAct({ W: o.W, H: o.H, era, startAt: f.startAt, v: f.v }, idx).svg)
   }
   return out.join('')
 }
-/** The panel's camera shake (CSS animation list for a wrapper), or '' when no fight is due. */
+/** The panel's camera shake (animation longhands for a wrapper: every shake of the cut plays), or '' when no fight is due. */
 export const invShake = (era: Era) => (o: { W: number; H: number; surface: 'band' | 'pane'; at: number; card?: PaneCard; working?: boolean; fx?: { kind: string; at: number }; swapAt?: number }): string => {
-  const f = fightDue(o.at, era, o.working, o.fx, o.swapAt)
+  const f = fightOf(o.at, era, o.working, o.fx, o.swapAt)
   if (f === undefined) return ''
-  return fightShake(o.surface, f, o.W, o.H, era, o.surface === 'pane' ? ACT_OF[o.card ?? 'cred'] : undefined)
+  if (o.surface === 'pane' && ACT_OF[o.card ?? 'cred'] >= timing(f.v).acts) return ''
+  return fightShake(o.surface, f.startAt, o.W, o.H, era, o.surface === 'pane' ? ACT_OF[o.card ?? 'cred'] : undefined, f.v)
 }

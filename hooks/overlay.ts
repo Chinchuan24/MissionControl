@@ -154,5 +154,6 @@ export const shakeInto = (svg: string, th: ThemeEggs | undefined, o: { W: number
   const root = /^<svg\b[^>]*>/.exec(svg)?.[0]
   const end = svg.lastIndexOf('</svg>')
   if (!anim || !root || end < 0) return svg
-  return `${root}<g class="dl-cam" style="animation:${anim}">${svg.slice(root.length, end)}</g></svg>`
+  // Longhands (`animation-name:a,b;...`) go in as they are: a list glued to an `animation:` shorthand played only one shake.
+  return `${root}<g class="dl-cam" style="${/^animation-name:/.test(anim) ? anim : `animation:${anim}`}">${svg.slice(root.length, end)}</g></svg>`
 }
