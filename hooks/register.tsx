@@ -6373,8 +6373,11 @@ const slimBandSvg = (OW: number, d: HudData): string => {
   let showGauge = Boolean(pg0)
   const shorterName = (w: number) => () => { if (own) own = nameAt(Math.min(W, w)) }
   // HEADER_ORDER: the gauge, the model, the episode (its code, then gone), "2 BG" and CREW for the two state chips, the name's
-  // shorter forms, the theme's chip, then the background count and crew mode themselves.
-  const order: (() => void)[] = [() => { showGauge = false }, () => { showModel = false }, () => { if (epMode === 0) epMode = 1 }, () => { epMode = 2 }, () => { bgForm = Math.min(bgForm + 1, 1) }, () => { crewForm = Math.min(crewForm + 1, 1) }, shorterName(1099), shorterName(899), shorterName(699), shorterName(499), () => { showChip = false }, () => { bgForm = 2 }, () => { crewForm = 2 }]
+  // shorter forms, the theme's chip, then the background count and crew mode themselves. A theme whose chip stays (`chipStays`:
+  // CAPRI IN CONTROL) lets the background count and crew mode go before its chip.
+  const dropChip = () => { showChip = false }
+  const tail: (() => void)[] = th.chipStays ? [() => { bgForm = 2 }, () => { crewForm = 2 }, dropChip] : [dropChip, () => { bgForm = 2 }, () => { crewForm = 2 }]
+  const order: (() => void)[] = [() => { showGauge = false }, () => { showModel = false }, () => { if (epMode === 0) epMode = 1 }, () => { epMode = 2 }, () => { bgForm = Math.min(bgForm + 1, 1) }, () => { crewForm = Math.min(crewForm + 1, 1) }, shorterName(1099), shorterName(899), shorterName(699), shorterName(499), ...tail]
   for (const give of order) {
     if (rightEdge(true) - (showGauge ? gW : 0) - (nameEnd() + tagsW() + (showModel ? modelW + 24 : 0)) >= 24) break
     give()

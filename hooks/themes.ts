@@ -118,6 +118,9 @@ export type ThemeEggs = {
   /** The context chip past 85%. */
   /** `W` is the band's width (a chip may wait for room). */
   chip: (x: number, y: number, ctxPct: number, t: ThemeColors, font: string, W?: number) => { svg: string; w: number }
+  /** The chip outranks the band's state chips: on a narrow band CREW and the background count give way before it (CAPRI IN
+   *  CONTROL, Chin's call). Without it the chip goes first. */
+  chipStays?: boolean
   warning: (ctxPct: number) => string
   /** The cheer when a job is done. */
   cheer: (W: number, H: number, font: string, t: ThemeColors, startAt?: number) => string
@@ -312,6 +315,7 @@ const er2Theme = (sec: boolean): ThemeEggs => ({
   css: ER2_CSS,
   readout: { w: 0, draw: () => '' },
   chip: (x, y, ctxPct, _t, _f, W) => er2Chip(x, y, ctxPct, sec, W),
+  ...(sec ? { chipStays: true } : {}),
   slimBand: true,
   slim: {
     h: ER2_BAND_H,

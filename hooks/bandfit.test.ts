@@ -214,3 +214,24 @@ test('band fit: the measure sees an overlap and an edge when there is one', () =
   expect(p.some(x => x.startsWith('"2 BACKGROUND" crosses the edge'))).toBe(true)
   expect(p.some(x => x.includes('a crawl'))).toBe(false)
 })
+
+// Chin's call: in CAPRI mode the CAPRI IN CONTROL chip stays on a narrow band; CREW and the background count give way first.
+test('band fit: CAPRI IN CONTROL outranks CREW and the background count at every width (narrow bands drop them first)', { timeoutMs: 60_000 }, async ($, on) => {
+  const clock = base(on, { skin: 'capricorn' }, true)
+  await $.session.start({ source: 'startup', cwd: '/repo', surface: 'desktop', isInteractive: true } as never)
+  await busyJob($, clock)
+  const seen: string[] = []
+  for (const bodyColumns of COLS) {
+    const ui = await $.ui.mount({ plugin: 'crab-progress', surface: 'desktop', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: true, maxRows: 14, bodyColumns } as never })
+    const svg = (await ui.findAll({ type: 'Svg' })).map(el => String(el.props.source))[0] ?? ''
+    await ui.unmount()
+    const capri = /CAPRI IN CONTROL/.test(svg.replace(/<title>[\s\S]*?<\/title>/g, ''))
+    const crew = />(?:CREW MODE|CREW)</.test(svg)
+    const bg = />2 (?:BACKGROUND|BG)</.test(svg)
+    seen.push(`${bodyColumns}:${capri ? 'C' : '-'}${crew ? 'W' : '-'}${bg ? 'B' : '-'}`)
+    expect(capri).toBe(true)
+    expect(problems(svg, widthOf('capricorn'))).toEqual([])
+  }
+  // The widest bands keep all three; the narrowest (about 450 px) keeps CAPRI's chip and lets CREW and the background count go.
+  expect(seen).toEqual(['66:C--', '86:CWB', '106:CWB', '126:CWB', '173:CWB'])
+})

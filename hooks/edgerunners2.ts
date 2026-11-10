@@ -466,7 +466,8 @@ export const er2Name = (x: number, y: number, W: number, sec: boolean, near: boo
   const px = x + lw + 10
   if (sec) s += `<g id="er2bust"><path d="${cham(px, y - 12, 17, 17, 3, 1)}" fill="${K.black}" stroke="${K.green}" stroke-width="1"/>${pixels(ER_CAPRI_BUST, px + 2, y - 11, 0.31)}</g>`
   else s += `<path d="${cham(px, y - 12, 16, 16, 3, 1)}" fill="${P.a}"/>${T(px + 4.3, y + 0.6, 'D', 12, 800, '#FFFFFF')}`
-  const id = sec ? (W >= 600 ? 'PROJECT CAPRICORN · HOST D' : 'CAPRICORN') : W >= 1100 ? 'SNAKE NATION · NETRUNNER' : W >= 900 ? 'SNAKE NATION' : ''
+  // Under 500 px CAPRI's id gives way to her chip (CAPRI IN CONTROL stays on a narrow band: Chin's call), her bust still marks her.
+  const id = sec ? (W >= 600 ? 'PROJECT CAPRICORN · HOST D' : W >= 500 ? 'CAPRICORN' : '') : W >= 1100 ? 'SNAKE NATION · NETRUNNER' : W >= 900 ? 'SNAKE NATION' : ''
   if (id) s += T(px + 23, y + 0.5, id, 9.5, 800, P.aT, 'letter-spacing="1.3"')
   let w = lw + 10 + 17 + (id ? 7 + er2W(id, 9.5, 1.3, 800) : 0)
   // CAPRI mode: his dimmed D patch after the id, the second D trace.
@@ -479,7 +480,8 @@ export const er2Name = (x: number, y: number, W: number, sec: boolean, near: boo
 }
 
 /**
- * The header chip. CAPRI mode: CAPRI IN CONTROL (her fill, green text, her eye, a 1 px jitter; the context joins it from 85%).
+ * The header chip. CAPRI mode: CAPRI IN CONTROL (her fill, green text, her eye, a 1 px jitter; the context joins it from 85% on a
+ * band 600 px wide or more).
  * D mode: 85% CHIP HOT (amber), 95% CAPRI'S AWAKE (her colours, a jitter, her eye), else HOST D · STABLE (a cobalt
  * outline) from a band 900 px wide; narrower, D's patch alone marks the mode.
  */
@@ -487,7 +489,8 @@ export const er2Chip = (x: number, y: number, pct: number, sec: boolean, W = 0):
   const K = kOf(sec)
   const P = palOf(sec)
   if (sec) {
-    const label = pct >= 85 ? `CAPRI IN CONTROL · ${Math.round(pct)}%` : 'CAPRI IN CONTROL'
+    // Under 600 px the context stays in the readouts' ring alone, so the chip (which stays: `chipStays`) still fits.
+    const label = pct >= 85 && !(W > 0 && W < 600) ? `CAPRI IN CONTROL · ${Math.round(pct)}%` : 'CAPRI IN CONTROL'
     const w = r1(er2W(label, 9.5, 1.2, 800) + 34)
     return { svg: ff(`<g class="v2-psy"><path d="${cham(x, y - 11.5, w, 16, 4, 1)}" fill="${K.hot}" fill-opacity=".26" stroke="${K.hot}" stroke-opacity=".8"/>${eye(x + 6, y - 7.5, 0.85, 'v2-led', true)}${T(x + 23, y, label, 9.5, 800, K.green, 'letter-spacing="1.2"')}</g>`), w }
   }
