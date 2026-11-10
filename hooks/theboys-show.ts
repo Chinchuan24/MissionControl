@@ -13,12 +13,13 @@ import { Act, KIT, bub, cap, defineActs, slate } from './theboys-acts'
 import type { Geo, Row } from './theboys-acts'
 import { BUST, C, CRAWL_Y, PROPS, SP, T, condW, pal, pin, px, r1, sansW, spH, spW, stamp, tape, unit } from './theboys'
 import type { Mode } from './theboys'
-import { actMs, autoLookAtMe, boysFx, fixedAt, onBoysEvent, registerReplay, setActMs, setApprovalMod, setStageBusy, testFails, toastOk, vnnBreak } from './theboys-eggs'
+import { REPLAYS, actMs, autoLookAtMe, boysFx, fixedAt, onBoysEvent, registerReplay, setActMs, setBoysFx, setApprovalMod, setStageBusy, testFails, toastOk, vnnBreak } from './theboys-eggs'
 import type { BoysEventArgs, BoysMode } from './theboys-eggs'
 import * as fx from './stage/fx'
 import { ease } from './stage/ease'
 import * as MS from './theboys-motion-sprites'
-import { cadence } from './stage/director'
+import { AMBUSH_MS, AMB_SLOT_MS, PIECES, ambushOfSlot, directorAt, kindOf, noirClue, stageAt } from './theboys-director'
+import { PLAY_NAME, playsFrom, playsOf, registerPlay } from './stage/replay'
 
 const { poses, actor, stillPose, arc, runFrame, feet, GROUND, gaugeOf, coverBust, dim, poof, knight, octo, tentacle, beaver, critter, dog, pig, flashbulb, cone, vial, crowd, runner, streak, heart } = KIT
 const by = (m: BoysMode, brand: string, book: string, gold: string, noir = brand): string => (m === 'book' ? book : m === 'gold' ? gold : m === 'noir' ? noir : brand)
@@ -35,134 +36,10 @@ export const sign = (x: number, y: number, text: string, z = 10): string => {
 export const translate = (x: number, y: number, said: string, m: Mode): string => bub(x, y, `She says: ${said}`, m)
 
 // ---------------------------------------------------------------- 2. the schedule
-/** The LOCAL date's day number (a UTC day would flip mid-evening west of UTC and re-roll the day's times halfway through). */
-export const localDay = (at: number): number => {
-  const d = new Date(at)
-  return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86_400_000)
-}
-const hourOf = (at: number, h: number): number => {
-  const d = new Date(at)
-  d.setHours(Math.floor(h), Math.round((h % 1) * 60), 0, 0)
-  return d.getTime()
-}
-export type Slot = { kind: string; startAt: number; endAt: number; src: 'fx' | 'ambush' | 'piece' | 'roamer'; book?: boolean }
-/** The daily set pieces (bible §5.1): each once a day in its window (local hours); THE WALK twice in OFF BOOK; BRAVE MAEVE only in
- *  June; none within 10 s of another; the SOLID GOLD teaser never within 2 min of THE PREMIERE. */
-export const PIECES: { kind: string; from: number; to: number; june?: boolean; book?: boolean }[] = [
-  { kind: 'redscare', from: 8, to: 12 },
-  { kind: 'ice', from: 9, to: 22 },
-  { kind: 'whale', from: 10, to: 21 },
-  { kind: 'expo', from: 14, to: 18 },
-  { kind: 'premiere', from: 19, to: 22.5 },
-  { kind: 'teaser', from: 18, to: 23 },
-  { kind: 'walk', from: 11, to: 20 },
-  { kind: 'walk', from: 11, to: 20, book: true },
-  { kind: 'bravemaeve', from: 10, to: 20, june: true },
-]
-export const PIECE_GAP_MS = 10_000
-export const TEASER_GAP_MS = 120_000
-const DAYS = new Map<number, Slot[]>()
-/** The day's set pieces, the same for every moment of the same local day. */
-export const dayPlan = (at: number): Slot[] => {
-  const day = localDay(at)
-  const hit = DAYS.get(day)
-  if (hit) return hit
-  const june = new Date(at).getMonth() === 5
-  const out: Slot[] = []
-  PIECES.forEach((p, i) => {
-    if (p.june && !june) return
-    const ms = actMs(p.kind)
-    const lo = hourOf(at, p.from)
-    const span = Math.max(1, hourOf(at, p.to) - ms - lo)
-    for (let k = 0; k < 16; k++) {
-      const startAt = lo + Math.floor(unit(`tb-day|${day}|${i}|${k}`) * span)
-      const endAt = startAt + ms
-      const gap = (q: Slot): number => ((p.kind === 'teaser' && q.kind === 'premiere') || (p.kind === 'premiere' && q.kind === 'teaser') ? TEASER_GAP_MS : PIECE_GAP_MS)
-      if (out.every(q => startAt >= q.endAt + gap(q) || endAt + gap(q) <= q.startAt)) {
-        out.push({ kind: p.kind, startAt, endAt, src: 'piece', ...(p.book ? { book: true } : {}) })
-        return
-      }
-    }
-  })
-  out.sort((a, b) => a.startAt - b.startAt)
-  if (DAYS.size > 8) DAYS.clear()
-  DAYS.set(day, out)
-  return out
-}
-const near = (a: { startAt: number; endAt: number }, b: { startAt: number; endAt: number }, gap: number): boolean => a.startAt < b.endAt + gap && b.startAt < a.endAt + gap
-const pieceNear = (s: { startAt: number; endAt: number }): boolean => [s.startAt, s.endAt].some(t => dayPlan(t).some(q => near(s, q, PIECE_GAP_MS)))
-
-// THE AMBUSH v2: rare, through the stage director's `rare` cadence (30-45 min): slots of 37.5 min, each AMBUSH at a seeded
-// moment in its slot's first 7.5 min, so two in a row are 30-45 min apart while a job works (about 37 min on average). It was
-// every 15-20 min, a 12 s takeover with the scrim over the working numbers: tens a day.
-export const AMBUSH_MS = 12_000
-export const AMB_SLOT_MS = cadence('rare').slotMs
-export const AMB_JITTER_MS = cadence('rare').jitterMs
-export const CHOREOS = ['a', 'b', 'c'] as const
-/** The slot's AMBUSH: its start and its choreography (the three take turns, so the same one never plays twice running). */
-export const ambushOfSlot = (slot: number): Slot => {
-  const startAt = slot * AMB_SLOT_MS + Math.floor(unit(`tb-amb|${slot}`) * AMB_JITTER_MS)
-  return { kind: `ambush-${CHOREOS[((slot % 3) + 3) % 3]}`, startAt, endAt: startAt + AMBUSH_MS, src: 'ambush' }
-}
-/** The AMBUSH due at `at` (a job must be working; never within 10 s of a set piece). */
-export const ambushAt = (at: number): Slot | undefined => {
-  const a = ambushOfSlot(Math.floor(at / AMB_SLOT_MS))
-  return at >= a.startAt - 1000 && at < a.endAt && !pieceNear(a) ? a : undefined
-}
-
-// The rare roamers: one shared 6-min slot; 65% of slots get one, at a seeded moment in the slot's first 2 min; never inside a set
-// piece or an AMBUSH window. Butcher's `Oi.` takeover only in every 8th slot (at most one per 48 min).
-export const ROAM_SLOT_MS = 360_000
-export const ROAM_JITTER_MS = 120_000
-export const ROAM_CHANCE = 0.65
-export const ROAMERS: [string, number][] = [
-  ['r-hughie', 30], ['r-starlight', 8], ['r-kimiko', 8], ['r-frenchie', 7], ['r-noir', 7], ['r-atrain', 8], ['r-terror', 7],
-  ['r-fish', 5], ['r-timothy', 4], ['r-ambrosius', 4], ['r-beaver', 3], ['r-blimp', 5], ['r-oi', 4],
-]
-const ROAM_SUM = ROAMERS.reduce((n, [, w]) => n + w, 0)
-export const roamerOfSlot = (slot: number): Slot | undefined => {
-  if (unit(`tb-roam|on|${slot}`) >= ROAM_CHANCE) return undefined
-  let r = unit(`tb-roam|who|${slot}`) * ROAM_SUM
-  let kind = 'r-hughie'
-  for (const [k, w] of ROAMERS) {
-    if (r < w) { kind = k; break }
-    r -= w
-  }
-  if (kind === 'r-oi' && ((slot % 8) + 8) % 8 !== 0) kind = 'r-hughie'
-  const startAt = slot * ROAM_SLOT_MS + Math.floor(unit(`tb-roam|t|${slot}`) * ROAM_JITTER_MS)
-  const s: Slot = { kind, startAt, endAt: startAt + actMs(kind), src: 'roamer' }
-  const amb = ambushOfSlot(Math.floor(startAt / AMB_SLOT_MS))
-  if (pieceNear(s) || near(s, amb, PIECE_GAP_MS)) return undefined
-  return s
-}
-/** Black Noir's cameo carries the `1979` VHS tag (the clue to THIS MEANS NOIR) one time in five. */
-export const noirClue = (startAt: number): boolean => unit(`tb-noir79|${startAt}`) < 0.2
-/** How far ahead an idle draw schedules a set piece or a roamer (the band redraws once a minute at rest). */
-export const AHEAD_MS = 75_000
-export type StageArgs = { working?: boolean; mode: Mode; swapAt?: number }
-/** What plays at `at`, one thing at a time: a typed act or an event egg (`fx`), else THE AMBUSH (while a job works), else the day's
- *  set piece, else a roamer. A breath of 10 s after an `fx` keeps the schedule off; a mode swap holds everything. NOIR is quiet:
- *  no set pieces (the roamers and the AMBUSH stay, silently). */
-export const stageAt = (at: number, o: StageArgs): Slot | undefined => {
-  const fx = boysFx()
-  if (fx && at >= fx.at - 1000 && at < fx.at + actMs(fx.kind)) return { kind: fx.kind, startAt: fx.at, endAt: fx.at + actMs(fx.kind), src: 'fx' }
-  if (o.swapAt !== undefined && o.swapAt > 0 && at >= o.swapAt - 1000 && at < o.swapAt + 2_700) return undefined
-  if (fx && at >= fx.at && at < fx.at + actMs(fx.kind) + 10_000) return undefined
-  if (o.working) {
-    const a = ambushAt(at)
-    if (a) return a
-  }
-  if (o.mode !== 'noir') {
-    const p = dayPlan(at).find(q => (!q.book || o.mode === 'book') && at < q.endAt && q.startAt <= at + AHEAD_MS)
-    if (p) return p
-  }
-  const slot = Math.floor(at / ROAM_SLOT_MS)
-  for (const s of [slot, slot + 1]) {
-    const r = roamerOfSlot(s)
-    if (r && at < r.endAt && r.startAt <= at + AHEAD_MS) return r
-  }
-  return undefined
-}
+// The daily set pieces, THE AMBUSH and the roamers all come from ONE stage director now (theboys-director.ts: lanes in priority
+// order, seeded slots, typed acts as held windows). These names stay here for the theme, the register and the tests.
+export { AHEAD_MS, AMBUSH_MS, AMB_JITTER_MS, AMB_SLOT_MS, CHOREOS, PIECES, PIECE_GAP_MS, ROAMERS, ROAM_CHANCE, ROAM_JITTER_MS, ROAM_SLOT_MS, TEASER_GAP_MS, ambushAt, ambushOfSlot, dayPlan, localDay, noirClue, roamerOfSlot, stageAt } from './theboys-director'
+export type { Slot, StageArgs } from './theboys-director'
 /** A scheduled act drawn before its start stays hidden until then (its keyframes' first frame would otherwise show early). */
 export const ahead = (svg: string, startAt: number): string => `<g style="animation:tqpre 1ms steps(1,end) both;animation-delay:calc(${pin(startAt)} + 0s)"><style>@keyframes tqpre{0%{opacity:0}100%{opacity:1}}</style>${svg}</g>`
 
@@ -696,6 +573,17 @@ const PLAY: [string, string, string][] = [
 for (const [name, fx, what] of PLAY) registerReplay({ name, what, run: () => ({ fx }) })
 registerReplay({ name: 'ambush', what: 'THE AMBUSH (the next of the three)', run: at => ({ fx: ambushOfSlot(Math.floor(at / AMB_SLOT_MS) + 1).kind }) })
 registerReplay({ name: 'night', what: 'E14 VNN OVERNIGHT on the crawl', run: (at, m) => { vnnBreak(t(m, 'VNN OVERNIGHT: midnight to 5 AM, the night desk is on', 'THE WIRE: past midnight. Kettle’s on.', 'Late show: midnight to 5 AM'), at, 'midnight'); return {} } })
+// The shared `/missioncontrol play` registry (stage/replay.ts), which the command asks before the Boys' own list: every director
+// bit by its play name (`playsFrom`: the AMBUSH, the roamers, the set pieces), then every other act in REPLAYS whose replay only
+// starts an act. The mode swaps (hijack, onbrand) and the lines that need the engine (breaking, night, spin, scoreboard, turbo)
+// stay in REPLAYS only: the register falls back to it, so all 92 names still play. The curtain call is NOIR's own.
+export const BOYS_SKINS = ['the-boys', 'solidgold', 'noir']
+export const ENGINE_PLAYS = new Set(['hijack', 'onbrand', 'breaking', 'scoreboard', 'spin', 'turbo', 'night'])
+playsFrom(BOYS_SKINS, directorAt(Date.now()), s => setBoysFx(kindOf(s.id), s.startAt), n => REPLAYS.find(r => r.name === n)?.what ?? n)
+for (const r of REPLAYS) {
+  if (ENGINE_PLAYS.has(r.name) || !PLAY_NAME.test(r.name) || playsOf('the-boys').some(p => p.name === r.name)) continue
+  registerPlay(r.name === 'curtain' ? ['noir'] : BOYS_SKINS, { name: r.name, what: r.what, run: at => { const out = r.run(at, 'brand'); if (out.fx) setBoysFx(out.fx, at) } })
+}
 /** The set pieces by their replay names (the plan's): ice, whale, teaser, premiere, expo, redscare, walk, bravemaeve are acts. */
 export const PIECE_KINDS = [...new Set(PIECES.map(p => p.kind))]
 export type { BoysEventArgs }
