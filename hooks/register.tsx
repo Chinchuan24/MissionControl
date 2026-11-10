@@ -3967,10 +3967,11 @@ const estimateOf = (a: AgentRun, at: number): number =>
   Math.min(0.95, 1 - Math.exp((-1.2 * Math.max(0, (a.endedAt ?? Math.max(at, a.startedAt)) - a.startedAt)) / typicalRunMs))
 
 // The task's own progress when the worker reports steps; a finished run is full;
-// a running one without steps is estimated when the time is known.
+// a running one without steps is estimated when the time is known. Only the end
+// makes it whole: a worker that reported every step is still writing its report.
 const progressOf = (a: AgentRun, at?: number): number | null => {
   if (a.status === 'done') return 1
-  if (a.stepTotal) return Math.min(1, (a.stepDone ?? 0) / a.stepTotal)
+  if (a.stepTotal) return Math.min(a.status === 'running' ? 0.95 : 1, (a.stepDone ?? 0) / a.stepTotal)
   if (a.status === 'running' && at) return estimateOf(a, at)
   return null
 }
@@ -5074,7 +5075,8 @@ const isHolding = (a: AgentRun): boolean => a.status === 'running'
 // When it was last heard from: a tool call still in flight (a long build, a
 // permission prompt) is a sign of life now, and so is a busy sub-agent it waits on.
 const heardAt = (a: AgentRun, list: readonly AgentRun[], at: number, depth = 0): number => {
-  if (a.toolsInFlight) return at
+  // A held agent (its loop waits on work of its own) is checked with the engine each second.
+  if (a.toolsInFlight || a.heldAt) return at
   const kids = a.agentId && depth < 5 ? list.filter(k => k.parentAgentId === a.agentId && k.status === 'running') : []
   return Math.max(lastSeen(a), ...kids.map(k => heardAt(k, list, at, depth + 1)))
 }
@@ -6934,6 +6936,44 @@ const hasOpenPlan = (plan: PlanStep[] | undefined): boolean => Boolean(plan?.len
 const isUnresolved = (a: AgentRun, crew: AgentRun[]): boolean =>
   a.status === 'failed' && !crew.some(b => b !== a && b.status === 'done' && b.startedAt >= a.startedAt && norm(b.description) === norm(a.description))
 
+// Where the engine says each agent's loop stands, by id; null when the list cannot be
+// read. Live (isLiveAgent): running a turn, settling one, or waiting on work of its own.
+async function agentLoops($: EngineInterface): Promise<Map<string, string> | null> {
+  try {
+    const listed = await $.agent.list()
+    return new Map((Array.isArray(listed) ? listed : []).map(a => [a.id, String(a.status)]))
+  } catch {
+    return null
+  }
+}
+const isLoopLive = (loops: Map<string, string> | null, id: string): boolean => isLiveAgent(loops?.get(id) ?? '')
+
+// What an agent's real end does besides its row: The Boys' cheer, its staffing savings saved.
+async function agentEnded($: EngineInterface, agentId: string, at: number, isAnswer: boolean): Promise<void> {
+  if (isBoys() && isAnswer) for (const t of boysEvent('agent-done', { at, mode: boysWorn() })) tbToast($, t)
+  if (staffBaseline.delete(agentId)) await $.store.set(STAFF_SAVED_KEY, staffSaved.total).catch(() => undefined)
+}
+
+// Held agents the engine no longer keeps end now, done as of their last answer; the
+// tick asks while any is held. A list that cannot be read lets them all end, as before.
+async function settleHeld($: EngineInterface, at: number): Promise<void> {
+  const loops = await agentLoops($)
+  const ended = (await read($, agents)).filter(a => a.status === 'running' && a.heldAt && !isLoopLive(loops, a.agentId ?? a.id))
+  if (!ended.length) return
+  // Killed while it waited: stopped (neutral); failed: failed; else its answer stands.
+  const endOf = (a: AgentRun): AgentRun['status'] => {
+    const st = loops?.get(a.agentId ?? a.id)
+    return st === 'failed' ? 'failed' : st === 'killed' ? 'stopped' : 'done'
+  }
+  const ids = new Set(ended.map(a => a.id))
+  await update($, agents, list => list.map(a => (ids.has(a.id) && a.status === 'running' && a.heldAt ? { ...a, status: endOf(a), endedAt: a.heldAt, heldAt: undefined, isStuck: false, toolsInFlight: 0 } : a)))
+  for (const a of ended) if (a.agentId) await agentEnded($, a.agentId, at, endOf(a) === 'done')
+  // A background agent's report now waits on the main loop: not done until answered.
+  if (ended.some(a => a.isBackground) && (await read($, manager)).task) await update($, manager, prev => (prev.doneAt ? prev : { ...prev, reportDue: at }))
+  await update($, now, () => at)
+  await finishIfIdle($).catch(() => undefined)
+}
+
 async function finishIfIdle($: EngineInterface): Promise<void> {
   const boss = await read($, manager)
   if (boss.isWorking || !boss.task || boss.doneAt) return
@@ -7454,6 +7494,7 @@ export const register: Register = (on, options) => {
         if (isLive || at - last >= 60_000) await update($, now, () => at)
         if (isEnvStale) await refreshEnv($)
         await keepTime($, at)
+        if (list.some(a => a.status === 'running' && a.heldAt)) await settleHeld($, at).catch(() => undefined)
         if (isBoys()) await boysTick($, at, boss.isWorking || st.isBusy || isRunning).catch(() => undefined)
         await watchStop($, at, list, boss).catch(() => undefined)
         // Free RAM is looked at only while work runs.
@@ -7969,7 +8010,7 @@ export const register: Register = (on, options) => {
       const was = resumed ? list.find(a => a.agentId === resumed || a.id === resumed) : undefined
       if (was) {
         isNew = false
-        return list.map(a => (a === was ? { ...a, status: 'running' as const, endedAt: undefined, isStuck: false, toolsInFlight: 0, lastProgressAt: at } : a))
+        return list.map(a => (a === was ? { ...a, status: 'running' as const, endedAt: undefined, heldAt: undefined, isStuck: false, toolsInFlight: 0, lastProgressAt: at } : a))
       }
       // A retry is the same task tried again in this job after an earlier try ended:
       // a workflow's parallel workers and repeats from other prompts are none.
@@ -8145,6 +8186,7 @@ export const register: Register = (on, options) => {
               effort: typeof wanted === 'string' ? wanted : a.effort,
               status: 'running',
               endedAt: undefined,
+              heldAt: undefined,
               contextTokens:
                 (usage.input_tokens || 0) +
                 (usage.cache_read_input_tokens || 0) +
@@ -8177,18 +8219,24 @@ export const register: Register = (on, options) => {
     }
     if (agentId) {
       const at = await $.clock.now()
+      // A turn's answer is not the agent's end while the engine keeps its loop: it waits on
+      // work of its own (a background shell, an agent it started) and wakes for another
+      // turn, or it is still settling this one. It runs on at its share; the tick ends it
+      // once the engine lets it go. Not listed (a workflow's agent), or no list: it ends here.
+      const isHeld = e.reason === 'answer' && isLoopLive(await agentLoops($), agentId)
       let reported = false
       await update($, agents, list =>
         list.map((a): AgentRun => {
           if (a.agentId !== agentId) return a
           // A run whose steps went unseen still gets the turn's own sum.
           const fallback = a.steps === 0 && e.usage
-          if (a.isBackground && a.status === 'running') reported = true
-          return {
+          if (!isHeld && a.isBackground && a.status === 'running') reported = true
+          const ended: AgentRun = {
             ...a,
             // Esc ends it stopped (neutral); an API error or a refusal, failed.
             status: e.reason === 'answer' ? 'done' : e.reason === 'aborted' ? 'stopped' : 'failed',
             endedAt: at,
+            heldAt: undefined,
             isStuck: false,
             toolsInFlight: 0,
             ...(fallback && e.usage
@@ -8203,10 +8251,10 @@ export const register: Register = (on, options) => {
                 }
               : {}),
           }
+          return isHeld ? { ...ended, status: 'running', endedAt: undefined, heldAt: at, lastProgressAt: at } : ended
         }),
       )
-      if (isBoys() && e.reason === 'answer') for (const t of boysEvent('agent-done', { at, mode: boysWorn() })) tbToast($, t)
-      if (staffBaseline.delete(agentId)) await $.store.set(STAFF_SAVED_KEY, staffSaved.total).catch(() => undefined)
+      if (!isHeld) await agentEnded($, agentId, at, e.reason === 'answer')
       // A background agent's report now waits on the main loop: not done until answered.
       if (reported && (await read($, manager)).task) await update($, manager, prev => (prev.doneAt ? prev : { ...prev, reportDue: at }))
       await update($, now, () => at)
