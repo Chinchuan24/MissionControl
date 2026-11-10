@@ -44,9 +44,9 @@ export const clip = (act: Act, t0: number, t1: number, svg: string, o: { dir?: D
 
 /**
  * The slit bar: a hot line with a soft glow crossing the panel toward `dir` from t0 to t1 (rides a wipe's edge when it
- * has the same times and ease). Gradients only, no blur filter.
+ * has the same times and `ease`; both default to 'whip'). Gradients only, no blur filter.
  */
-export const bar = (act: Act, t0: number, t1: number, o: { dir?: Dir; color?: string; core?: string; glow?: number } = {}): string => {
+export const bar = (act: Act, t0: number, t1: number, o: { dir?: Dir; color?: string; core?: string; glow?: number; ease?: Ease | string } = {}): string => {
   const dir = o.dir ?? 'r'
   const horiz = dir === 'r' || dir === 'l'
   const L = horiz ? act.W : act.H
@@ -61,7 +61,7 @@ export const bar = (act: Act, t0: number, t1: number, o: { dir?: Dir; color?: st
   const to = L - from
   const at = (v: number): string => (horiz ? `translate(${r1(v)}px,0)` : `translate(0,${r1(v)}px)`)
   const end = act.T - act.off
-  return `<defs>${grad}</defs>${act.kf(shape, [[0, `opacity:0;transform:${at(from)}`], [t0, `opacity:0;transform:${at(from)}`], [t0 + 0.01, `opacity:1;transform:${at(from)}`], [t1 - 0.01, `opacity:1;transform:${at(to)}`], [t1, `opacity:0;transform:${at(to)}`], [end, `opacity:0;transform:${at(to)}`]], { ease: 'whip' })}`
+  return `<defs>${grad}</defs>${act.kf(shape, [[0, `opacity:0;transform:${at(from)}`], [t0, `opacity:0;transform:${at(from)}`], [t0 + 0.01, `opacity:1;transform:${at(from)}`], [t1 - 0.01, `opacity:1;transform:${at(to)}`], [t1, `opacity:0;transform:${at(to)}`], [end, `opacity:0;transform:${at(to)}`]], { ease: o.ease ?? 'whip' })}`
 }
 
 /**
@@ -133,13 +133,17 @@ export type SwitchLook = { bg: string; accent: string; ink?: string }
 export type SwitchFlavour = { dir?: Dir; ms?: number; veil?: number; bar?: boolean; shards?: number; extra?: (act: Act, surface: 'band' | 'pane') => string }
 /** The default switch length: well under a second. */
 export const SWITCH_MS = 700
+/** The default veil's opacity: the panel and its numbers show through it. */
+export const SWITCH_VEIL = 0.55
 /** Pane cards that get the switch (the top of the pane, where the eye is), and the cascade between two cards. */
 export const SWITCH_CARDS = 4
 export const SWITCH_STAGGER = 0.06
 
 /**
- * The generic skin switch, over a panel ALREADY drawn in the new skin: the new skin's own ground covers it and wipes away
- * (whip ease), uncovering the panel, with a bar in the new accent on its edge and a few shards. Only the NEW skin's colours
+ * The generic skin switch, over a panel ALREADY drawn in the new skin: a veil of the new skin's own ground wipes away
+ * ('settle': it moves at once and glides to rest), with a bar in the new accent on its edge and a few shards. The veil is
+ * see-through (`veil`, default .55), so the working numbers stay readable through the whole switch; a full cover read as
+ * a blank panel for the first 150 ms. Only the NEW skin's colours
  * by default (a skin with a strict palette, like GENE's greys or Caliper's faces, never shows another skin's colour); `from`
  * is there for a flavour that wants the old look. The pane's cards cascade (`i`). Reduced motion: no wipe; a 2 px rule in
  * the new accent marks the change for the act's life. `at` is the switch time (pinned). Returns the layer (an `Act.done`),
@@ -157,9 +161,10 @@ export const skinSwitch = (o: { W: number; H: number; at: number; surface: 'band
   const t0 = lag + 0.04
   const t1 = T - 0.06
   let body = ''
-  // The old ground, nearly opaque: the person sees the old skin's colour pulled off the new one.
-  body += clip(act, t0, t1, `<rect width="${o.W}" height="${o.H}" fill="${o.to.bg}" opacity="${f.veil ?? 0.96}"/><rect y="${o.H - 2}" width="${o.W}" height="2" fill="${o.to.accent}" opacity=".8"/>`, { dir })
-  if (f.bar !== false) body += bar(act, t0, t1, { dir, color: o.to.accent, core: o.to.ink ?? o.to.accent })
+  // A veil of the new ground pulled off the new panel. See-through: motion never hides the working numbers.
+  const ease: Ease = 'settle'
+  body += clip(act, t0, t1, `<rect width="${o.W}" height="${o.H}" fill="${o.to.bg}" opacity="${f.veil ?? SWITCH_VEIL}"/><rect y="${o.H - 2}" width="${o.W}" height="2" fill="${o.to.accent}" opacity=".8"/>`, { dir, ease })
+  if (f.bar !== false) body += bar(act, t0, t1, { dir, color: o.to.accent, core: o.to.ink ?? o.to.accent, ease })
   const n = f.shards ?? (band ? 6 : i === 0 ? 4 : 0)
   if (n) body += shards(act, t0 + 0.1, { n, seed: `sw${o.surface}${i}`, colors: [o.to.accent, o.to.ink ?? o.to.accent], d: 0.45, spread: 0.2 })
   if (f.extra) body += f.extra(act, o.surface)
