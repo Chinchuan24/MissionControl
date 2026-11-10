@@ -160,7 +160,7 @@ export const total = (x: number, y: number, usd: number, m: Mode) => {
   const w = sansW('Total ', 11.5) + sansW(v, 11.5, 0, true) + 2
   return { svg: `<text x="${r1(x)}" y="${y}" font-family="${FONT}" font-size="11.5" fill="${P.muted}" font-variant-numeric="tabular-nums">Total <tspan font-weight="700" fill="${P.text}">${v}</tspan></text>`, w }
 }
-/** The name: MISSION CONTROL as a broadcast tag, the Total, the APPROVAL meter, then the network line on wide bands. */
+/** The name: MISSION CONTROL as a broadcast tag, the Total, the APPROVAL meter (from 500 px), then the network line on wide bands. */
 export const name = (x: number, y: number, W: number, m: Mode, usd: number, at: number) => {
   const P = pal(m)
   const label = 'MISSION CONTROL'
@@ -174,9 +174,11 @@ export const name = (x: number, y: number, W: number, m: Mode, usd: number, at: 
   s += tot.svg
   w += 12 + tot.w
   const wide = W >= 1200
-  const ap = approval(x + w + 16, y, approvalAt(at), m, wide)
-  s += ap
-  w += 16 + approvalW(wide, m)
+  // Under 500 px the meter gives way (the Total stays): the header keeps its clock.
+  if (W >= 500) {
+    s += approval(x + w + 16, y, approvalAt(at), m, wide)
+    w += 16 + approvalW(wide, m)
+  }
   const firm = W >= 1450 ? (m === 'book' ? 'THE BOYS · OFF THE BOOKS' : m === 'gold' ? 'SOLID GOLD · LIVE' : 'VOUGHT INTERNATIONAL · SUPE OPERATIONS') : W >= 1000 ? (m === 'book' ? 'THE BOYS' : m === 'gold' ? 'SOLID GOLD' : 'VOUGHT INTERNATIONAL') : ''
   if (firm) {
     s += m === 'book' ? C(x + w + 10, y, firm, 10, P.aT, 'letter-spacing="2"') : M(x + w + 10, y, firm, 9, m === 'gold' ? P.aT : P.a, 'letter-spacing="1.2"')
