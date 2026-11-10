@@ -5,6 +5,8 @@
 // showdown, the era swap) in invincible-eggs.ts and invincible-fight.ts.
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import * as SP from './invincible-sprites'
+import * as MS from './invincible-motion-sprites'
+import { FrameBank } from './stage/frames'
 import { pin } from './smooth'
 
 export { SP, pin }
@@ -367,7 +369,25 @@ export const cheer = (W: any, H: any, era: any, o: any = {}) => {
   const cy = H / 2 + 6
   const sub = 'JOB DONE · INVINCIBLE'
   const crack = `<path class="inv-crack" d="M${r1(cx - 70)} ${r1(cy - 40)}l12 10 -6 8 14 9 -5 11 10 6" fill="none" stroke="${P.text}" stroke-width="1.2" opacity=".7"/><path class="inv-crack" d="M${r1(cx + 64)} ${r1(cy + 36)}l-10 -9 7 -7 -12 -10 4 -9 -8 -5" fill="none" stroke="${P.text}" stroke-width="1.2" opacity=".7"/>`
-  return `<g class="inv-cheer" pointer-events="none"${o.delay ? ` style="--cd:${o.delay}"` : ''}><rect x="0" y="0" width="${W}" height="${H}" fill="${P.tile}" opacity=".78"/><rect class="inv-flashf" x="0" y="0" width="${W}" height="${H}" fill="${PROPS.flash}"/><g class="inv-cshake">${crack}<g class="inv-slam">${sfx(cx, cy + size * 0.32, 'INVINCIBLE', size, P.hero, { anchor: 'middle', skew: -12, ls: 1.5 })}</g><g class="inv-sub">${C(cx, cy + size * 0.32 + 16, sub, 9.5, P.text, 'text-anchor="middle" letter-spacing="2"')}</g></g></g>`
+  return `<g class="inv-cheer" pointer-events="none"${o.delay ? ` style="--cd:${o.delay}"` : ''}><rect x="0" y="0" width="${W}" height="${H}" fill="${P.tile}" opacity=".78"/><rect class="inv-flashf" x="0" y="0" width="${W}" height="${H}" fill="${PROPS.flash}"/><g class="inv-cshake">${crack}<g class="inv-slam">${sfx(cx, cy + size * 0.32, 'INVINCIBLE', size, P.hero, { anchor: 'middle', skew: -12, ls: 1.5 })}</g><g class="inv-sub">${C(cx, cy + size * 0.32 + 16, sub, 9.5, P.text, 'text-anchor="middle" letter-spacing="2"')}</g></g>${H < 200 ? doneTurn(era === 2 ? 2 : 1, P.tile) : ''}</g>`
+}
+/**
+ * The done cheer's small HEAD TURN (3D, Chin's 8-view turn): the band's bust stands over the veil and glances round, front ->
+ * 3/4 -> side -> 3/4 -> front, as the title lands (1.2-1.9 s of the 2.6 s cheer). Stepped; under reduced motion the front view.
+ */
+export const DONE_TURN = [[0, 46, 'v0'], [46, 54, 'v1'], [54, 65, 'v2'], [65, 73, 'v1'], [73, 100, 'v0']] as const
+const doneTurn = (era: 1 | 2, tile: string): string => {
+  const T = era === 2 ? [MS.FX3_MARK_TURN_0, MS.FX3_MARK_TURN_1, MS.FX3_MARK_TURN_2] : [MS.FX_MARK_TURN_0, MS.FX_MARK_TURN_1, MS.FX_MARK_TURN_2]
+  const bank = new FrameBank(`invdt${era}`, 6)
+  T.forEach((sp, i) => bank.add(`v${i}`, sp))
+  const wins = (k: string): string => {
+    const ons = DONE_TURN.filter(w => w[2] === k)
+    const rows = ['0%{opacity:0}', ...ons.flatMap(([a, b]) => [`${a}%{opacity:1}`, `${Math.max(a, b - 0.1)}%{opacity:1}`, `${b}%{opacity:0}`])]
+    return `@keyframes inv-dt${k}{${rows.join('')}}`
+  }
+  const css = `${['v0', 'v1', 'v2'].map(wins).join('')}.inv-dt{animation-duration:2.6s;animation-timing-function:steps(1);animation-fill-mode:both;animation-delay:var(--cd,0s)}@media (prefers-reduced-motion: reduce){.inv-dt{animation:none!important}}`
+  const views = ['v0', 'v1', 'v2'].map((k, i) => `<g class="inv-dt" style="animation-name:inv-dt${k}"${i ? ' opacity="0"' : ''}>${bank.use(k, 34, 56, 1, 1)}</g>`).join('')
+  return `<style>${css}</style><defs>${bank.defs()}</defs><rect x="14" y="34" width="44" height="46" fill="${tile}"/>${views}`
 }
 /** THINK, MARK: typed as a code, or at 95 %. Omni-Man drops in beside the avatar, arms crossed, and his bubble says the line (S1E8); 3.2 s. */
 export const thinkMark = (W: any, H: any, era: any, dly: any = '0s') => {
