@@ -213,8 +213,8 @@ export class Act {
   win(t0: number, t1: number, svg: string): string { return this.cue('show', t0, svg, { d: Math.max(0.02, this.warp(t1) - this.warp(t0)) }) }
 
   // ---------------------------------------------------------------- actors (frames + path)
-  /** Register a pose (a `Sprite`) under `key`; `ax` is where the body stands across its width (0..1). */
-  cast(key: string, sp: Sprite, ax = 0.5): this { this.bank.add(key, sp, ax); return this }
+  /** Register a pose (a `Sprite`) under `key`; `ax` is where the body stands across its width (0..1); `K` its own colour count. */
+  cast(key: string, sp: Sprite, ax = 0.5, K?: number): this { this.bank.add(key, sp, ax, K); return this }
   /**
    * A frame-swap actor: its poses toggled by `segs`, moved along `path` (t, x, y, rotation?, opacity?, y-squash?).
    * Each pose is cut once (defs), each window costs a keyframe row, the path one keyframes block.

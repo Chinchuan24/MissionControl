@@ -4,7 +4,7 @@
 //
 // Beats run on a cursor `t` (act seconds), in time order. Moves advance the cursor; instants (hit, freeze, impact, sfx)
 // happen at it. `at(t)` jumps, `wait(s)` waits, `with()` runs the next move alongside the last one.
-//   moves      approach, strike, knockback, throw, exit                     (the fight)
+//   moves      approach, strike, knockback, throw, orbit, exit              (the fight)
 //   stand-off  stare, step, flinch, backdown, say                           (the tension before it)
 //   instants   hit (star + flash + shake + hit-stop), freeze, impact, smear, sfx, pose
 // PG-13: an impact is a star, a flash, dust; nobody bleeds. Fights are RARE: schedule them with `fightLane` (director.ts).
@@ -302,6 +302,35 @@ export class Fight {
     f.ghosts ??= [this.t, this.t + (o.d ?? 0.5)]
     this.move(f, x, y, o.d ?? 0.5, 'linear', { arc: o.arc ?? 30, rot: 360 * (o.turns ?? 1), n: 8 })
     f.spin = true
+    return this
+  }
+  /**
+   * A swing round a pivot (a fighter swung by the wrist, a hammer throw): the fighter turns from angle `a0` to `a1` (CSS
+   * degrees, clockwise) while its centre circles (cx, cy) at radius `r`, so its top always points at the pivot (0 = hanging
+   * straight below it, 90 = held out to its left, 180 = straight above it). Rotation is smooth (a stepped spin from an earlier
+   * throw on the same fighter steps it: keep `n` keys at ~20 degrees). `upright` squares it up when the swing ends.
+   */
+  orbit(who: string, cx: number, cy: number, r: number, a0: number, a1: number, d = 0.5, o: { pose?: string; ease?: Ease | string; n?: number; upright?: boolean } = {}): this {
+    this.log('orbit')
+    const f = this.get(who)
+    if (o.pose) this.pose(who, o.pose)
+    const t0 = this.t
+    const c = curve(o.ease ?? 'linear')
+    const n = o.n ?? Math.max(3, Math.ceil(Math.abs(a1 - a0) / 20))
+    const at = (a: number): [number, number] => { const q = (a * Math.PI) / 180; return [r1(cx - r * Math.sin(q)), r1(cy + r * Math.cos(q))] }
+    this.hold(f, t0)
+    for (let i = 0; i <= n; i++) {
+      const u = i / n
+      const a = a0 + (a1 - a0) * c(u)
+      const [x, y] = at(a)
+      f.path.push([r3(t0 + d * u + (i ? 0 : 0.001)), x, y, r1(a)] as Key)
+    }
+    const [x1, y1] = at(a1)
+    f.x = x1
+    f.y = y1
+    if (o.upright) f.path.push([r3(t0 + d + 0.01), x1, y1, 0] as Key)
+    this.last = t0
+    this.t = t0 + d
     return this
   }
   /** Exit: off the panel toward `dir` (default: the way it faces) over `d` s, fading if `fade`. */
