@@ -10,6 +10,7 @@ import { BB_REVEAL_MS, BB_RIGHT, BB_SKIN_WORDS, BB_TOOLS, SAY_MY_NAME_RE } from 
 import { bbRightLine } from './breakingbad-cards'
 import { THEMES, themeKeyOf } from './themes'
 import { SWITCH_CARDS, SWITCH_MS, into as switchInto, sizeOf as svgSizeOf, skinSwitch } from './stage/wipe'
+import { playsOf, runPlay } from './stage/replay'
 import type { SwitchLook } from './stage/wipe'
 import { ramStatus, settingsTagline, settingsTones } from './settingslook'
 import type { SettingsSection } from './settingslook'
@@ -2651,7 +2652,7 @@ async function boysReplay($: EngineInterface, name: string): Promise<string> {
   const r = TB_REPLAYS.find(x => x.name === name)
   if (!r) {
     // The curtain call is NOIR's own; the count matches the names listed.
-    const names = TB_REPLAYS.filter(x => SKIN.id === 'noir' || x.name !== 'curtain').map(x => x.name)
+    const names = [...TB_REPLAYS.filter(x => SKIN.id === 'noir' || x.name !== 'curtain').map(x => x.name), ...playsOf(SKIN.id).map(p => p.name)]
     return `Play which? The Boys has ${names.length}: ${names.join(', ')}`
   }
   const at = await $.clock.now().catch(() => Date.now())
@@ -2761,7 +2762,7 @@ async function setEr2Mode($: EngineInterface, mode: Er2ModeName, auto: boolean):
 const INV_REPLAYS = ['fight', 'showdown', 'think', 'eve', 'oliver', 'cecil', 'newsuit', 'classic'] as const
 async function invReplay($: EngineInterface, egg: string): Promise<string> {
   if (!isInv()) return 'Wear the Invincible skin first.'
-  if (!(INV_REPLAYS as readonly string[]).includes(egg)) return `Play which? ${INV_REPLAYS.join(', ')}`
+  if (!(INV_REPLAYS as readonly string[]).includes(egg)) return `Play which? ${[...INV_REPLAYS, ...playsOf(SKIN.id).map(p => p.name)].join(', ')}`
   const at = await $.clock.now().catch(() => Date.now())
   if (egg === 'newsuit' || egg === 'classic') {
     if (!(await setInvEra($, egg === 'newsuit' ? 2 : 1).catch(() => false))) return `Already in the ${egg === 'newsuit' ? 'new' : 'classic'} suit.`
@@ -7599,10 +7600,23 @@ export const register: Register = (on, options) => {
       await setFlag($, 'boysSpoilers', spoil[1].toLowerCase() === 'on')
       return { text: BOYS_SPOILERS ? 'Spoilers on: The Boys’ finale eggs can play (S5).' : 'Spoilers off: no finale or death eggs.' }
     }
-    // Unlisted on purpose: `/missioncontrol play <egg>` replays one of Invincible's eggs now (no help text names it).
+    // Unlisted on purpose: `/missioncontrol play <name>` replays one of the worn skin's acts now (no help text names it). The shared
+    // registry first (stage/replay.ts: every skin's fights), then The Boys' and Invincible's own lists.
     const replay = /^play(?:\s+(\S+))?\s*$/i.exec((e.args ?? '').trim())
-    if (replay && isBoys()) return { text: await boysReplay($, (replay[1] ?? '').toLowerCase()) }
-    if (replay) return { text: await invReplay($, (replay[1] ?? '').toLowerCase()) }
+    if (replay) {
+      const name = (replay[1] ?? '').toLowerCase()
+      const at = await $.clock.now().catch(() => Date.now())
+      const shared = name ? await runPlay(SKIN.id, name, at).catch(() => undefined) : undefined
+      if (shared !== undefined) {
+        await update($, bandTick, () => at)
+        await update($, paneTick, () => at)
+        return { text: shared }
+      }
+      if (isBoys()) return { text: await boysReplay($, name) }
+      const own = playsOf(SKIN.id)
+      if (own.length && !isInv()) return { text: `Play which? ${SKIN.name} has ${own.length}: ${own.map(p => p.name).join(', ')}` }
+      return { text: await invReplay($, name) }
+    }
     // Billing: how to pay with API credits instead of the plan, in four steps (nothing is edited).
     if (/^billing$/i.test((e.args ?? '').trim())) {
       await refreshBilling($).catch(() => undefined)
