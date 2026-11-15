@@ -8,7 +8,7 @@ export type Rect = [number, number, number, number]
 /** What the band hands a band act: the clear span's right edge and the readouts inside it (x, y, w, h). `wide`, when the band
  *  gives it: a wider window (to `x2`) for an act that keeps out of each row's own readouts (`keep` there holds those rows'
  *  right parts, as holes, on top of the span's own). */
-export type BandStage = { x1: number; keep: Rect[]; wide?: { x2: number; keep: Rect[] } }
+export type BandStage = { x1: number; keep: Rect[]; wide?: { x2: number; keep: Rect[] }; /** The task title's box, when the band has one (not a hole by default: a fight with a lane clear of it adds it). */ title?: Rect }
 
 /** The holes of `keep` that fall inside `win`, clipped to it (an even-odd hole outside the window would show, not hide). */
 export const holesIn = (win: Rect, keep: Rect[]): Rect[] => {
@@ -86,3 +86,22 @@ export const spanOf = (H: number, stage: BandStage): { r: { x: number; y: number
   r: { x: 8, y: 34, w: Math.round(Math.max(120, (stage.wide?.x2 ?? stage.x1) - 8)), h: Math.max(56, H - 37) },
   keep: { x1: stage.wide?.x2 ?? stage.x1, keep: [...stage.keep, ...(stage.wide?.keep ?? [])] },
 })
+/**
+ * The widest full-height lane of a window `win` (x, y, w, h) free of every hole that meets it (each kept `pad` px clear), when it
+ * is at least `min` wide: where a band act can stand tall without passing over the task title, a chip or a number (wave 4). The
+ * holes are the band's: its readouts, each row's right part, and the task title (`BandStage.title`).
+ */
+export const laneIn = (win: Rect, holes: Rect[], min: number, pad = 4): Rect | undefined => {
+  const [wx, wy, ww, wh] = win
+  const hit = holesIn(win, holes)
+  const xs = [wx, wx + ww, ...hit.flatMap(([x, , w]) => [x - pad, x + w + pad])].map(v => Math.max(wx, Math.min(wx + ww, v))).sort((p, q) => p - q)
+  let best: Rect | undefined
+  for (let i = 0; i < xs.length - 1; i++) {
+    const a = xs[i] as number
+    const b = xs[i + 1] as number
+    if (b - a >= min && b - a > (best?.[2] ?? 0) && !hit.some(([x, , w]) => x < b && x + w > a)) best = [Math.round(a), wy, Math.round(b - a), wh]
+  }
+  return best
+}
+/** Every hole a band act keeps clear of on a staged band: its readouts, the wide window's row parts, the task title. */
+export const allHoles = (stage: BandStage): Rect[] => [...stage.keep, ...(stage.wide?.keep ?? []), ...(stage.title ? [stage.title] : [])]
