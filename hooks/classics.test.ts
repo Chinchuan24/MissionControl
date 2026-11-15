@@ -46,6 +46,8 @@ test('classics: a failed pill shakes once (pinned), a crab scuttles in at its sp
   expect(shake('<rect/>', NOW, NOW + FRESH_MS + 1)).toBe('<rect/>')
   expect(shake('<rect/>', undefined, NOW)).toBe('<rect/>')
   expect(scuttle('<g/>', { startedAt: NOW, running: true }, NOW + 100)).toContain('cl-in')
+  // Never ahead of its spawn: a crab whose clock runs a little ahead is drawn plain, never held invisible.
+  expect(scuttle('<g/>', { startedAt: NOW + 400, running: true }, NOW)).toBe('<g/>')
   expect(scuttle('<g/>', { startedAt: NOW - 10 * MIN, running: true }, NOW)).toBe('<g/>')
   expect(scuttle('<g/>', { startedAt: NOW - MIN, endedAt: NOW, running: false }, NOW + 100)).toContain('cl-out')
 })

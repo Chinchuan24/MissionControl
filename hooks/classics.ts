@@ -32,9 +32,15 @@ export const checkMark = (x: number, y: number, color: string, at?: number, now 
   `<path d="M${x} ${y}l3.5 3.5 6.5-7" fill="none" stroke="${color}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round"${fresh(at, now) ? ` class="cl-chk" style="${dl(at)}"` : ''}/>`
 /** The failed pill's one shake, pinned to the failure. */
 export const shake = (svg: string, at: number | undefined, now: number): string => (fresh(at, now) ? `<g class="cl-shk" style="${dl(at)}">${svg}</g>` : svg)
-/** A crab scuttling in sideways at its spawn, or out and back (dim) when it ends; plain otherwise. */
+/** A moment that has come and is still fresh (no drawing ahead of it). */
+const since = (at: number | undefined, now: number): at is number => at !== undefined && now >= at && now < at + FRESH_MS
+/**
+ * A crab scuttling in sideways at its spawn (.38 s from 14 px left, its legs at double speed: it reads as a scuttle, and the
+ * first frame is the only empty one), or out and back (dim) when it ends; plain otherwise. Never drawn ahead of its moment:
+ * a crab's clock a little ahead of the band's would otherwise hold it invisible (the entrance's first frame) until then.
+ */
 export const scuttle = (svg: string, a: { startedAt?: number; endedAt?: number; running: boolean }, now: number): string =>
-  !a.running && fresh(a.endedAt, now) ? `<g class="cl-out" style="${dl(a.endedAt)}">${svg}</g>` : a.running && fresh(a.startedAt, now) ? `<g class="cl-in" style="${dl(a.startedAt)}">${svg}</g>` : svg
+  !a.running && since(a.endedAt, now) ? `<g class="cl-out" style="${dl(a.endedAt)}">${svg}</g>` : a.running && since(a.startedAt, now) ? `<g class="cl-in" style="${dl(a.startedAt)}">${svg}</g>` : svg
 
 const RISE_CSS = '.cl-rise{animation:cl-rise .22s cubic-bezier(.23,1,.32,1) both}@keyframes cl-rise{from{opacity:0;transform:translateY(4px)}}@media (prefers-reduced-motion: reduce){.cl-rise{animation:none}}'
 /** The pane cards that rise in on open: the top of the pane, where the eye is. */
