@@ -450,7 +450,7 @@ const saulTheme = (gene: boolean): ThemeEggs => ({
   },
   warning: bcsWarning(gene),
   // GENE's own cheer: the mall shutter with NIPPY! on it (bettercallsaul-gene.ts); Saul keeps the TV ad's star-wipe.
-  cheer: (W, H, _font, _t, startAt, stage) => (gene && startAt !== undefined ? geneCheer(W, H, startAt, stage) : bcsCheer(W, H, gene, startAt)),
+  cheer: (W, H, _font, _t, startAt, stage) => (gene && startAt !== undefined ? geneCheer(W, H, startAt, stage) : bcsCheer(W, H, gene, startAt, stage)),
   cred: { title: 'ATTORNEY AT LAW', ranks: bcsRankOf, words: BCS_CRED_WORDS, badges: BCS_BADGES, toast: bcsToast, card: (W, c) => attorneyCard(W, c, gene) },
   card: {
     draw: (W, task, isWorking, done, total, _t, _font, _frame, legends) => docketCard(W, task, isWorking, done, total, legends, gene),

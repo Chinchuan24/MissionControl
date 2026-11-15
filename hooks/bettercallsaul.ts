@@ -11,6 +11,8 @@ import { BCS_GENE_BUST, BCS_PARALEGAL, BCS_PARALEGAL2, BCS_PARALEGAL3, BCS_SAUL_
 import type { Sprite } from './cast'
 import { sansClip, sansW } from './breakingbad-cards'
 import { pin } from './smooth'
+import { freeRects, holesIn, keepClip, spanOf } from './stage/keep'
+import type { BandStage, Rect } from './stage/keep'
 import { inkOn } from './extras'
 import { BCS_SAUL_HEAD_045, BCS_STATUE_INFLATE_0, BCS_STATUE_INFLATE_1, BCS_STATUE_INFLATE_2, BCS_STATUE_SAG, GENE_DUST_SCRATCH, GENE_GRAIN_1, GENE_GRAIN_2, GENE_GRAIN_3 } from './bettercallsaul-sprites'
 
@@ -697,31 +699,81 @@ export const AD_PHONE = '505-555-0100'
  * The cheer: the TV ad's star-wipe. A red band wipes across, a yellow starburst spins up with DONE!, BETTER CALL SAUL! with a navy
  * shadow. One time in four (`isAdCheer`) it is a cheesy late-night ad with a phone banner. GENE: NIPPY!
  */
-export const bcsCheer = (W: number, H: number, gene: boolean, startAt?: number): string => {
+export const bcsCheer = (W: number, H: number, gene: boolean, startAt?: number, stage?: BandStage): string => {
   const red = prop('adRed', gene), yel = prop('adYellow', gene), blue = prop('adBlue', gene)
   const cream = gene ? '#F4F4F4' : '#FFF4D6'
-  const cy = H * 0.5
   const ad = !gene && isAdCheer(startAt)
   const text = gene ? 'NIPPY!' : 'BETTER CALL SAUL!'
-  const fs = W < 800 ? 19 : 23
+  // Where it plays. On the band (`stage`): its whole clear span (each row up to its own first readout), the readouts inside it
+  // (the Done! chip, the step count, each row's right part) cut out as holes, so every number reads through the wipe; the
+  // starburst and the shout sit in the span's biggest free rectangle. Without a stage: the band's middle strip, as it always was.
+  // Sizes: as before (23 px wide, 19 narrow), shrunk to fit a free rectangle whole (burst, shout, finger guns, the bell; the bell
+  // and then the guns stay home when even 12 px does not fit).
+  const fs0 = W < 800 ? 19 : 23
+  const need = (fs: number, extra: number): number => 64 * (fs / fs0) + condW(text, fs, 1) + extra
+  const fit = ([, , fw, fh]: Rect): { fs: number; extra: number } => {
+    for (const extra of gene ? [34, 0] : [60, 26, 0]) {
+      let fs = Math.min(fs0, fh / 0.8)
+      while (fs > 12 && need(fs, extra) > fw - 6) fs -= 0.5
+      if (need(fs, extra) <= fw - 6) return { fs, extra }
+    }
+    return { fs: 12, extra: 0 }
+  }
+  let win: Rect = [0, Math.round(H / 2 - 23), W, 46]
+  let free: Rect = win
+  let spare: Rect[] = []
+  if (stage) {
+    const sp = spanOf(H, stage)
+    win = [0, sp.r.y, sp.r.x + sp.r.w, sp.r.h]
+    const holes = holesIn(win, sp.keep.keep).map(([x, y, w, h]) => [x - win[0], y - win[1], w, h] as Rect)
+    const all = freeRects(win[2], win[3], holes)
+    const rects = all.filter(r => r[3] >= 18)
+    // The rectangle where the shout is biggest; on a tie, the roomiest (up to the strip's 46 px).
+    const score = (r: Rect): number => fit(r).fs * 1e6 + r[2] * Math.min(r[3], 46)
+    const best = (rects.length ? rects : all).sort((a, b) => score(b) - score(a))[0]
+    if (best) free = [best[0] + win[0], best[1] + win[1], best[2], best[3]]
+    spare = all.filter(r => r !== best).map(([x, y, w, h]) => [x + win[0], y + win[1], w, h] as Rect)
+  }
+  const [fx, fy, fw, fh] = free
+  const top = win[1], bot = win[1] + win[3]
+  const cy = Math.max(top + 23, Math.min(bot - 23, fy + fh / 2))
+  const { fs, extra } = fit(free)
+  const k = fs / fs0
+  const r = Math.min(30 * k, Math.max(12, fh / 2 + 6))
   const tw = condW(text, fs, 1)
-  const cx = W / 2 + 14
+  const left = fx + Math.max(3, (fw - need(fs, extra)) / 2)
+  const bx = left + r
+  const cx = bx + 34 * k + tw / 2
+  const guns = !gene && extra >= 26
+  const bellOn = extra >= (gene ? 34 : 60)
+  const bellX = cx + tw / 2 + (gene ? 12 : 38)
+  // The second line only where the free rectangle has room under the shout.
+  const sub = fh >= fs + 12
   const at = startAt !== undefined ? ` style="animation-delay:${pin(startAt)}"` : ''
-  let s = `<g class="${ad ? 'bcs-ad' : 'bcs-cheer'}" pointer-events="none"${at}>`
-  s += `<rect class="bcs-wipe" x="0" y="${r1(cy - 23)}" width="${W}" height="46" fill="${red}" opacity=".94"${at}/>`
-  const bx = cx - tw / 2 - 34
-  s += `<g class="bcs-star"${at}>${burst(bx, cy, 30, yel)}${burst(bx, cy, 22, gene ? '#E8E8E8' : '#FFF2A8', 'opacity=".9"')}<g transform="rotate(-12 ${r1(bx)} ${r1(cy)})">${C(bx, cy + 3.5, 'DONE!', 10, prop('navy', gene), 'text-anchor="middle" letter-spacing=".5"')}</g></g>`
+  const id = `bcs-chw${W}x${H}`
+  const clip = stage ? `<defs>${keepClip(id, win, spanOf(H, stage).keep.keep)}</defs>` : ''
+  let s = `${clip}<g class="${ad ? 'bcs-ad' : 'bcs-cheer'}" pointer-events="none"${stage ? ` clip-path="url(#${id})"` : ''}${at}>`
+  s += `<rect class="bcs-wipe" x="${win[0]}" y="${r1(cy - 23)}" width="${win[2]}" height="46" fill="${red}" opacity=".94"${at}/>`
+  s += `<g class="bcs-star"${at}>${burst(bx, cy, r, yel)}${burst(bx, cy, r * 0.73, gene ? '#E8E8E8' : '#FFF2A8', 'opacity=".9"')}<g transform="rotate(-12 ${r1(bx)} ${r1(cy)})">${C(bx, cy + 3.5 * k, 'DONE!', Math.max(8, 10 * k), prop('navy', gene), 'text-anchor="middle" letter-spacing=".5"')}</g></g>`
   s += `<g class="bcs-shout"${at}>${C(cx + 1.5, cy + 2.5, text, fs, prop('navy', gene), 'text-anchor="middle" letter-spacing="1"')}${C(cx, cy + 1, text, fs, cream, 'text-anchor="middle" letter-spacing="1"')}`
-  s += gene ? C(cx, cy + 16, 'MALL BAKERY · JOB DONE', 8.5, cream, 'text-anchor="middle" letter-spacing="1.6" opacity=".9"') : ad ? '' : C(cx, cy + 16, "S'ALL GOOD, MAN!", 8.5, cream, 'text-anchor="middle" letter-spacing="1.6" opacity=".95"')
+  if (sub) s += gene ? C(cx, cy + 16 * k, 'MALL BAKERY · JOB DONE', 8.5, cream, 'text-anchor="middle" letter-spacing="1.6" opacity=".9"') : ad ? '' : C(cx, cy + 16 * k, "S'ALL GOOD, MAN!", 8.5, cream, 'text-anchor="middle" letter-spacing="1.6" opacity=".95"')
   s += '</g>'
-  // Saul's finger guns (a two-frame pixel hand) to the right of the shout, then Hector's bell dings three times at the far end.
-  if (!gene) s += `<g class="bcs-shout"${at}>${fingerGuns(cx + tw / 2 + 12, cy - 9, 2, false)}</g>`
-  s += `<g class="bcs-shout"${at}><g class="bcs-ding" fill="none" stroke="${prop('bell', gene)}" stroke-width="1.2" stroke-linecap="round" style="animation-delay:calc(${startAt !== undefined ? pin(startAt) : '0s'} + 1.1s)"><path d="M${r1(W - 36)} ${r1(cy - 6)}q-2 1.5 0 3.5"/><path d="M${r1(W - 14)} ${r1(cy - 6)}q2 1.5 0 3.5"/></g>${bell(W - 31, cy - 7, 1.2, 'still', gene)}</g>`
+  // Saul's finger guns (a two-frame pixel hand) to the right of the shout, then Hector's bell dings three times at the end.
+  if (guns) s += `<g class="bcs-shout"${at}>${fingerGuns(cx + tw / 2 + 10, cy - 9, 2, false)}</g>`
+  if (bellOn) s += `<g class="bcs-shout"${at}><g class="bcs-ding" fill="none" stroke="${prop('bell', gene)}" stroke-width="1.2" stroke-linecap="round" style="animation-delay:calc(${startAt !== undefined ? pin(startAt) : '0s'} + 1.1s)"><path d="M${r1(bellX - 5)} ${r1(cy - 6)}q-2 1.5 0 3.5"/><path d="M${r1(bellX + 17)} ${r1(cy - 6)}q2 1.5 0 3.5"/></g>${bell(bellX, cy - 7, 1.2, 'still', gene)}</g>`
   if (ad) {
-    // The late-night ad: a phone banner across the foot (a fictional 555-01xx number) on blue with yellow stars, blinking at 1.25 Hz.
-    const bw = Math.min(W - 40, condW(AD_PHONE, 16, 1.2) + 130)
-    const bxx = (W - bw) / 2
-    s += `<g class="bcs-shout"${at}><rect x="${r1(bxx)}" y="${r1(cy + 20)}" width="${r1(bw)}" height="${r1(Math.min(24, H - cy - 22))}" rx="2" fill="${blue}"/>${star(bxx + 12, cy + 32, 5, yel)}${star(bxx + bw - 12, cy + 32, 5, yel)}${C(W / 2 - 30, cy + 37, 'CALL NOW!', 10, cream, 'text-anchor="middle" letter-spacing="1"')}<g class="bcs-blink"${at}>${C(W / 2 + 46, cy + 38, AD_PHONE, 16, yel, 'text-anchor="middle" letter-spacing="1.2"')}</g></g>`
+    // The late-night ad: a phone banner under the shout (a fictional 555-01xx number) on blue with yellow stars, blinking at
+    // 1.25 Hz; on the band, in a free rectangle under the strip (clear of every readout), else just under the strip.
+    const full = condW(AD_PHONE, 16, 1.2) + 130
+    const below = spare.filter(([, y, w, h]) => h >= 21 && w >= full - 40 && y + h > cy + 23).sort((a, b) => b[1] - a[1] || b[2] - a[2])[0]
+    const bw = Math.min(win[2] - 16, full, below ? below[2] - 6 : full)
+    const bxx = below ? Math.max(below[0] + 3, Math.min(below[0] + below[2] - bw - 3, cx - bw / 2)) : Math.max(win[0] + 8, Math.min(win[0] + win[2] - bw - 8, cx - bw / 2))
+    const by = below ? below[1] + below[3] - 22 : Math.min(cy + 20, bot - 24)
+    const mid = bxx + bw / 2
+    const cw = condW('CALL NOW!', 10, 1)
+    const t0 = mid - (cw + 6 + condW(AD_PHONE, 16, 1.2)) / 2
+    const stars = bw >= full - 10 ? `${star(bxx + 12, by + 11, 5, yel)}${star(bxx + bw - 12, by + 11, 5, yel)}` : ''
+    s += `<g class="bcs-shout"${at}><rect x="${r1(bxx)}" y="${r1(by)}" width="${r1(bw)}" height="21" rx="2" fill="${blue}"/>${stars}${C(t0, by + 15, 'CALL NOW!', 10, cream, 'letter-spacing="1"')}<g class="bcs-blink"${at}>${C(t0 + cw + 6, by + 16.5, AD_PHONE, 16, yel, 'letter-spacing="1.2"')}</g></g>`
   }
   return `${s}</g>`
 }
