@@ -89,6 +89,11 @@ export type Panel = {
    * running one its card instead of its slim live row. Kept in the store (paneView).
    */
   expanded?: string[]
+  /**
+   * Agents the person collapsed: a running one keeps its slim live row (never a card by the
+   * pane's own rule) until the person opens it again, through its end and a resume. Kept in the store (paneView).
+   */
+  collapsed?: string[]
   autoOpenedFor: string
 }
 

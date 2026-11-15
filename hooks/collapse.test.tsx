@@ -214,14 +214,148 @@ test('a running agent past the cards has a slim row with Open ▸; it opens to i
   const moved = (await rowsOf(ui)).rows.find(r => r.alt.startsWith(who))
   expect(moved?.isSlim).toBe(false)
   expect(moved?.source).not.toBe(card?.source)
-  // Collapse folds it back to its slim live row.
-  const close = open.buttons.find(b => b.label === '▴ Collapse')?.key as string
-  await ui.press({ key: close })
+  // Collapse folds it back to its slim live row (every card has one: this agent's own).
+  await ui.press({ key: `close-a${pieceN + 1}` })
   const back = await rowsOf(ui)
   await ui.unmount()
   expect(back.rows.find(r => r.alt.startsWith(who))?.isSlim).toBe(true)
   expect(slimOpen(back.buttons).length).toBe(2)
 })
+
+// --- "The whole panel flickers and the card snaps back open" when a card is collapsed while agents work.
+// A Collapse only took the agent off the opened list, so a running one fell back on the pane's own rule (the
+// first few running agents get a card) and its card came right back. And the pane's size fallback was free to
+// change on the click: a card less made room for a richer layout, so every other card, section and picture was
+// drawn anew (and other agents' cards snapped open too).
+
+// Agents at work in a seasoned store, `n` of them, on a skin.
+const working = async ($: Engine, on: On, skin: string, n: number) => {
+  const clock = mock.clock(on, { now: T0 })
+  mock.env(on, { LANG: 'en_US.UTF-8' })
+  mock.store(on, structuredClone(SEED))
+  on('settings.read', async () => ({ value: {} }) as never)
+  on('ui.open', () => ({ value: { isPlaced: true } }) as never)
+  on('fs.exists', async (_$, e) => ({ value: /addons[\\/]cyberpunk[\\/]addon\.json$/.test(String((e as { path: string }).path)) }) as never)
+  on('session.start', async () => ({ cwd: '/repo' }) as never)
+  on('session.usage', async () => ({ value: { startedAt: 0, context: { window: 1_000_000, tokens: 400_000 }, rateLimits: [], cost: { usd: 12 } } }) as never)
+  on('ui.toast', async () => ({ value: undefined }) as never)
+  on('tool.call', async () => ({ result: 'ok' }) as never)
+  on('turn.complete', () => ({ text: '' }) as never)
+  on('prompt.submit', async (_$, e) => ({ text: (e as { text: string }).text }) as never)
+  let k = 0
+  on('agent.spawn', () => ({ model: 'claude-opus-5-5', agentId: `a${++k}` }) as never)
+  await $.session.start({ source: 'startup', cwd: '/repo', surface: 'desktop', isInteractive: true } as never)
+  await $.command.run({ command: 'skin', args: skin } as never)
+  await $.prompt.submit({ text: 'Build the new skins and verify them all', cursor: 0, origin: { kind: 'composer' } } as never)
+  for (let i = 0; i < n; i++)
+    await $.agent.spawn({ tool_use_id: `t${i}`, prompt: 'p', description: `Engineer: piece ${i}`, subagentType: 'mc-heavy', provider: 'engine', parentModel: 'claude-opus-5-5', background: false, fork: false } as never)
+  // Past the skin switch's wipe (it plays on the first cards for about a second).
+  await clock.advance(2_000)
+  return clock
+}
+const finish = ($: Engine, id: string) => $.turn.complete({ agentId: id, reason: 'answer', answer: 'ok' } as never)
+// Each agent's row as drawn: `C` its card, `s` its slim row (`a3:s`).
+const shapes = (root: unknown) =>
+  svgs(root)
+    .filter(v => /^Engineer: piece \d/.test(v.alt))
+    .map(v => `a${Number(/piece (\d+)/.exec(v.alt)?.[1]) + 1}:${/^<svg[^>]*\sheight="36"/.test(v.source) ? 's' : 'C'}`)
+const shapeOf = (root: unknown, id: string) => shapes(root).find(s => s.startsWith(`${id}:`))?.slice(-1)
+const firstSlim = (root: unknown) => shapes(root).find(s => s.endsWith(':s'))?.split(':')[0] as string
+
+for (const skin of ['crab-classic', 'the-boys', 'edgerunners-2'])
+  test(`${skin}: a collapsed card stays collapsed: ticks, an agent finishing, other toggles, a finish and a resume`, { timeoutMs: 20_000 }, async ($, on) => {
+    const clock = await working($, on, skin, 6)
+    const ui = await mount($)
+    const x = firstSlim(await ui.drawn())
+    await ui.press({ key: `open-${x}` })
+    expect(shapeOf(await ui.drawn(), x)).toBe('C')
+    // The newest agent finishes: x moves up among the first few running, which get a card by default.
+    await finish($, x === 'a6' ? 'a5' : 'a6')
+    await ui.press({ key: `close-${x}` })
+    expect(shapeOf(await ui.drawn(), x)).toBe('s')
+    // The work goes on: log lines, the ticks, another agent opened and collapsed.
+    for (let i = 0; i < 4; i++) {
+      await $.tool.call({ tool: 'Read', file_path: `/repo/src/file-${i}.ts`, agentId: 'a1' } as never).catch(() => undefined)
+      await clock.advance(15_000)
+      expect(shapeOf(await ui.drawn(), x)).toBe('s')
+    }
+    const y = shapes(await ui.drawn()).find(s => s.endsWith(':s') && !s.startsWith(`${x}:`))?.split(':')[0]
+    if (y) {
+      await ui.press({ key: `open-${y}` })
+      await ui.press({ key: `close-${y}` })
+    }
+    expect(shapeOf(await ui.drawn(), x)).toBe('s')
+    // It finishes, then is resumed (SendMessage): still collapsed, its slim row and Open ▸.
+    await finish($, x)
+    await $.agent.spawn({ tool_use_id: 'tr', prompt: 'p', description: 'Engineer: again', subagentType: 'mc-heavy', provider: 'engine', parentModel: 'claude-opus-5-5', background: false, fork: false, resume: { agentId: x } } as never)
+    await clock.advance(1_000)
+    const root = await ui.drawn()
+    const labels = (await ui.findAll({ type: 'Button' })).map(b => `${String(b.props.key)}=${String(b.props.label)}`)
+    await ui.unmount()
+    expect(shapeOf(root, x)).toBe('s')
+    expect(labels).toContain(`open-${x}=Open ▸`)
+  })
+
+test('every running card has ▴ Collapse; collapsed, it keeps its slim row while it works', async ($, on) => {
+  const clock = await working($, on, 'crab-classic', 3)
+  const ui = await mount($)
+  expect(shapes(await ui.drawn())).toEqual(['a3:C', 'a2:C', 'a1:C'])
+  await ui.press({ key: 'close-a2' })
+  for (let i = 0; i < 3; i++) {
+    await $.tool.call({ tool: 'Read', file_path: `/repo/src/f${i}.ts`, agentId: 'a2' } as never).catch(() => undefined)
+    await clock.advance(20_000)
+    expect(shapes(await ui.drawn())).toEqual(['a3:C', 'a2:s', 'a1:C'])
+  }
+  await ui.press({ key: 'open-a2' })
+  expect(shapes(await ui.drawn())).toEqual(['a3:C', 'a2:C', 'a1:C'])
+  await ui.unmount()
+})
+
+test('two cards collapsed in quick succession both stay collapsed (no lost write)', async ($, on) => {
+  await working($, on, 'crab-classic', 3)
+  for (const id of ['a1', 'a2']) await finish($, id)
+  const ui = await mount($)
+  await ui.press({ key: 'open-a1' })
+  await ui.press({ key: 'open-a2' })
+  await Promise.all([ui.press({ key: 'close-a1' }), ui.press({ key: 'close-a2' })])
+  const labels = (await ui.findAll({ type: 'Button' })).map(b => `${String(b.props.key)}=${String(b.props.label)}`)
+  await ui.unmount()
+  expect(labels).toContain('open-a1=Open ▸')
+  expect(labels).toContain('open-a2=Open ▸')
+})
+
+// The sources of a drawing by picture: the agent rows by agent, the rest by what they show. Breaking Bad's
+// cards number their SVG ids afresh at each drawing (a known, separate cost of every redraw): read without them.
+const unnumbered = (src: string) => src.replace(/\b(id="|url\(#)([A-Za-z]+)\d+/g, '$1$2')
+const pictures = (root: unknown) => new Map(svgs(root).map((v, i) => [/^Engineer: piece (\d+)/.exec(v.alt)?.[1] ? `a${Number(/piece (\d+)/.exec(v.alt)?.[1]) + 1}` : `${i}:${v.alt.split(':')[0]}`, unnumbered(v.source)]))
+for (const skin of ['breaking-bad', 'crab-classic', 'the-boys', 'edgerunners-2'])
+  test(`${skin}: a Collapse redraws only the clicked card, and the layout holds while the work goes on`, { timeoutMs: 20_000 }, async ($, on) => {
+    const clock = await working($, on, skin, 5)
+    const ui = await mount($)
+    const x = firstSlim(await ui.drawn())
+    await ui.press({ key: `open-${x}` })
+    // Some seconds of work, within the same minute: the pane redraws as x reads a file (pictures that
+    // move with the time are drawn anew then, whatever the click). Then the click.
+    await clock.advance(20_000)
+    await $.tool.call({ tool: 'Read', file_path: '/repo/src/a.ts', agentId: x } as never).catch(() => undefined)
+    const before = await ui.drawn()
+    await ui.press({ key: `close-${x}` })
+    const after = await ui.drawn()
+    const was = pictures(before)
+    const now = pictures(after)
+    expect([...now.keys()]).toEqual([...was.keys()])
+    const redrawn = [...now].filter(([k, src]) => was.get(k) !== src).map(([k]) => k)
+    expect(redrawn).toEqual([x])
+    // The ticks that follow keep that layout: no card snaps open, no section comes or goes.
+    const layoutNow = shapes(after)
+    for (let i = 0; i < 3; i++) {
+      await clock.advance(10_000)
+      const root = await ui.drawn()
+      expect(shapes(root)).toEqual(layoutNow)
+      expect(svgs(root).length).toBe(svgs(after).length)
+    }
+    await ui.unmount()
+  })
 
 test('an opened running card is kept in the store: a reload keeps it open, a gone agent is dropped', async ($, on) => {
   const { kv } = await six($, on, { paneView: { isCompact: false, isDoneCollapsed: false, expanded: ['ghost'] } })
