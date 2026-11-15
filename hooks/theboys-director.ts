@@ -86,7 +86,7 @@ export const buildDirector = (o: { june?: boolean; dayOffsetMs?: number } = {}):
   })
   // Wave 4: the look's fight in its own lane, as often as the fight level says (stage/director.ts; `often` by default), under
   // the day's set pieces and over the AMBUSH and the roamers: one act at a time. Two turns, so ON BRAND rotates its two fights.
-  // At `rare` the lane rests: THE AMBUSH's fight turn (one slot in four) is the old rule; at `off` that turn draws nothing.
+  // At `rare` the lane rests: THE AMBUSH's fight turn (one slot in four) is the old rule; at the other levels that turn draws nothing.
   dir.lane('fight', { gap: 'fight', pick: 'turns', breathMs: 20_000, fight: true, fightLevels: ['often', 'normal'] })
   for (const id of FIGHT_TURNS) dir.add('fight', { id, ms: AMBUSH_MS })
   dir.lane('ambush', { gap: 'rare', when: 'working', pick: 'turns' })
@@ -183,7 +183,9 @@ export const stageAt = (at: number, o: StageArgs): Slot | undefined => {
   if (fx && at >= fx.at - 1000 && at < fx.at + actMs(fx.kind)) return { kind: fx.kind, startAt: fx.at, endAt: fx.at + actMs(fx.kind), src: 'fx' }
   if (o.swapAt !== undefined && o.swapAt > 0 && at >= o.swapAt - 1000 && at < o.swapAt + 2_700) return undefined
   const held = fx ? [{ startAt: fx.at, endAt: fx.at + actMs(fx.kind), id: fx.kind }] : []
-  const off = fightLevel() === 'off'
+  // THE AMBUSH's fight turn is the `rare` level's fight; at often and normal the fight lane plays them (a second one minutes
+  // after it would bunch them), at off none.
+  const off = fightLevel() !== 'rare'
   const s = directorAt(at).plan(at - LONG(), at + AHEAD_MS + 1, { working: o.working === true, held }).find(x => shows(x, o.mode) && !(off && x.lane === 'ambush' && x.id === FIGHT_ID) && at < x.endAt && x.startAt <= at + AHEAD_MS)
   return s ? inLook(toSlot(s), o.mode) : undefined
 }
