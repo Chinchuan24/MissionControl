@@ -2414,25 +2414,32 @@ async function billingRemove($: EngineInterface): Promise<void> {
   await update($, billing, prev => ({ ...prev, nonce: prev.nonce + 1 }))
 }
 
-// The pane's two folds and the agents opened in it, kept in the store so a reload or a
-// new session opens the list as the person left it: long by default. An opened agent
+// The pane's two folds and the agents opened and collapsed in it, kept in the store so a
+// reload or a new session opens the list as the person left it: long by default. An agent
 // that is no longer listed is dropped.
 const PANE_VIEW = 'paneView'
-type PaneView = Pick<Panel, 'isCompact' | 'isDoneCollapsed' | 'expanded'>
+type PaneView = Pick<Panel, 'isCompact' | 'isDoneCollapsed' | 'expanded' | 'collapsed'>
 const listedIds = async ($: EngineInterface): Promise<Set<string>> => new Set((await read($, agents)).map(a => a.id))
+const knownIds = (v: unknown, known: Set<string>): string[] => (Array.isArray(v) ? v.filter((id): id is string => typeof id === 'string' && known.has(id)) : [])
 const readPaneView = async ($: EngineInterface): Promise<PaneView> => {
   const v = (await $.store.get(PANE_VIEW).catch(() => undefined)) as Partial<Panel> | undefined
   const known = await listedIds($)
-  const expanded = Array.isArray(v?.expanded) ? v.expanded.filter(id => typeof id === 'string' && known.has(id)) : []
-  return { isCompact: v?.isCompact === true, isDoneCollapsed: v?.isDoneCollapsed === true, expanded }
+  return { isCompact: v?.isCompact === true, isDoneCollapsed: v?.isDoneCollapsed === true, expanded: knownIds(v?.expanded, known), collapsed: knownIds(v?.collapsed, known) }
 }
+// Set when the person changes the view: the pane's next drawing holds its size fallback (paneHold).
+let isViewChanged = false
+// The change is worked out from the panel as it is at the write, not as read before an await:
+// two presses close together (Collapse on one card, then another) each keep their own.
 const setPaneView = async ($: EngineInterface, change: (p: PaneView) => Partial<PaneView>): Promise<void> => {
-  const prev = await read($, panel)
   const known = await listedIds($)
-  const was = { isCompact: prev.isCompact, isDoneCollapsed: prev.isDoneCollapsed, expanded: (prev.expanded ?? []).filter(id => known.has(id)) }
-  const next = { ...was, ...change(was) }
-  await update($, panel, p => ({ ...p, ...next }))
-  await $.store.set(PANE_VIEW, next).catch(() => undefined)
+  let next: PaneView | undefined
+  isViewChanged = true
+  await update($, panel, p => {
+    const was = { isCompact: p.isCompact, isDoneCollapsed: p.isDoneCollapsed, expanded: knownIds(p.expanded, known), collapsed: knownIds(p.collapsed, known) }
+    next = { ...was, ...change(was) }
+    return { ...p, ...next }
+  })
+  if (next) await $.store.set(PANE_VIEW, next).catch(() => undefined)
 }
 
 // A sound, when the person has sounds on. Never in the way: a failure is silent.
@@ -2737,6 +2744,11 @@ const drawnChars = (n: unknown, sourceLength: (source: string) => number = src =
 // layouts, cards to slim rows to the short view and back, redraw after redraw.
 const DRAW_SLACK = 10_000
 let paneLevel = 0
+// The crew as it was when the person last opened, collapsed or folded something. While it is the
+// same, the pane never steps up to a richer fallback: a card less made room for one, and the
+// step redrew every other card and picture (others' cards snapping open, sections coming back)
+// on the click. It steps down only when it must; the next start, end or resume lets it go.
+let paneHold = ''
 
 // After a switch, the open panes take the new skin's tab titles.
 async function retitle($: EngineInterface): Promise<void> {
@@ -4492,11 +4504,12 @@ const liveRowSvg = (W: number, a: AgentRun, at: number, lite = false): string =>
   const H = FOLD_H - 8
   const alarm = isOver(a) || isQuiet(a)
   const color = alarm ? '#E5675E' : runRoleColor(a)
-  const progress = progressOf(a, at)
+  // Whole minutes and no token count, read at the wall minute (when the pane redraws): the row
+  // reads the same, and is not sent again, for a minute at a time, nor on a click mid-minute.
+  const t0 = at - (at % 60_000)
+  const progress = progressOf(a, t0)
   const flag = isOver(a) ? ` · ⏱\uFE0E ${tkStr().overWord}` : isQuiet(a) ? ' · ⚠ quiet' : ''
-  // Whole minutes and no token count: the row reads the same, and is not sent again,
-  // for a minute at a time.
-  const meta = `${progress === null ? '' : `${Math.round(progress * 100)}% · `}${Math.floor(elapsed(a, at) / 60_000)}m${a.budgetMin ? ` / ${a.budgetMin}m` : ''}${flag}`
+  const meta = `${progress === null ? '' : `${Math.round(progress * 100)}% · `}${Math.floor(elapsed(a, t0) / 60_000)}m${a.budgetMin ? ` / ${a.budgetMin}m` : ''}${flag}`
   const metaW = textWidth(meta, 11) + 6
   const barW = progress === null ? 0 : 56
   const x0 = 40
@@ -8488,11 +8501,13 @@ export const register: Register = (on, options) => {
     const info = liveEnv(await read($, env), clockNow)
     const rules = await read($, memory)
     const opened = new Set((p.expanded ?? []).filter(id => allAgents.some(a => a.id === id)))
+    const shut = new Set((p.collapsed ?? []).filter(id => !opened.has(id)))
     const rows = buildTree(list, p.isDoneCollapsed)
     // On a desktop only the first few running agents get a card; each of the rest
     // gets a slim live row, so a big crew stays listed in full and under the app's
     // size limit. A card that ends hands its place to the next. A running agent the
-    // person opened keeps its card over and above those.
+    // person opened keeps its card over and above those; one the person collapsed
+    // keeps its slim row, never a card handed on by that rule.
     // The finished rows kept in a row of their own: the newest few (and any opened, or standing over work
     // still going); the rest are one "+N more finished" chip, so a long session does not grow the pane.
     const recency = new Map(finished.map((a, i) => [a.id, i]))
@@ -8511,7 +8526,8 @@ export const register: Register = (on, options) => {
       return drop.size ? withoutRows(all, drop) : all
     }
     const treeWith = (cards: number, keep = DONE_SHOWN): TreeRow[] => {
-      const slim = new Set(e.surface === 'desktop' ? rows.flatMap(r => (r.kind === 'agent' && r.a.status === 'running' && !opened.has(r.a.id) ? [r.a.id] : [])).slice(cards) : [])
+      const live = rows.flatMap(r => (r.kind === 'agent' && r.a.status === 'running' && !opened.has(r.a.id) ? [r.a.id] : []))
+      const slim = new Set(e.surface === 'desktop' ? [...live.filter(id => shut.has(id)), ...live.filter(id => !shut.has(id)).slice(cards)] : [])
       return trimDone(rows.map(r => (r.kind === 'agent' ? { ...r, folded: r.a.status !== 'running' && !opened.has(r.a.id), slim: slim.has(r.a.id) } : r)), keep)
     }
     const tree = treeWith(MAX_CARDS)
@@ -8520,12 +8536,16 @@ export const register: Register = (on, options) => {
       const listed = new Set(shown.flatMap(r => (r.kind === 'agent' ? [r.a.id] : [])))
       return finished.filter(a => !listed.has(a.id))
     }
-    const toggleOpen = (id: string) =>
+    // Open and Collapse each set what their button says: a second press, or one on a drawing
+    // a moment old, never turns it back. A collapse is remembered as one (see `shut`).
+    const setOpen = (id: string, isOpen: boolean) =>
       setPaneView($, prev => {
-        const set = new Set(prev.expanded ?? [])
-        if (set.has(id)) set.delete(id)
-        else set.add(id)
-        return { expanded: [...set].slice(-50) }
+        const open = new Set(prev.expanded ?? [])
+        const closed = new Set(prev.collapsed ?? [])
+        open.delete(id)
+        closed.delete(id)
+        ;(isOpen ? open : closed).add(id)
+        return { expanded: [...open].slice(-50), collapsed: [...closed].slice(-50) }
       })
     noteTypicalRun(allAgents)
     const steps = workSteps(f, list, boss, clockNow)
@@ -8573,7 +8593,7 @@ export const register: Register = (on, options) => {
         key="compact"
         label={p.isCompact ? s.expand : s.collapse}
         plain
-        onPress={() => setPaneView($, prev => ({ isCompact: !prev.isCompact }))}
+        onPress={() => setPaneView($, () => ({ isCompact: !p.isCompact }))}
       />
     )
     // Settings and billing have a pane of their own (SETTINGS_PANE), so a dropdown there is
@@ -8590,7 +8610,7 @@ export const register: Register = (on, options) => {
         key="done"
         label={`${p.isDoneCollapsed ? (isRtl() ? '◂' : '▸') : '▾'} ${s.finished} · ${finished.length}`}
         plain
-        onPress={() => setPaneView($, prev => ({ isDoneCollapsed: !prev.isDoneCollapsed }))}
+        onPress={() => setPaneView($, () => ({ isDoneCollapsed: !p.isDoneCollapsed }))}
       />
     )
     const isEmpty = list.length === 0 && planned.length === 0
@@ -8651,7 +8671,7 @@ export const register: Register = (on, options) => {
             <Box flexDirection="column">
               <Text dimColor>Too much to draw in full at once: this is the short view.</Text>
               <Box flexDirection="row" gap={2}>
-                {opened.size > 0 && <Button key="fold-all" label="Fold the opened agents" plain onPress={() => setPaneView($, () => ({ expanded: [] }))} />}
+                {opened.size > 0 && <Button key="fold-all" label="Fold the opened agents" plain onPress={() => setPaneView($, prev => ({ expanded: [], collapsed: [...new Set([...(prev.collapsed ?? []), ...(prev.expanded ?? [])])].slice(-50) }))} />}
                 {finished.length > 0 && !p.isDoneCollapsed && toggleDone}
               </Box>
             </Box>
@@ -8662,6 +8682,12 @@ export const register: Register = (on, options) => {
           {settingsLinks}
         </Box>
       )
+      // The crew the fallback is held for (paneHold): who is listed and running, the skin, the width, the fight's reserve.
+      const crewKey = JSON.stringify([SKIN.id, W, isWorking || boss.isWorking, list.map(a => `${a.id}:${a.status}`)])
+      if (isViewChanged) {
+        isViewChanged = false
+        paneHold = crewKey
+      }
       if (p.isCompact) return keep(compactView())
       const egg = eggOf()
       const th = themeOf()
@@ -8797,7 +8823,7 @@ export const register: Register = (on, options) => {
                       />
                     </Box>
                     <Box flexShrink={0}>
-                      <Button key={`open-${r.key}`} label="Open ▸" plain onPress={() => toggleOpen(r.a.id)} />
+                      <Button key={`open-${r.key}`} label="Open ▸" plain onPress={() => setOpen(r.a.id, true)} />
                     </Box>
                   </Box>
                   {rescueRow($, r.a, ui)}
@@ -8813,7 +8839,7 @@ export const register: Register = (on, options) => {
                     />
                   </Box>
                   <Box flexShrink={0}>
-                    <Button key={`open-${r.key}`} label="Open ▸" plain onPress={() => toggleOpen(r.a.id)} />
+                    <Button key={`open-${r.key}`} label="Open ▸" plain onPress={() => setOpen(r.a.id, true)} />
                   </Box>
                 </Box>
               ) : (
@@ -8822,7 +8848,7 @@ export const register: Register = (on, options) => {
                     source={treeRowSvg(W, r, drawn(r.key, () => agentSvg(rowInnerW(W, r), r.a, at, !isBoxed(r))))}
                     alt={`${r.a.description}: ${modelName(r.a.model)}, ${r.a.status === 'running' ? s.isRunning : r.a.status === 'failed' ? s.failed : r.a.status === 'stopped' ? s.stopped : s.isFinished}${isOver(r.a) ? `, ${tkStr().overWord}` : ''}`}
                   />
-                  {(r.a.status !== 'running' || opened.has(r.a.id)) && <Button key={`close-${r.key}`} label="▴ Collapse" plain onPress={() => toggleOpen(r.a.id)} />}
+                  <Button key={`close-${r.key}`} label="▴ Collapse" plain onPress={() => setOpen(r.a.id, false)} />
                   {rescueRow($, r.a, ui)}
                   {r.a.isUltra && r.a.isUltraByManager && <Text key={`ultra-by-${r.key}`} dimColor>{"⚡ Manager's call"}</Text>}
                   {r.a.status === 'running' && <Button key={`ultra-${r.key}`} label={r.a.isUltra ? '⚡ Turn Ultra off' : '⚡ Turn Ultra on'} plain onPress={() => toggleUltra($, r.a.id)} />}
@@ -8857,7 +8883,8 @@ export const register: Register = (on, options) => {
       const lengthOf = (src: string): number => sent.get(src) ?? sent.set(src, sentLength(src.includes('<!--dl-->') ? src.replace(/<!--dl-->[\s\S]*?<!--\/dl-->/g, '') : src)).get(src) ?? src.length
       const sizeOf = (v: unknown): number => drawnChars(v, lengthOf)
       // Level `level` of the fallbacks fits: with room to spare when richer than the last drawn.
-      const fits = (level: number, size: number): boolean => size + reserve <= DRAW_MAX - (level < paneLevel ? DRAW_SLACK : 0)
+      // Never richer while the person's last change holds it (paneHold): the click redraws its own card only.
+      const fits = (level: number, size: number): boolean => (level >= paneLevel || paneHold !== crewKey) && size + reserve <= DRAW_MAX - (level < paneLevel ? DRAW_SLACK : 0)
       const take = <T,>(level: number, v: T): T => {
         paneLevel = level
         return keep(v)
@@ -9043,12 +9070,12 @@ export const register: Register = (on, options) => {
                       <Text dimColor wrap="truncate-end">
                         {r.a.description || r.a.type} · {fmtTokens(r.a.tokens)} tokens
                       </Text>
-                      <Button key={`open-${r.key}`} label="open" plain onPress={() => toggleOpen(r.a.id)} />
+                      <Button key={`open-${r.key}`} label="open" plain onPress={() => setOpen(r.a.id, true)} />
                     </Box>
                   ) : (
                     <Box flexDirection="column">
                       {row(r.a)}
-                      {r.a.status !== 'running' && <Button key={`close-${r.key}`} label="▴ collapse" plain onPress={() => toggleOpen(r.a.id)} />}
+                      {r.a.status !== 'running' && <Button key={`close-${r.key}`} label="▴ collapse" plain onPress={() => setOpen(r.a.id, false)} />}
                     </Box>
                   )}
                 </Box>
