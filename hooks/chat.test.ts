@@ -78,11 +78,9 @@ test('a reply with code, a table, a chart and math draws its blocks as cards', a
 test('a plain reply is left to the app', async ($, on) => {
   base(on)
   await start($)
-  const drew = await $.ui
-    .mount({ plugin: 'crab-progress', surface: 'desktop', component: 'AssistantMessage', props: { text: 'Just words, nothing else.', isFirstOfReply: true } as never })
-    .then(
-      () => 'drew',
-      (err: unknown) => String(err),
-    )
-  expect(drew).toMatch(/engine drew its own|no implementation for ui.render/)
+  // The hook hands the reply on (`next(e)`): the drawing is what is beneath the plugins, the app's own.
+  const ui = await $.ui.mount({ plugin: 'crab-progress', surface: 'desktop', component: 'AssistantMessage', props: { text: 'Just words, nothing else.', isFirstOfReply: true } as never })
+  const isKept = await ui.keepsBeneath()
+  await ui.unmount()
+  expect(isKept).toBe(true)
 })
