@@ -15,13 +15,15 @@ const stageOf = (W: number) => ({
 const scales = (svg: string): number[] => [...svg.matchAll(/scale\(-?([\d.]+)[ ,)]/g)].map(m => Number(m[1]))
 
 for (const W of [450, 600, 750, 900, 1250]) {
-  test(`parlour + walk-by at ${W}: the whole clear span, figures at least 1.6x, the butler line whole, the rim light on him`, () => {
+  // Final review: both now stand in a room free of every word of the band (mentalist-final.test.ts, on the real band), so they
+  // are as big as that room allows: at least 1.4x here.
+  test(`parlour + walk-by at ${W}: the whole clear span, figures at least 1.4x, the butler line whole, the rim light on him`, () => {
     const st = stageOf(W)
     setMentPlay({ kind: 'parlour', at: NOW })
     const p = mentBand({ W, H: 134, at: NOW + 6_500, working: false, red: false, stage: st })
     // The span's own clip (to y 131, the last row's foot), not the old 56 px task-row strip.
     expect(p).toMatch(/clip-rule="evenodd" d="M8 34h\d+v97h/)
-    expect(Math.max(...scales(p)), `${W}`).toBeGreaterThanOrEqual(1.6)
+    expect(Math.max(...scales(p)), `${W}`).toBeGreaterThanOrEqual(1.4)
     // The punch line is drawn whole inside the span, clear of every hole.
     const m = /<text x="([\d.]+)" y="([\d.]+)"[^>]*font-size="([\d.]+)"[^>]*>It was the butler\.<\/text>/.exec(p)
     expect(m, `${W}`).not.toBeNull()
@@ -42,7 +44,7 @@ for (const W of [450, 600, 750, 900, 1250]) {
     setMentPlay({ kind: 'walk-by', at: NOW })
     const w = mentBand({ W, H: 134, at: NOW + 3_000, working: true, red: true, stage: st })
     expect(w).toMatch(/clip-rule="evenodd" d="M8 34h\d+v97h/)
-    expect(Math.max(...scales(w)), `${W}`).toBeGreaterThanOrEqual(1.6)
+    expect(Math.max(...scales(w)), `${W}`).toBeGreaterThanOrEqual(1.4)
     // The rim: his poses as flat red silhouettes behind him (no face, no skin: only the edge catches the light).
     expect(w).toContain('#C42A22')
     expect(w).not.toMatch(/#(F[0-9A-F]B[0-9A-F]8[0-9A-F]|E79E73|F9BE91)/i)
