@@ -7,6 +7,8 @@
 //   gus     Gus walks onto the band (Nacho a step behind him), straightens his tie in two frames while he stands, and walks
 //           out: about once per 30-45 min (the director's "rare"), never in the same breath as Mike's cameo
 //   lalo    Lalo rises through the floorboards at the bottom edge of THE DOCKET or the LEGAL PAD, about once per 20-40 min
+//   chicanery  the bar hearing (bettercallsaul-court.ts) by itself: at most one per 30-45 min, only while a job works, on the
+//           band and the LEGAL PAD; `/missioncontrol play chicanery` replays it (and the typed word plays it)
 //   unplug  Chuck "unplugs": 4+ tool calls in 10 s (or 4+ running agents) dim the band and the LEGAL PAD to lantern light for 4 s
 import { BCS_CHUCK, BCS_GUS, BCS_LALO, BCS_NACHO } from './cast'
 import type { Sprite } from './cast'
@@ -20,6 +22,9 @@ import type { BandStage } from './stage/keep'
 import type { ExtraArgs } from './themes'
 import { EGG_MS } from './bettercallsaul-motion'
 import { fxLayer, fxLive } from './bettercallsaul-fx'
+import { fightLane } from './stage/choreo'
+import { CHIC_MS, chicaneryPane } from './bettercallsaul-court'
+import { SWAP_MS, swapLayer } from './bettercallsaul-gene'
 import type { Fx } from './bettercallsaul-fx'
 export type Surface = 'band' | 'pane'
 
@@ -48,29 +53,31 @@ export const gusSeed = (gene: boolean): string => (gene ? 'bcs-gene-gus' : 'bcs-
 export const laloSeed = (gene: boolean): string => (gene ? 'bcs-gene-lalo' : 'bcs-lalo')
 const mikeSeed = (gene: boolean): string => (gene ? 'bcs-gene-mike' : 'bcs-mike')
 
-/** The skin's director: Gus (rare, 30-45 min), the car (8-14 min) and Lalo (20-40 min) in priority order, each with a replay name. */
+/** The skin's director: the bar hearing (a fight: 30-45 min, working only), Gus (rare, 30-45 min), the car (8-14 min) and Lalo
+ *  (20-40 min) in priority order, each with a replay name. */
 const DIRS = new Map<boolean, Director>()
 export const bcsDirector = (gene: boolean): Director => {
   const had = DIRS.get(gene)
   if (had) return had
-  const d = new Director(gene ? 'bcs-gene' : 'bcs')
+  const d = fightLane(new Director(gene ? 'bcs-gene' : 'bcs'), [{ id: 'chicanery', ms: CHIC_MS, replay: 'chicanery' }])
     .lane('gus', { gap: 'rare', chance: 0.95 }).add('gus', { id: 'gus', ms: GUS_MS, replay: 'gus' })
     .lane('car', { gap: [8, 14], chance: 0.8 }).add('car', { id: 'car', ms: CAR_MS, replay: 'car' })
     .lane('lalo', { gap: [20, 40], chance: 0.7 }).add('lalo', { id: 'lalo', ms: LALO_MS, replay: 'lalo' })
   DIRS.set(gene, d)
   return d
 }
-const SPAN: Record<string, number> = { gus: 46 * MIN, car: 15 * MIN, lalo: 41 * MIN }
+const SPAN: Record<string, number> = { fight: 46 * MIN, gus: 46 * MIN, car: 15 * MIN, lalo: 41 * MIN }
 const PAGES = new Map<string, { startAt: number; endAt: number }[]>()
 /** One lane's act around `at`: the one under way, else the next, else the last (`on` false when the lane has none near). */
-const laneSlot = (gene: boolean, lane: 'gus' | 'car' | 'lalo', at: number): Slot => {
+const laneSlot = (gene: boolean, lane: 'fight' | 'gus' | 'car' | 'lalo', at: number): Slot => {
   const span = SPAN[lane] as number
   // Plans come in span-long pages (each with a span either side), cached: a redraw or a test asking every few seconds is cheap.
   const page = Math.floor(at / span)
   const key = `${gene ? 'g' : 's'}|${lane}|${page}`
   let list = PAGES.get(key)
   if (!list) {
-    list = bcsDirector(gene).plan((page - 1) * span, (page + 2) * span).filter(x => x.lane === lane)
+    // The fight lane plays only while a job works: its plan is asked as working (the caller checks the job).
+    list = bcsDirector(gene).plan((page - 1) * span, (page + 2) * span, lane === 'fight' ? { working: true } : {}).filter(x => x.lane === lane)
     PAGES.set(key, list)
     if (PAGES.size > 96) PAGES.delete(PAGES.keys().next().value as string)
   }
@@ -80,6 +87,8 @@ const laneSlot = (gene: boolean, lane: 'gus' | 'car' | 'lalo', at: number): Slot
 /** A replayed act as a slot from `at`. */
 const replaySlot = (at: number, ms: number): Slot => ({ on: true, startAt: at, endAt: at + ms, bucket: Math.floor(at / 1000) })
 export const carPlan = (at: number, gene: boolean): Slot => laneSlot(gene, 'car', at)
+/** The scheduled bar hearing around `at` (shown only while a job works). */
+export const fightPlan = (at: number, gene: boolean): Slot => laneSlot(gene, 'fight', at)
 export const lalooPlan = (at: number, gene: boolean): Slot & { card: 'task' | 'log' } => {
   const p = laneSlot(gene, 'lalo', at)
   return { ...p, card: unit(`${laloSeed(gene)}|card|${p.bucket}`) < 0.5 ? 'task' : 'log' }
@@ -176,11 +185,17 @@ export const unplug = (W: number, H: number, unplugAt: number, gene: boolean, su
 /** The theme's extras for a panel: a typed egg's act, else the car and Gus on the band; Lalo on THE DOCKET or the LEGAL PAD;
  *  Chuck's dim on the band and the LEGAL PAD. A typed egg (or a replay) owns the band while it plays: one act at a time. */
 export const bcsExtras = (gene: boolean) => (o: ExtraArgs): string => {
-  if (o.party) return ''
-  const out: string[] = []
+  // The switch word's colour move (takavic drains it, saul goodman floods it back), over the band and every card, pinned.
+  const swap = o.swapAt !== undefined && o.at >= o.swapAt - 500 && o.at < o.swapAt + SWAP_MS ? swapLayer({ W: o.W, H: o.H, at: o.swapAt, toGene: gene, surface: o.surface, i: o.card ?? '' }) : ''
+  if (o.party) return swap
+  const out: string[] = [swap]
   const typed = o.fx && fxLive(o.fx as Fx, o.at) ? (o.fx as Fx) : undefined
+  // The bar hearing by itself (the director's fight lane), only while a job works and nothing is typed.
+  const f = !typed && o.working ? fightPlan(o.at, gene) : undefined
+  const hearing: Fx | undefined = typed?.kind === 'chicanery' ? typed : f && live(f, o.at) ? { kind: 'chicanery', at: f.startAt } : undefined
   if (o.surface === 'band') {
-    if (typed && Object.hasOwn(EGG_MS, typed.kind)) out.push(fxLayer(o.W, o.H, typed, o.at, gene, o.stage))
+    if (hearing && !typed) out.push(fxLayer(o.W, o.H, hearing, o.at, gene, o.stage))
+    else if (typed && Object.hasOwn(EGG_MS, typed.kind)) out.push(fxLayer(o.W, o.H, typed, o.at, gene, o.stage))
     else if (typed?.kind === 'car') out.push(car(o.W, o.H, replaySlot(typed.at, CAR_MS), gene, o.stage))
     else if (typed?.kind === 'gus') out.push(gus(o.W, o.H, replaySlot(typed.at, GUS_MS), gene, o.stage))
     else if (!typed) {
@@ -189,6 +204,9 @@ export const bcsExtras = (gene: boolean) => (o: ExtraArgs): string => {
       const g = gusPlan(o.at, gene)
       if (live(g, o.at)) out.push(gus(o.W, o.H, g, gene, o.stage))
     }
+  } else if (hearing) {
+    // The pane's half of the hearing: on the LEGAL PAD, the camera pushed in.
+    if (o.card === 'log') out.push(chicaneryPane({ W: o.W, H: o.H, at: hearing.at, gene }).svg)
   } else if (typed?.kind === 'lalo') {
     const r = replaySlot(typed.at, LALO_MS)
     if (o.card === (unit(`${laloSeed(gene)}|card|${r.bucket}`) < 0.5 ? 'task' : 'log')) out.push(lalo(o.W, o.H, r, gene))

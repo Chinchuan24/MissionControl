@@ -19,7 +19,7 @@ import type { SkinGroup } from './skinslook'
 import { calPal } from './caliper'
 import { setCalModeWord } from './caliper-theme'
 import { BCS_SKIN_WORDS, BCS_TOOLS, SAUL_GOODMAN_RE, TAKAVIC_RE } from './bettercallsaul'
-import { EGG_PLAYS, TOASTS, bashToast, cmdKind, fxOf, mcgillNow, resultFailed, toastDue } from './bettercallsaul-fx'
+import { EGG_PLAYS, TOASTS, bashToast, cmdKind, dayOf as bcsDayOf, fxOf, hearingAfterFails, mcgillNow, resultFailed, toastDue } from './bettercallsaul-fx'
 import type { BashState, Fx, FxKind, ToastKey } from './bettercallsaul-fx'
 import { UNPLUG_GAP_MS, bcsDirector, shouldUnplug } from './bettercallsaul-extra'
 import { CLASSIC_RE, GUARDIANS_RE, NEW_SUIT_RE, SWAP_MS, THINK_RE, fightDirector, isVariantsAsk, versionOf } from './invincible-eggs'
@@ -2132,7 +2132,9 @@ let TB_COST = 0
 let TB_IDLE = { from: 0, ten: false }
 let TB_LINT_FAILED = false
 const boysSwapAt = (): number | undefined => (SKIN.id === 'solidgold' || SKIN.id === 'noir' ? (BOYS_GOLD_SINCE > 0 ? BOYS_GOLD_SINCE : undefined) : BOYS_MODE.since > 0 ? BOYS_MODE.since : undefined)
-const swapAtNow = (): number | undefined => (isInv() && INV_ERA.since > 0 ? INV_ERA.since : isBoys() ? boysSwapAt() : undefined)
+// Better Call Saul / GENE: when the switch word (takavic, saul goodman) last swapped them (0: never), for the colour drain / flood.
+let BCS_SWAP = 0
+const swapAtNow = (): number | undefined => (isInv() && INV_ERA.since > 0 ? INV_ERA.since : isBoys() ? boysSwapAt() : (SKIN.id === 'better-call-saul' || SKIN.id === 'gene') && BCS_SWAP > 0 ? BCS_SWAP : undefined)
 // Caliper's setting (dark, light, auto; only this is stored) and the app's theme from /config (for auto). The atom packs
 // `mode|since|appIsLight` for the drawers; `since` is 0 after a restart. The resolved face is never stored.
 const calMode = atom({ plugin: 'crab-progress', key: 'calMode' } as const, 'auto|0|0')
@@ -2220,8 +2222,11 @@ async function noteSwitch($: EngineInterface, from: Skin): Promise<void> {
 let BCS_FX: Fx | undefined
 // `/missioncontrol play <name>` on both skins: every typed egg (saul3d, namaste, ding, chicanery, 1216) and the director's
 // scheduled acts (gus, car, lalo), each stored as the typed act, pinned to now.
-for (const [kind, what] of EGG_PLAYS) registerPlay(['better-call-saul', 'gene'], { name: kind, what, run: at => { BCS_FX = { kind, at } } })
+// The director's first (its bar hearing is the typed `chicanery` too: the typed egg's line wins the list).
 for (const gene of [false, true]) playsFrom(gene ? 'gene' : 'better-call-saul', bcsDirector(gene), sl => { BCS_FX = { kind: sl.id as FxKind, at: sl.startAt } }, n => `${n} (scheduled)`)
+for (const [kind, what] of EGG_PLAYS) registerPlay(['better-call-saul', 'gene'], { name: kind, what, run: at => { BCS_FX = { kind, at } } })
+// The day the bar hearing last played after three failed test runs in a row (once a local day).
+let BCS_FAILS_DAY = ''
 let BCS_UNPLUG_AT: number | undefined
 const BCS_TOAST_AT: Partial<Record<ToastKey, number>> = {}
 let BCS_BASH: BashState = { testFails: 0, lintFailed: false }
@@ -7611,6 +7616,7 @@ export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     // A new session starts the Better Call Saul skins' little memory afresh (trigger word, unplug, toasts).
     BCS_FX = undefined
+    BCS_SWAP = 0
     BCS_UNPLUG_AT = undefined
     BCS_CALLS = []
     BCS_BASH = { testFails: 0, lintFailed: false }
@@ -7970,7 +7976,15 @@ export const register: Register = (on, options) => {
     try {
       const { toast, state } = bashToast(kind, kind === 'force' ? false : resultFailed(res), BCS_BASH)
       BCS_BASH = state
-      if (toast) bcsToast($, toast, await $.clock.now())
+      const now = await $.clock.now()
+      if (toast) bcsToast($, toast, now)
+      // Three failed test runs in a row: the bar hearing (once a day; never over an egg already playing).
+      if (hearingAfterFails(state.testFails, BCS_FAILS_DAY, now) && !(BCS_FX && now < BCS_FX.at + 9_000)) {
+        BCS_FAILS_DAY = bcsDayOf(now)
+        BCS_FX = { kind: 'chicanery', at: now }
+        await update($, bandTick, () => now)
+        await update($, paneTick, () => now)
+      }
     } catch {
       // A garnish only.
     }
@@ -9178,6 +9192,8 @@ export const register: Register = (on, options) => {
       const found = to ? SKINS.get(to) : undefined
       if (found) {
         applySkin(found)
+        // The colour drains out (to GENE) or floods back (to Saul) over both panels, pinned to now (bettercallsaul-gene.ts).
+        BCS_SWAP = at
         await $.store.set('skin', found.id).catch(() => undefined)
         await update($, skin, () => found.id)
         await retitle($).catch(() => undefined)

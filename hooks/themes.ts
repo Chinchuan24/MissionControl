@@ -36,6 +36,7 @@ import { BCS_BADGES, BCS_CRED_WORDS, attorneyCard, bcsBootLine, bcsRankOf, bcsTo
 import { mikeCameo, mikeRoamer } from './bettercallsaul-mike'
 import { bcsExtras } from './bettercallsaul-extra'
 import { figureFor } from './bettercallsaul-fx'
+import { geneCheer } from './bettercallsaul-gene'
 import type { Fx } from './bettercallsaul-fx'
 import { invTheme } from './invincible-theme'
 import { calTheme } from './caliper-theme'
@@ -405,7 +406,8 @@ const saulTheme = (gene: boolean): ThemeEggs => ({
     foot: (W, H, _t, ctx) => bcsFoot(W, H, ctx, gene),
   },
   warning: bcsWarning(gene),
-  cheer: (W, H, _font, _t, startAt) => bcsCheer(W, H, gene, startAt),
+  // GENE's own cheer: the mall shutter with NIPPY! on it (bettercallsaul-gene.ts); Saul keeps the TV ad's star-wipe.
+  cheer: (W, H, _font, _t, startAt) => (gene && startAt !== undefined ? geneCheer(W, H, startAt) : bcsCheer(W, H, gene, startAt)),
   cred: { title: 'ATTORNEY AT LAW', ranks: bcsRankOf, words: BCS_CRED_WORDS, badges: BCS_BADGES, toast: bcsToast, card: (W, c) => attorneyCard(W, c, gene) },
   card: {
     draw: (W, task, isWorking, done, total, _t, _font, _frame, legends) => docketCard(W, task, isWorking, done, total, legends, gene),
@@ -421,6 +423,8 @@ const saulTheme = (gene: boolean): ThemeEggs => ({
   roamer: mikeRoamer(gene),
   takeover: (W, H, line, tm) => mikeCameo(W, H, line, tm, gene),
   extras: bcsExtras(gene),
+  // The bar hearing's LEGAL PAD act (bettercallsaul-court.ts, about 34 k between `<!--dl-->` markers): kept free while a job works.
+  paneReserve: 36_000,
 })
 
 export const THEMES: Record<ThemeKey, ThemeEggs> = {

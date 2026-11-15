@@ -7,12 +7,13 @@
 //              on a wide band Saul himself steps in, arms wide (BCS_SAUL)
 //   namaste    a bowling ball rolls along the roof into Howard's car: hit-stop, the crack, a dust puff; Howard comes to look
 //   ding       Hector rolls in and rings his bell three times: DING! DING! DING!
-//   chicanery  Chuck at the witness stand: composed, then "I AM NOT CRAZY!", 1216 / 1261 flipping beside him; Kim watches
+//   chicanery  the bar hearing, Jimmy against Chuck (bettercallsaul-court.ts): the trap, the battery, the break, the slump
 //   1216       the number flip alone, as a big manila exhibit tag
-import { BCS_HECTOR, BCS_HOWARD, BCS_KIM, BCS_SAUL } from './cast'
+import { BCS_HECTOR, BCS_HOWARD, BCS_SAUL } from './cast'
 import type { Sprite } from './cast'
-import { BELL, C, FONT, PROPS, S, condW, fingerGuns, grey, pal, prop, sansW, serifW, tab } from './bettercallsaul'
-import { BCS_CT_CHUCK_COMPOSED, BCS_CT_CHUCK_OUTBURST, BCS_SAUL_TURN, BCS_WITNESS_STAND, GENE_TURN } from './bettercallsaul-sprites'
+import { BELL, C, PROPS, S, condW, fingerGuns, grey, pal, prop, serifW, tab } from './bettercallsaul'
+import { BCS_SAUL_TURN, GENE_TURN } from './bettercallsaul-sprites'
+import { CHIC_MS, chicaneryBand } from './bettercallsaul-court'
 import { Act, r1 } from './stage/timeline'
 import type { Key, Seg } from './stage/timeline'
 import * as fx from './stage/fx'
@@ -22,7 +23,7 @@ import type { BandStage, Rect } from './stage/keep'
 
 export type EggKind = 'saul3d' | 'namaste' | 'ding' | 'chicanery' | '1216'
 /** Each act's length (ms). */
-export const EGG_MS: Record<EggKind, number> = { saul3d: 4_000, namaste: 4_800, ding: 3_400, chicanery: 5_200, '1216': 4_000 }
+export const EGG_MS: Record<EggKind, number> = { saul3d: 4_000, namaste: 4_800, ding: 3_400, chicanery: CHIC_MS, '1216': 4_000 }
 export type EggArgs = { W: number; H: number; at: number; gene: boolean; stage?: BandStage }
 /** What an act drew and how big its subject is (the tests hold a minimum drawn size for every egg). */
 export type EggOut = { svg: string; size: Record<string, number> }
@@ -66,6 +67,8 @@ const shout = (x: number, y: number, text: string, size: number, fill: string, i
 // ---------------------------------------------------------------- saul3d: the head turns all the way round
 /** The turn's beats: the dip, the 8 views (slower at front and back), the snap back to front with an overshoot. */
 export const TURN = { dip: 0.3, from: 0.42, holds: [0.14, 0.2, 0.18, 0.2, 0.3, 0.2, 0.18, 0.2], snap: 2.02 } as const
+/** Where GENE's glasses catch the light in his turn: view, facing, lens x from the turn axis and y from the head's top (sprite px). */
+export const GENE_GLINTS: [string, 1 | -1, number, number][] = [['v1', 1, 2, 14], ['v2', 1, 8, 13], ['v2', -1, 8, 13], ['v1', -1, 2, 14]]
 /** The head's place: on the bust's spot in the task row (x 14 to 60), bottom on the row's floor, full size (45 px tall). */
 export const HEAD = { x: 37, foot: 82, sc: 1 } as const
 export const saul3d = (o: EggArgs): EggOut => {
@@ -101,6 +104,19 @@ export const saul3d = (o: EggArgs): EggOut => {
   let body = `${card}${lights}${pop}${clip}${glint.svg}`
   let still = `<rect x="3" y="35" width="60" height="48" rx="4" fill="#0B0806" opacity=".88"/>${floorLit}${act.still('v1', x, cy, 1, sc)}`
   const size: Record<string, number> = { head: 45 * sc }
+  if (gene) {
+    // His glasses catch the light as he turns (the ¾ and profile views, both ways), and once he is round to the front the little
+    // ad for Saul shows in his lenses again (the only colour in GENE: two pixels, red and yellow).
+    const spark = (gx: number, gy: number): string => `<path d="M${r1(gx)} ${r1(gy - 2.2)}l.6 1.6 1.6 .6 -1.6 .6 -.6 1.6 -.6 -1.6 -1.6 -.6 1.6 -.6z" fill="#FFFFFF"/>`
+    const top = cy - 22.5 * sc
+    for (const [k, d, lx, ly] of GENE_GLINTS) {
+      const i = order.findIndex(([kk, dd]) => kk === k && dd === d)
+      const seg = segs[i + 1]
+      if (seg) body += act.win(seg[0] + 0.03, seg[1] - 0.02, spark(x + lx * d * sc, top + ly * sc))
+    }
+    body += act.win(TURN.snap + 0.2, act.T - 0.3, `<rect x="${r1(x - 4 * sc)}" y="${r1(top + 14 * sc)}" width="1" height="1" fill="#D7262C"/><rect x="${r1(x + 4 * sc)}" y="${r1(top + 14 * sc)}" width="1" height="1" fill="#FFD23F"/>`)
+    size.glints = GENE_GLINTS.length
+  }
   if (!gene) {
     // Finger guns, then (with room in the task row) Saul himself steps in, arms wide, and the line slams down.
     const guns = act.win(TURN.snap + 0.25, act.T - 0.3, fingerGuns(x + 12, cy + 4, 1.4, false))
@@ -260,47 +276,16 @@ const flipTag = (act: Act, x: number, y: number, size: number, t0: number, t1: n
   void P
   return { svg: act.on(svg, t0, t1, { fade: 0.15 }), still: `${plate}${num('1216', ink)}`, w: tw }
 }
-export const rant = (o: EggArgs & { kind: 'chicanery' | '1216' }): EggOut => {
+/** 1216: the number flip alone, as a big manila exhibit tag in the step row (the bar hearing is bettercallsaul-court.ts). */
+export const rant = (o: EggArgs & { kind: '1216' }): EggOut => {
   const { W, H, at, gene, stage, kind } = o
   const act = new Act({ id: `bcs-ch-${kind}-${gene ? 'g' : 's'}-${W}`, ms: EGG_MS[kind], at, W, H })
   const win = windowOf(W, H, stage)
   const x1 = win[0] + win[2]
   const F = floorOf(H)
-  if (kind === '1216') {
-    const [a, b] = freeRun(stage, 12, x1 - 8, 86, 128)
-    const tag = flipTag(act, (a + b) / 2, F - 22, 24, 0.2, act.T - 0.2, 0.75, gene)
-    return { svg: frame(act, win, stage, tag.svg, tag.still, gene), size: { number: 24, tag: tag.w } }
-  }
-  // Chicanery: the witness stand at the right of the span; Chuck behind it, composed, then the outburst.
-  act.cast('stand', look(BCS_WITNESS_STAND, gene), 0.5).cast('calm', look(BCS_CT_CHUCK_COMPOSED, gene), 0.5).cast('mad', look(BCS_CT_CHUCK_OUTBURST, gene), 0.6).cast('kim', look(BCS_KIM, gene), 0.5)
-  const sx = x1 - 30
-  const cy = F - 4 - 23
-  const BREAK = 1.4
-  let body = act.actor('chuck', [[0, BREAK, 'calm', -1], [BREAK, act.T, 'mad', -1]], [[0, sx + 3, cy + 30, 0, 0], [0.45, sx + 3, cy, 0, 1], [BREAK, sx + 3, cy, 0, 1], [BREAK + 0.04, sx + 1, cy - 1, 0, 1], [BREAK + 0.1, sx + 4, cy, 0, 1], [BREAK + 0.16, sx + 2, cy, 0, 1], [BREAK + 0.22, sx + 3, cy, 0, 1], [act.T, sx + 3, cy, 0, 1]])
-  body += act.still('stand', sx, F - 11)
-  // The bubble slams in on the outburst, the exhibit tag flips under it.
-  const text = 'I AM NOT CRAZY!'
-  const bw = sansW(text, 12.5, 0, true) + 20
-  const P = pal(gene)
-  // The bubble goes where the row has room: the task row (left of the Tasks chip's hole), else the step row.
-  const up = freeRun(stage, 66, sx - 22, 48, 78)
-  const low = freeRun(stage, 12, sx - 22, 84, 112)
-  const [ba, bb, byy] = up[1] - up[0] >= bw ? [up[0], up[1], 50] : [low[0], low[1], 86]
-  const bx = Math.max(ba, bb - bw)
-  const bubble = `<rect x="${r1(bx)}" y="${byy}" width="${r1(bw)}" height="26" rx="5" fill="${P.tile2}" stroke="${P.text}" stroke-width="1.4"/><path d="M${r1(bx + bw)} ${byy + 9}l8 5l-8 5z" fill="${P.text}"/><text x="${r1(bx + bw / 2)}" y="${byy + 17.5}" text-anchor="middle" font-family="${FONT}" font-size="12.5" font-weight="800" fill="${gene ? '#FFFFFF' : PROPS.adYellow}">${text}</text>`
-  body += act.slam(bubble, BREAK + 0.05, act.T - 0.15)
-  const [a, b] = freeRun(stage, 12, Math.min(sx - 24, byy > 60 ? bx - 6 : sx - 24), 88, 126)
-  const tag = b - a >= 70 ? flipTag(act, b - 40, F - 16, 16, BREAK + 0.5, act.T - 0.15, 0.7, gene) : undefined
-  if (tag) body += tag.svg
-  // Kim in the gallery on the left, watching (she does not move: the silence is hers).
-  let still = `${act.still('mad', sx + 3, cy, -1)}${act.still('stand', sx, F - 11)}${bubble}${tag?.still ?? ''}`
-  const [ka, kb] = freeRun(stage, 12, (tag ? b - 80 : Math.min(sx - 24, byy > 60 ? bx : sx)) - 6, 78, 128)
-  if (kb - ka >= 18) {
-    const kx = kb - 9
-    body += act.on(act.still('kim', kx, F - 22.5), 0.3, act.T - 0.1, { fade: 0.3 })
-    still += act.still('kim', kx, F - 22.5)
-  }
-  return { svg: frame(act, win, stage, body, still, gene), size: { chuck: 46, bubble: 12.5, number: tag ? 16 : 0 } }
+  const [a, b] = freeRun(stage, 12, x1 - 8, 86, 128)
+  const tag = flipTag(act, (a + b) / 2, F - 22, 24, 0.2, act.T - 0.2, 0.75, gene)
+  return { svg: frame(act, win, stage, tag.svg, tag.still, gene), size: { number: 24, tag: tag.w } }
 }
 
 /** The act for a typed egg at `at` (empty for a kind with no band act). */
@@ -308,6 +293,7 @@ export const eggAct = (kind: string, o: EggArgs): string => {
   if (kind === 'saul3d') return saul3d(o).svg
   if (kind === 'namaste') return namaste(o).svg
   if (kind === 'ding') return ding(o).svg
-  if (kind === 'chicanery' || kind === '1216') return rant({ ...o, kind }).svg
+  if (kind === 'chicanery') return chicaneryBand(o).svg
+  if (kind === '1216') return rant({ ...o, kind }).svg
   return ''
 }

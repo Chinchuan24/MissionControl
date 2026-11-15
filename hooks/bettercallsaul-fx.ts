@@ -2,7 +2,8 @@
 // research notes). Pure functions: the hooks module keeps the little state (when a word was typed, when a toast last
 // showed) and passes it in. Every drawing is pinned to the clock with `pin()`, brief, ≤ 3 Hz, still under reduced motion.
 //
-//   chicanery  Chuck at the witness stand, "I AM NOT CRAZY!" (S3E5), 1216 <-> 1261 flipping beside him, Kim watching
+//   chicanery  the bar hearing (S3E5), Jimmy against Chuck: the trap, the battery, the break, the slump (bettercallsaul-court.ts).
+//              Also by itself (the director's fight lane) and, once a day, after three failed test runs in a row
 //   1216       the number flip alone, a big manila exhibit tag (the whole prompt "1216", or "it was 1216")
 //   namaste    a bowling ball rolls along the roof into Howard's car (S5E4): hit-stop, the crack, a dust puff, Howard looks
 //   ding       Hector rolls in and rings his bell three times (the whole prompt "ding", or "ding ding")
@@ -37,7 +38,7 @@ const FX_RES: [FxKind, RegExp[]][] = [
 /** The trigger in a prompt (the first of the list found), or undefined. The prompt itself always goes on unchanged. */
 export const fxOf = (text: string): FxKind | undefined => FX_RES.find(([, res]) => res.some(re => re.test(text)))?.[0]
 /** The typed eggs a `/missioncontrol play <name>` replays on these two skins (the scheduled ones come from the director). */
-export const EGG_PLAYS: [FxKind, string][] = [['saul3d', 'the head turns all the way round'], ['namaste', 'the bowling ball and Howard\'s car'], ['ding', "Hector's bell, three times"], ['chicanery', 'I AM NOT CRAZY!'], ['1216', '1216 or 1261']]
+export const EGG_PLAYS: [FxKind, string][] = [['saul3d', 'the head turns all the way round'], ['namaste', 'the bowling ball and Howard\'s car'], ['ding', "Hector's bell, three times"], ['chicanery', 'the bar hearing: Jimmy against Chuck'], ['1216', '1216 or 1261']]
 
 // --- toasts: each at most once per a few minutes, only on the two skins
 export const TOASTS = {
@@ -86,6 +87,11 @@ export const bashToast = (kind: CmdKind, failed: boolean, state: BashState): { t
   if (kind === 'lint') return failed ? { state: { ...state, lintFailed: true } } : state.lintFailed ? { toast: 'lint', state: { ...state, lintFailed: false } } : { state }
   return { state }
 }
+
+/** Three failed test runs in a row play the bar hearing, at most once a local day (`lastDay`: the day it last played, or ''). */
+export const FAILS_FOR_HEARING = 3
+export const dayOf = (at: number): string => { const d = new Date(at); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}` }
+export const hearingAfterFails = (testFails: number, lastDay: string, at: number): boolean => testFails >= FAILS_FOR_HEARING && dayOf(at) !== lastDay
 
 /** The band layer for a live trigger word: its act, inside the band's clear span (`stage`). */
 export const fxLayer = (W: number, H: number, fx: Fx | undefined, at: number, gene: boolean, stage?: BandStage): string => {

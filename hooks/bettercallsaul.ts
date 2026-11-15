@@ -12,7 +12,7 @@ import type { Sprite } from './cast'
 import { sansClip, sansW } from './breakingbad-cards'
 import { pin } from './smooth'
 import { inkOn } from './extras'
-import { BCS_SAUL_HEAD_045, BCS_STATUE_INFLATE_0, BCS_STATUE_INFLATE_1, BCS_STATUE_INFLATE_2, BCS_STATUE_SAG } from './bettercallsaul-sprites'
+import { BCS_SAUL_HEAD_045, BCS_STATUE_INFLATE_0, BCS_STATUE_INFLATE_1, BCS_STATUE_INFLATE_2, BCS_STATUE_SAG, GENE_DUST_SCRATCH, GENE_GRAIN_1, GENE_GRAIN_2, GENE_GRAIN_3 } from './bettercallsaul-sprites'
 
 export { sansClip, sansW }
 
@@ -213,8 +213,16 @@ ${ringKf('0', 24)}${ringKf('1', 6)}${ringKf('2', 2)}
 @keyframes bcs-cam{0%{opacity:0;transform:translate(var(--sx),0)}15%,82%{opacity:1;transform:none}100%{opacity:0;transform:translate(var(--sx),0)}}
 .bcs-bub{animation:bcs-bub 3s steps(1) both}
 @keyframes bcs-bub{0%,22%{opacity:0}23%,100%{opacity:1}}
-.bcs-grain{animation:bcs-grain .4s steps(1) infinite}
-@keyframes bcs-grain{50%{transform:translate(-1px,1px)}}
+.bcs-gr1,.bcs-gr2,.bcs-gr3{animation:bcs-gr .375s steps(1) infinite}.bcs-gr2{animation-delay:-.25s}.bcs-gr3{animation-delay:-.125s}
+@keyframes bcs-gr{0%,33.3%{opacity:.07}33.4%,100%{opacity:0}}
+.bcs-flk{animation:bcs-flk 2.3s steps(1) infinite}
+@keyframes bcs-flk{0%{opacity:0}13%{opacity:.03}27%{opacity:0}52%{opacity:.02}66%{opacity:0}84%{opacity:.035}90%{opacity:0}}
+.bcs-dust1{animation:bcs-dust 19s steps(1) infinite}.bcs-dust2{animation:bcs-dust 23s steps(1) infinite -11s}
+@keyframes bcs-dust{0%,98.9%{opacity:0}99%,99.6%{opacity:.35}99.7%,100%{opacity:0}}
+.bcs-gblk{animation:bcs-gblk 6.7s steps(1) infinite}
+@keyframes bcs-gblk{0%,95.9%{opacity:0}96%,98.2%{opacity:1}98.3%,100%{opacity:0}}
+.bcs-glint{animation:bcs-glint 5.3s steps(1) infinite}
+@keyframes bcs-glint{0%,90%{opacity:0}90.1%,93%{opacity:1}93.1%,94.5%{opacity:.5}94.6%,100%{opacity:0}}
 .bcs-walk{animation:bcs-walk .7s steps(2) infinite}
 @keyframes bcs-walk{50%{transform:translateY(-1px)}}
 .bcs-go{animation:bcs-go linear both}
@@ -243,8 +251,9 @@ ${ringKf('0', 24)}${ringKf('1', 6)}${ringKf('2', 2)}
 .bcs-droop{animation-name:bcs-droop;animation-duration:2.5s;animation-timing-function:cubic-bezier(.45,0,.55,1);animation-fill-mode:both}
 @keyframes bcs-droop{0%{transform:none}60%{transform:rotate(3deg) scaleY(.94)}100%{transform:rotate(6deg) scaleY(.86)}}
 @media (prefers-reduced-motion: reduce){
- .bcs-flame,.bcs-pen,.bcs-run,.bcs-chip,.bcs-sway,.bcs-tube,.bcs-arms,.bcs-ring0,.bcs-tilt0,.bcs-ring1,.bcs-tilt1,.bcs-ring2,.bcs-tilt2,.bcs-mad,.bcs-madtilt,.bcs-star,.bcs-wipe,.bcs-shout,.bcs-cheer,.bcs-ad,.bcs-blink,.bcs-stamp,.bcs-fresh,.bcs-flip,.bcs-cam,.bcs-bub,.bcs-grain,.bcs-walk,.bcs-go,.bcs-putt,.bcs-tie1,.bcs-tie2,.bcs-up,.bcs-dim,.bcs-lamp,.bcs-fx,.bcs-ding,.bcs-gun1,.bcs-gun2,.bcs-breath,.bcs-blk,.bcs-wob,.bcs-droop,.bcs-win{animation:none}
+ .bcs-flame,.bcs-pen,.bcs-run,.bcs-chip,.bcs-sway,.bcs-tube,.bcs-arms,.bcs-ring0,.bcs-tilt0,.bcs-ring1,.bcs-tilt1,.bcs-ring2,.bcs-tilt2,.bcs-mad,.bcs-madtilt,.bcs-star,.bcs-wipe,.bcs-shout,.bcs-cheer,.bcs-ad,.bcs-blink,.bcs-stamp,.bcs-fresh,.bcs-flip,.bcs-cam,.bcs-bub,.bcs-gr1,.bcs-gr2,.bcs-gr3,.bcs-flk,.bcs-dust1,.bcs-dust2,.bcs-gblk,.bcs-glint,.bcs-walk,.bcs-go,.bcs-putt,.bcs-tie1,.bcs-tie2,.bcs-up,.bcs-dim,.bcs-lamp,.bcs-fx,.bcs-ding,.bcs-gun1,.bcs-gun2,.bcs-breath,.bcs-blk,.bcs-wob,.bcs-droop,.bcs-win{animation:none}
  .bcs-ring0,.bcs-ring1,.bcs-ring2{opacity:0}.bcs-mad{opacity:1}.bcs-star,.bcs-wipe,.bcs-shout,.bcs-cheer,.bcs-ad,.bcs-cam,.bcs-bub{opacity:1;transform:none}.bcs-run{opacity:.6}
+ .bcs-gr1{opacity:.07}.bcs-gr2,.bcs-gr3,.bcs-flk,.bcs-dust1,.bcs-dust2,.bcs-gblk,.bcs-glint{opacity:0}
  .bcs-tie2,.bcs-gun2{opacity:0}.bcs-ding{opacity:0}.bcs-fx{opacity:1}.bcs-up{transform:none}.bcs-dim{opacity:.85}.bcs-go{transform:translateX(var(--b))}
 }`
 
@@ -282,12 +291,50 @@ export const pickCss = (css: string, names: string[]): string => {
   return parse(css).map(keep).filter(Boolean).join('\n')
 }
 /** What the pane's cards need (their own motion, Mike and Lalo on them, Chuck's dim, Hector's bell). */
-export const CARD_CSS = pickCss(BCS_CSS, ['pen', 'run', 'flip', 'fresh', 'stamp', 'sway', 'grain', 'walk', 'cam', 'bub', 'up', 'dim', 'lamp', 'mad', 'madtilt'])
+export const CARD_CSS = pickCss(BCS_CSS, ['pen', 'run', 'flip', 'fresh', 'stamp', 'sway', 'gr', 'gr1', 'gr2', 'gr3', 'flk', 'dust', 'dust1', 'dust2', 'walk', 'cam', 'bub', 'up', 'dim', 'lamp', 'mad', 'madtilt'])
 
 // ---------------------------------------------------------------- primitives
-/** Film grain for GENE: fractal noise, desaturated, 7% alpha, jittering 1 px in steps so it reads as projected film. */
-export const grain = (W: number, H: number): string =>
-  `<defs><filter id="bcsgr" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".85" numOctaves="2" seed="7" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/><feComponentTransfer><feFuncA type="table" tableValues="0 .07"/></feComponentTransfer></filter></defs><rect class="bcs-grain" x="-2" y="-2" width="${W + 4}" height="${H + 4}" filter="url(#bcsgr)" pointer-events="none"/>`
+/** A pixel tile as stroked 1 px dots in at most two inks (light, dark): `M x y.5h n` per run, relative moves after the first, about
+ *  half the chars of filled squares (a grain tile is a few hundred lone specks). */
+const dots = (sp: Sprite, light: string, dark: string): string => {
+  const lightK = new Set(Object.entries(sp.pal).filter(([, c]) => parseInt(c.slice(1, 3), 16) >= 128).map(([k]) => k))
+  const ink = (want: boolean): string => {
+    let d = ''
+    let px = 0
+    let py = 0
+    let first = true
+    sp.rows.forEach((row, y) => {
+      let x = 0
+      while (x < row.length) {
+        const ch = row[x] as string
+        if (ch === '.' || !sp.pal[ch] || lightK.has(ch) !== want) { x++; continue }
+        let n = 1
+        while (x + n < row.length && row[x + n] !== '.' && sp.pal[row[x + n] as string] && lightK.has(row[x + n] as string) === want) n++
+        d += first ? `M${x} ${y}.5h${n}` : `m${x - px} ${y - py}h${n}`
+        first = false
+        px = x + n
+        py = y
+        x += n
+      }
+    })
+    return d
+  }
+  return `<path d="${ink(true)}" stroke="${light}"/><path d="${ink(false)}" stroke="${dark}"/>`
+}
+/**
+ * GENE's projected film: three baked grain tiles (GENE_GRAIN_1..3, 32 px, white and black specks) stepped one after the other at
+ * 8 fps at 7%, a ±3% flicker, and a dust speck or a broken vertical scratch (GENE_DUST_SCRATCH) for two frames now and then (19 s
+ * and 23 s loops, at two seeded places). No filter anywhere: every piece is a pattern or a shape whose opacity steps. Reduced
+ * motion: tile 1 at 7%, nothing moves. Ids keep the old `bcsgr` prefix.
+ */
+export const grain = (W: number, H: number): string => {
+  const tile = (i: number, sp: Sprite): string => `<pattern id="bcsgr${i}" patternUnits="userSpaceOnUse" width="32" height="32"><g stroke-width="1" fill="none">${dots(sp, '#FFFFFF', '#000000')}</g></pattern>`
+  const r = rng(`dust${W}x${H}`)
+  const x1 = Math.round(W * (0.12 + 0.3 * r()))
+  const x2 = Math.round(W * (0.55 + 0.35 * r()))
+  const dust = `<g id="bcsgrd" fill="none" stroke-width="1">${dots(GENE_DUST_SCRATCH, '#F4F4F4', '#101010')}</g>`
+  return `<defs>${tile(1, GENE_GRAIN_1)}${tile(2, GENE_GRAIN_2)}${tile(3, GENE_GRAIN_3)}${dust}</defs><g pointer-events="none">${[1, 2, 3].map(i => `<rect class="bcs-gr${i}" width="${W}" height="${H}" fill="url(#bcsgr${i})" opacity="${i === 1 ? 0.07 : 0}"/>`).join('')}<rect class="bcs-flk" width="${W}" height="${H}" fill="#000" opacity="0"/><use class="bcs-dust1" href="#bcsgrd" x="${x1}" y="${Math.max(0, Math.round(H / 2 - 24))}" opacity="0"/><use class="bcs-dust2" href="#bcsgrd" transform="translate(${x2} ${Math.max(0, Math.round(H / 2 - 24))}) scale(-1 1)" opacity="0"/></g>`
+}
 /** A soft vignette for GENE (the Omaha scenes are shot dark at the edges). */
 export const vignette = (W: number, H: number): string =>
   `<defs><radialGradient id="bcsvg" cx="50%" cy="50%" r="72%"><stop offset="55%" stop-color="#000" stop-opacity="0"/><stop offset="100%" stop-color="#000" stop-opacity=".45"/></radialGradient></defs><rect x="0" y="0" width="${W}" height="${H}" fill="url(#bcsvg)" pointer-events="none"/>`
@@ -384,6 +431,8 @@ export const statueAt = (x: number, foot: number, gene: boolean, ctx: { working?
 }
 
 // ---------------------------------------------------------------- the bust's idle life (a breath, a blink) and the glance
+/** Gene's eyes behind the glasses on BCS_GENE_BUST (the lenses' inner pixels, row 13): his blink paints two pixels each. */
+export const GENE_LENS: [number, number][] = [[13, 13], [19, 13]]
 /** Saul's eyes on BCS_SAUL_BUST (sprite pixels): the blink paints them as lids. */
 const SAUL_EYES: [number, number][] = [[17, 13], [23, 13]]
 /** The job-done glance: after the cheer's wipe, Saul looks aside (the ¾ head) for about a second, then back. */
@@ -608,7 +657,10 @@ export const bcsFigure = (gene: boolean, o: { glanceAt?: number; at?: number; hi
   let inner: string
   if (gene) {
     // The only colour in GENE: a tiny ad for "Better Call Saul" reflected in the glasses (two pixels, red and yellow).
-    inner = `<g class="bcs-breath">${px(BCS_GENE_BUST, 22, 38, s)}<rect x="${r1(22 + 13 * s)}" y="${r1(38 + 13 * s)}" width=".9" height=".9" fill="#D7262C"/><rect x="${r1(22 + 19 * s)}" y="${r1(38 + 13 * s)}" width=".9" height=".9" fill="#FFD23F"/></g>`
+    // His blink: the lenses' inner pixels go to the skin's grey for 0.15 s every 6.7 s; a glint crosses the left lens every 5.3 s.
+    const lid = GENE_LENS.map(([ex, ey]) => `<rect x="${r1(22 + ex * s)}" y="${r1(38 + ey * s)}" width="${r1(2 * s)}" height="${s}" fill="#CAC9C9"/>`).join('')
+    const glint = `<path class="bcs-glint" opacity="0" d="M${r1(22 + 12.6 * s)} ${r1(38 + 11.6 * s)}l.5 1.3 1.3 .5 -1.3 .5 -.5 1.3 -.5 -1.3 -1.3 -.5 1.3 -.5z" fill="#FFFFFF"/>`
+    inner = `<g class="bcs-breath">${px(BCS_GENE_BUST, 22, 38, s)}<rect x="${r1(22 + 13 * s)}" y="${r1(38 + 13 * s)}" width=".9" height=".9" fill="#D7262C"/><rect x="${r1(22 + 19 * s)}" y="${r1(38 + 13 * s)}" width=".9" height=".9" fill="#FFD23F"/><g class="bcs-gblk" opacity="0">${lid}</g>${glint}</g>`
   } else {
     const lids = SAUL_EYES.map(([ex, ey]) => `<rect x="${r1(18 + ex * s)}" y="${r1(38 + ey * s)}" width="${s}" height="${s}" fill="#E79E73"/>`).join('')
     inner = `<g class="bcs-breath">${px(BCS_SAUL_BUST, 18, 38, s)}<g class="bcs-blk" opacity="0">${lids}</g></g>`

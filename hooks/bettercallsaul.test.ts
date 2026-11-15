@@ -522,9 +522,10 @@ test('trigger words: found as whole words, only in these skins, the prompt uncha
   const res = (await $.prompt.submit({ text: 'chicanery', cursor: 0 } as never)) as { text?: string }
   expect(String(res?.text ?? 'chicanery')).toBe('chicanery')
   const b = await bandAt($, 1250)
+  // The bar hearing (bettercallsaul-court.ts): the trap, the break, the title card. 1216 / 1261 is the `1216` egg's.
   expect(b).toContain('I AM NOT CRAZY!')
-  expect(b).toContain('1216')
-  expect(b).toContain('1261')
+  expect(b).toContain('Check your coat pocket')
+  expect(b).toContain('CHICANERY')
   await $.prompt.submit({ text: 'namaste', cursor: 0 } as never)
   expect(await bandAt($, 1250)).toContain('NAMASTE.')
   await $.prompt.submit({ text: 'ding', cursor: 0 } as never)

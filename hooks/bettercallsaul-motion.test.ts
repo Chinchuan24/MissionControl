@@ -8,6 +8,7 @@ import { BUDGET, audit, chars } from './stage/budget'
 import { MIN } from './stage/director'
 import { BCS_CSS, STATUE, bcsFigure, statueAt } from './bettercallsaul'
 import { EGG_MS, HEAD, ding, namaste, rant, saul3d } from './bettercallsaul-motion'
+import { chicaneryBand } from './bettercallsaul-court'
 import type { EggOut } from './bettercallsaul-motion'
 import { EGG_PLAYS, fxOf } from './bettercallsaul-fx'
 import { GUS, bcsDirector, carPlan, gus, gusPlan, lalooPlan } from './bettercallsaul-extra'
@@ -20,7 +21,7 @@ const ALL = (gene: boolean, W = 1250): [string, EggOut][] => [
   ['saul3d', saul3d({ W, H: 134, at: NOW, gene, stage: STAGE })],
   ['namaste', namaste({ W, H: 134, at: NOW, gene, stage: STAGE })],
   ['ding', ding({ W, H: 134, at: NOW, gene, stage: STAGE })],
-  ['chicanery', rant({ W, H: 134, at: NOW, gene, stage: STAGE, kind: 'chicanery' })],
+  ['chicanery', chicaneryBand({ W, H: 134, at: NOW, gene, stage: STAGE })],
   ['1216', rant({ W, H: 134, at: NOW, gene, stage: STAGE, kind: '1216' })],
 ]
 
@@ -45,7 +46,7 @@ test('triggers: 40 ordinary coding prompts fire nothing', () => {
 
 // --- the acts: size, budget, still frame, visible size -------------------------------------------------------------------
 test('eggs: every act is drawn big enough to see, under the band act budget, with a still frame, clean markup (both skins)', () => {
-  const MIN_SIZE: Record<string, [string, number][]> = { saul3d: [['head', 40]], namaste: [['ball', 12], ['car', 36], ['howard', 40]], ding: [['bell', 20], ['hector', 40], ['word', 14]], chicanery: [['chuck', 40], ['bubble', 12], ['number', 14]], '1216': [['number', 20], ['tag', 60]] }
+  const MIN_SIZE: Record<string, [string, number][]> = { saul3d: [['head', 40]], namaste: [['ball', 12], ['car', 36], ['howard', 40]], ding: [['bell', 20], ['hector', 40], ['word', 14]], chicanery: [['chuck', 40], ['jimmy', 40], ['words', 11], ['stamp', 14]], '1216': [['number', 20], ['tag', 60]] }
   for (const gene of [false, true]) {
     for (const [k, out] of ALL(gene)) {
       for (const [part, min] of MIN_SIZE[k] ?? []) expect(out.size[part] ?? 0, `${k} ${part}`).toBeGreaterThanOrEqual(min)
@@ -62,7 +63,8 @@ test('eggs: every act is drawn big enough to see, under the band act budget, wit
     }
   }
   // GENE stays grey: no Saul blue, no ad red or yellow in GENE's acts.
-  for (const [k, out] of ALL(true)) expect(/#(5589D8|D7262C|FFD23F|1B2A5E)/i.test(out.svg), k).toBe(false)
+  // (saul3d's front view shows the bust's own exception once he is round: the two one-pixel lens ads, red and yellow.)
+  for (const [k, out] of ALL(true)) expect(/#(5589D8|D7262C|FFD23F|1B2A5E)/i.test(out.svg.replace(/<rect [^>]*width="1" height="1" fill="#(D7262C|FFD23F)"\/>/g, '')), k).toBe(false)
   // saul3d is a real turn: five head poses (8 views with the mirrored three), not a size pop.
   const s3 = (ALL(false)[0] as [string, EggOut])[1].svg
   expect((s3.match(/<g id="s\w+fv[0-4]">/g) ?? []).length).toBe(5)
@@ -144,7 +146,7 @@ test('director: Gus about every 30-45 min, the car every 8-14 min, Lalo every 20
     expect(n('lalo')).toBeGreaterThan(20)
     expect(n('lalo')).toBeLessThan(73)
     for (let i = 1; i < p.length; i++) expect((p[i] as { startAt: number }).startAt).toBeGreaterThanOrEqual((p[i - 1] as { endAt: number }).endAt)
-    expect(bcsDirector(gene).replays().sort()).toEqual(['car', 'gus', 'lalo'])
+    expect(bcsDirector(gene).replays().sort()).toEqual(['car', 'chicanery', 'gus', 'lalo'])
   }
   expect(carPlan(NOW, false)).toEqual(carPlan(NOW, false))
   expect(gusPlan(NOW, false).on || gusPlan(NOW, false).startAt === 0).toBe(true)
