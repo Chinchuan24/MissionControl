@@ -5,7 +5,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import { audit } from './stage/budget'
 import { overlaps, readouts } from './stage/keep'
-import { FIN_AT, FIN_MS, finPx, finaleAct, gigFinale } from './cyber-fights'
+import { FIN_AT, FIN_MS, FIN_PUSH, finPx, finaleAct, gigFinale } from './cyber-fights'
 import { ACT_MS } from './cyber-motion'
 
 test('samurai finale: the gig covers it, a clean layer in budget at every region, its three poses and the cut-in, a still', () => {
@@ -20,10 +20,15 @@ test('samurai finale: the gig covers it, a clean layer in budget at every region
     expect(a.act.chainKeys()).toEqual(['leap', 'slide', 'fin'])
     // the reduced-motion still: the finisher under the spot
     expect(a.layer).toMatch(/class="[\w-]+-s"><rect[^>]*\/><path[^>]*\/><use href="#[\w-]+fin"/)
+    // The chord's light is a burst off the boards (a radial glow), never the flat amber box it was.
+    expect(a.layer).not.toMatch(/<rect width="[\d.]+" height="[\d.]+" fill="#FFF4C0" opacity="\.35"\/>/)
+    expect(a.layer).toMatch(/<radialGradient id="[\w-]+fl"/)
+    // The camera pushes in on the finisher (a scale of 1.45 about him).
+    expect(a.layer).toContain(`scale(${FIN_PUSH})`)
   }
-  // The rocker stands as tall as the lane allows: 72 px in the classic band's wide stage, 40 in its title row.
-  expect(finPx(78)).toBeGreaterThanOrEqual(70)
-  expect(finPx(46)).toBeGreaterThanOrEqual(39)
+  // The rocker at the hold, pushed in: about 97 px in the classic band's wide stage (was 72), 54 in a 46 px lane (was 40).
+  expect(finPx(78)).toBeGreaterThanOrEqual(90)
+  expect(finPx(46)).toBeGreaterThanOrEqual(50)
   // Drawn from a minute before its start (the band looks a minute ahead), gone after it.
   const gig = 1_000_000
   const t0 = gig + FIN_AT * 1000
