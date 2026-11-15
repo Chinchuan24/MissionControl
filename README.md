@@ -268,6 +268,8 @@ Type a word anywhere in your prompt (any case) while its skin is on.
 
 **They also play by themselves:** daily Invincible and The Boys set pieces, THE AMBUSH, cameos while jobs run, show toasts on job and tool events, and something extra on most skins when context passes 85% and 95%.
 
+**Fights:** every skin's fights and stand-offs pop up by themselves, rotating through the skin's fights. `/missioncontrol fights often` (the default: one every 7-10 min while a job runs, every 15-20 min at rest), `normal` (15-20 min, jobs only), `rare` (30-45 min, jobs only) or `off` (replays only); `/missioncontrol fights` shows the setting, which is saved.
+
 <details>
 <summary>Spoilers: hidden skins</summary>
 <br>

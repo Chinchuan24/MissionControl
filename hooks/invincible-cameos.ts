@@ -62,8 +62,7 @@ export const camBlocked = (startAt: number, endAt: number): boolean => {
   }
   for (const era of [1, 2] as const) {
     for (const t of [startAt, endAt]) {
-      const d = duelPlan(t, era)
-      if (d.on && overlaps(startAt, endAt, d.startAt, d.endAt, CAM_GAP_MS)) return true
+      for (const d of [duelPlan(t, era), duelPlan(t, era, false)]) if (d.on && overlaps(startAt, endAt, d.startAt, d.endAt, CAM_GAP_MS)) return true
       const s = showdownPlan(t, era)
       if (overlaps(startAt, endAt, s.startAt, s.endAt, CAM_GAP_MS)) return true
     }

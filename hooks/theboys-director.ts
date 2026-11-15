@@ -12,7 +12,7 @@
 //   scheduled starts within 10 s of one. Every bit with a replay name is offered by `/missioncontrol play` (theboys-show.ts).
 // The previous scheduler (one hand-rolled function per stream) is kept below as `V1` for one release: the tests compare the
 // hit counts per simulated day.
-import { Director, cadence, localOffsetMs } from './stage/director'
+import { Director, cadence, fightLevel, localOffsetMs } from './stage/director'
 import type { Slot as DSlot } from './stage/director'
 import { unit } from './theboys'
 import type { Mode } from './theboys'
@@ -47,6 +47,8 @@ export const CHOREOS = ['a', 'b', 'c'] as const
 /** The AMBUSH lane's turns: the three choreographies, then the look's fight (`fight` stands for it until a look draws it). */
 export const TAKEOVERS = ['ambush-a', 'ambush-b', 'ambush-c', 'fight'] as const
 export const FIGHT_ID = 'fight'
+/** The fight lane's turns (wave 4): a look with two fights (ON BRAND) plays them in turn, never one twice in a row. */
+export const FIGHT_TURNS = ['fight-0', 'fight-1'] as const
 /** Roamers: [4, 8] min gives 6-min slots with the hit in each slot's first 2 min (cadence: slot = mean, jitter = half the spread). */
 export const ROAM_GAP: [number, number] = [4, 8]
 export const ROAM_SLOT_MS = cadence(ROAM_GAP).slotMs
@@ -82,6 +84,11 @@ export const buildDirector = (o: { june?: boolean; dayOffsetMs?: number } = {}):
     dir.lane(`p-${id}`, { daily: [p.from, p.to], ...(p.kind === 'teaser' ? { breathMs: TEASER_GAP_MS } : {}) })
     dir.add(`p-${id}`, { id, ms: actMs(p.kind), ...(p.book ? {} : { replay: p.kind }) })
   })
+  // Wave 4: the look's fight in its own lane, as often as the fight level says (stage/director.ts; `often` by default), under
+  // the day's set pieces and over the AMBUSH and the roamers: one act at a time. Two turns, so ON BRAND rotates its two fights.
+  // At `rare` the lane rests: THE AMBUSH's fight turn (one slot in four) is the old rule; at `off` that turn draws nothing.
+  dir.lane('fight', { gap: 'fight', pick: 'turns', breathMs: 20_000, fight: true, fightLevels: ['often', 'normal'] })
+  for (const id of FIGHT_TURNS) dir.add('fight', { id, ms: AMBUSH_MS })
   dir.lane('ambush', { gap: 'rare', when: 'working', pick: 'turns' })
   for (const id of TAKEOVERS) dir.add('ambush', { id, ms: AMBUSH_MS, ...(id === FIGHT_ID ? {} : { replay: id }) })
   dir.lane('roam', { gap: ROAM_GAP, chance: ROAM_CHANCE })
@@ -119,7 +126,7 @@ const ambOnly = (): Director => {
   }
   return AMB_ONLY
 }
-const srcOf = (lane: string, id = ''): Slot['src'] => (lane === 'ambush' ? (id === FIGHT_ID ? 'fight' : 'ambush') : lane.startsWith('p-') ? 'piece' : 'roamer')
+const srcOf = (lane: string, id = ''): Slot['src'] => (lane === 'fight' ? 'fight' : lane === 'ambush' ? (id === FIGHT_ID ? 'fight' : 'ambush') : lane.startsWith('p-') ? 'piece' : 'roamer')
 /** A director slot as the Boys' `Slot`. */
 export const toSlot = (s: DSlot): Slot => ({ kind: kindOf(s.id), startAt: s.startAt, endAt: s.endAt, src: srcOf(s.lane, s.id), ...(s.id === 'walk2' ? { book: true } : {}) })
 /** The fight a shared slot plays in a look (theboys-fights `fightFor`; ON BRAND alternates by the fight's number). */
@@ -127,7 +134,8 @@ export const fightOf = (startAt: number, mode: Mode): string => fightFor(mode, M
 /** A director slot as drawn in a look: a fight slot becomes that look's fight, with its own length. */
 const inLook = (s: Slot, mode: Mode): Slot => {
   if (s.src !== 'fight') return s
-  const kind = fightOf(s.startAt, mode)
+  const turn = /^fight-(\d)$/.exec(s.kind)
+  const kind = turn ? fightFor(mode, Number(turn[1])) : fightOf(s.startAt, mode)
   return { ...s, kind, endAt: s.startAt + actMs(kind) }
 }
 /** What a look shows of a slot: NOIR draws no set pieces, and only OFF BOOK draws the 2nd WALK. */
@@ -175,7 +183,8 @@ export const stageAt = (at: number, o: StageArgs): Slot | undefined => {
   if (fx && at >= fx.at - 1000 && at < fx.at + actMs(fx.kind)) return { kind: fx.kind, startAt: fx.at, endAt: fx.at + actMs(fx.kind), src: 'fx' }
   if (o.swapAt !== undefined && o.swapAt > 0 && at >= o.swapAt - 1000 && at < o.swapAt + 2_700) return undefined
   const held = fx ? [{ startAt: fx.at, endAt: fx.at + actMs(fx.kind), id: fx.kind }] : []
-  const s = directorAt(at).plan(at - LONG(), at + AHEAD_MS + 1, { working: o.working === true, held }).find(x => shows(x, o.mode) && at < x.endAt && x.startAt <= at + AHEAD_MS)
+  const off = fightLevel() === 'off'
+  const s = directorAt(at).plan(at - LONG(), at + AHEAD_MS + 1, { working: o.working === true, held }).find(x => shows(x, o.mode) && !(off && x.lane === 'ambush' && x.id === FIGHT_ID) && at < x.endAt && x.startAt <= at + AHEAD_MS)
   return s ? inLook(toSlot(s), o.mode) : undefined
 }
 

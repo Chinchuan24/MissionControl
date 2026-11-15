@@ -97,6 +97,9 @@ for (const skin of ['mentalist', 'breaking-bad', 'better-call-saul', 'invincible
     test(`secrets: ${skin} band and pane at ${ctx / 10_000}% context, all badges locked`, async ($, on) => {
       setup(on, ctx)
       await $.session.start({ source: 'startup', cwd: '/repo', surface: 'desktop', isInteractive: true } as never)
+      // These tests pin the fight schedule the test computes (stage/director.ts's own default, the crew's old 30-45 min rule): the
+      // plugin's setting defaults to `often` (fight-level.test.ts tests that).
+      await $.command.run({ command: 'missioncontrol', args: 'fights rare' } as never)
       await $.command.run({ command: 'skin', args: skin } as never)
       await $.prompt.submit({ text: 'Fix it', cursor: 0 } as never)
       const all = [...(await svgs($, 'AbovePrompt')), ...(await svgs($, 'Pane'))].join('\n')

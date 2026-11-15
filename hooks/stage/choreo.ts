@@ -384,13 +384,13 @@ export class Fight {
 }
 
 /**
- * The fight lane of a skin's director: at most one fight per 30-45 min (the crew's rule), only while a job works, the
- * fights in turns, each with a `/missioncontrol play <replay>` name. Add the lane where it ranks (lanes added before it
- * beat it). Returns the director.
+ * The fight lane of a skin's director: as often as the fight level says (director.ts `fightLevel`: by default a fight every
+ * 7-10 min while a job works, 15-20 min at rest), the fights in turns (a skin with several rotates), each with a
+ * `/missioncontrol play <replay>` name. Add the lane where it ranks (lanes added before it beat it). Returns the director.
  */
 export const fightLane = (dir: Director, fights: { id: string; ms: number; replay?: string }[], o: { when?: When; lane?: string } = {}): Director => {
   const lane = o.lane ?? 'fight'
-  dir.lane(lane, { gap: 'fight', when: o.when ?? 'working', pick: 'turns', breathMs: 20_000 })
+  dir.lane(lane, { gap: 'fight', when: o.when ?? 'working', pick: 'turns', breathMs: 20_000, fight: true })
   for (const f of fights) dir.add(lane, { id: f.id, ms: f.ms, replay: f.replay ?? f.id })
   return dir
 }

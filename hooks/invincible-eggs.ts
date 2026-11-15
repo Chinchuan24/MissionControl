@@ -10,7 +10,7 @@ import { fightLane } from './stage/choreo'
 import { FrameBank } from './stage/frames'
 import type { Sprite } from './cast'
 import * as MS from './invincible-motion-sprites'
-import { Director, cadence } from './stage/director'
+import { Director, cadence, fightGap, fightKey } from './stage/director'
 import type { Slot } from './stage/director'
 import { thinkMark } from './invincible'
 import type { Era } from './invincible'
@@ -47,7 +47,8 @@ export const VARIANTS_MS = 8_000
 export const fightDirector = (era: Era): Director => FIGHT_DIRS[era]
 const mkDir = (era: Era): Director => fightLane(new Director(era === 2 ? 'inv-fight-2' : 'inv-fight'), VERSIONS.flatMap((name, i) => [{ id: `inv-fight-${i}`, ms: DUEL_MS, replay: name }, ...(era === 2 ? [{ id: CQ_BITS[i] as string, ms: CQ_DUEL_MS, replay: CONQUEST_PLAY }] : [])]))
 const FIGHT_DIRS: Record<Era, Director> = { 1: mkDir(1), 2: mkDir(2) }
-const FIGHT_SLOT = cadence('fight').slotMs
+/** THE FIGHT's slot length now: the fight level's gap (stage/director.ts), working or at rest; undefined when none plays then. */
+const fightSlot = (working: boolean): number | undefined => { const g = fightGap(working); return g ? cadence(g).slotMs : undefined }
 const DUELS = new Map<string, { on: boolean; startAt: number; endAt: number; bucket: number; v: Version }>()
 /** The version a director bit (or a replay name) plays. */
 export const versionOf = (id: string): Version => {
@@ -55,16 +56,21 @@ export const versionOf = (id: string): Version => {
   const i = VERSIONS.indexOf(id as (typeof VERSIONS)[number])
   return (i >= 0 ? i : Math.max(0, Math.min(2, Number(id.slice(-1)) || 0))) as Version
 }
-/** THE FIGHT's slot holding `at` (one per 30-45 min, working only): its start, end and version. Pure: same at, same plan. */
-export const duelPlan = (at: any, era: any) => {
+/**
+ * THE FIGHT's slot holding `at` (as often as the fight level says: working, or at rest): its start, end and version. Pure:
+ * same at, same level, same plan. At rest only `often` plays one (a 15-20 min series of its own).
+ */
+export const duelPlan = (at: any, era: any, working = true) => {
   const e: Era = era === 2 ? 2 : 1
-  const n = Math.floor(at / FIGHT_SLOT)
-  const key = `${e}|${n}`
+  const S = fightSlot(working)
+  if (S === undefined) return { on: false, startAt: at as number, endAt: at as number, bucket: 0, v: 0 as Version }
+  const n = Math.floor(at / S)
+  const key = `${e}|${fightKey()}|${working ? 1 : 0}|${n}`
   const hit = DUELS.get(key)
   if (hit) return hit
-  const s: Slot | undefined = FIGHT_DIRS[e].plan(n * FIGHT_SLOT, (n + 1) * FIGHT_SLOT, { working: true })[0]
+  const s: Slot | undefined = FIGHT_DIRS[e].plan(n * S, (n + 1) * S, { working })[0]
   const v = s ? versionOf(s.id) : (0 as Version)
-  const p = s ? { on: true, startAt: s.startAt, endAt: s.startAt + duelMs(v), bucket: n, v } : { on: false, startAt: n * FIGHT_SLOT, endAt: n * FIGHT_SLOT, bucket: n, v }
+  const p = s ? { on: true, startAt: s.startAt, endAt: s.startAt + duelMs(v), bucket: n, v } : { on: false, startAt: n * S, endAt: n * S, bucket: n, v }
   if (DUELS.size > 400) DUELS.clear()
   DUELS.set(key, p)
   return p
@@ -90,7 +96,8 @@ export const variantsBlocked = (startAt: number, endAt: number): boolean => {
   for (const era of [1, 2] as const) {
     for (const t of [startAt, endAt]) {
       const d = duelPlan(t, era)
-      if ((d.on && near(d)) || near(showdownPlan(t, era))) return true
+      const r = duelPlan(t, era, false)
+      if ((d.on && near(d)) || (r.on && near(r)) || near(showdownPlan(t, era))) return true
     }
   }
   return false
@@ -274,9 +281,8 @@ export const fightOf = (at: number, era: Era, working: boolean | undefined, fx?:
   const rv = Number(rp?.[1] ?? 0) as Version
   // MARK VS CONQUEST is the new suit's: in the classic suit (a swap mid-fight, a stale replay) it never draws.
   if (fx && rp && liveAt(fx.at, at, timing(rv).ms + 600)) return rv === CONQUEST && era !== 2 ? undefined : { startAt: fx.at, v: rv }
-  if (!working) return undefined
   if (liveAt(swapAt, at, SWAP_MS + 500) || (fx && liveAt(fx.at, at, fx.kind === 'think' ? THINK_MS : fx.kind === 'showdown' ? SHOWDOWN_MS : fx.kind === 'variants' ? VARIANTS_MS : 0))) return undefined
-  const p = duelPlan(at, era)
+  const p = duelPlan(at, era, working === true)
   if (!due(p, at)) return undefined
   if (showdownPlan(at, era).startAt < p.endAt + 5000 && showdownPlan(at, era).endAt > p.startAt - 5000) return undefined
   const v = variantsPlan(p.startAt)

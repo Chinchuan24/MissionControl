@@ -38,6 +38,36 @@ export const RARITY = {
 export type Rarity = keyof typeof RARITY
 const gapOf = (g: Rarity | Gap): Gap => (typeof g === 'string' ? [...RARITY[g]] : g)
 
+// ---------------------------------------------------------------- how often the fights play (Chin's setting, wave 4)
+/**
+ * `/missioncontrol fights often | normal | rare | off` (saved in the store). Every FIGHT lane (`fightLane`, `fight: true`)
+ * follows it at query time, in every skin: `often` (the default) a fight every 7-10 min while a job works and every 15-20 min
+ * at rest; `normal` 15-20 min, working only; `rare` the old 30-45 min, working only; `off` none by itself (replays still play).
+ * Roamers and set pieces keep their own lanes. A fight lane picks its fights in turns, so a skin with several rotates.
+ */
+export type FightLevel = 'often' | 'normal' | 'rare' | 'off'
+export const FIGHT_LEVELS: readonly FightLevel[] = ['often', 'normal', 'rare', 'off']
+/** Each level's gaps in minutes: while a job works, and at rest (none: the fights wait for a job). */
+export const FIGHT_GAPS: Record<FightLevel, { work?: Gap; idle?: Gap }> = { often: { work: [7, 10], idle: [15, 20] }, normal: { work: [15, 20] }, rare: { work: [30, 45] }, off: {} }
+// The engine's own default is the crew's old rule (`rare`): a director asked outside the plugin (a skin's unit test, a tool)
+// keeps the 30-45 min cadence. The PLUGIN's default is `often` (Chin's call): register.tsx sets the level at every session start
+// from the store, `often` when nothing is saved (`cleanFightLevel`).
+let LEVEL: FightLevel = 'rare'
+/** The fight level now (module state: the plugin sets it from the store at start and on the command). */
+export const fightLevel = (): FightLevel => LEVEL
+export const setFightLevel = (l: FightLevel): void => { LEVEL = l }
+/** A stored or typed value as a level (anything else: the default, `often`). */
+export const cleanFightLevel = (v: unknown): FightLevel => (FIGHT_LEVELS.includes(String(v).toLowerCase() as FightLevel) ? (String(v).toLowerCase() as FightLevel) : 'often')
+let JOB_AT: number | undefined
+/** A job's first moments belong to its own job-start acts (a slate, the Sandevistan, the dive): at `often` and `normal` no fight
+ *  starts from 5 s before a job's start to 90 s after it. The plugin tells the engine when a job starts. */
+export const JOB_BREATH_MS = 90_000
+export const setJobStart = (at: number | undefined): void => { JOB_AT = at }
+/** What a cached fight plan depends on besides the clock (the level, the job's start): part of a cache key. */
+export const fightKey = (): string => `${LEVEL}|${LEVEL === 'often' || LEVEL === 'normal' ? JOB_AT ?? '' : ''}`
+/** The gap a fight lane uses now, working or at rest (undefined: no fight then). */
+export const fightGap = (working: boolean, level: FightLevel = LEVEL): Gap | undefined => (working ? FIGHT_GAPS[level].work : FIGHT_GAPS[level].idle)
+
 /**
  * A lane's slot geometry for a gap: slots of the mean length, each hit at a seeded moment in the first `jitter` of its slot.
  * Two hits of one lane are then never closer than the shortest gap, nor further apart than the longest (at chance 1).
@@ -89,6 +119,10 @@ export type LaneOpts = {
   daily?: [number, number]
   /** Breath after this lane's act (and before), during which nothing else starts. Default the director's. */
   breathMs?: number
+  /** A fight lane: its gap and its hours follow the fight level (`fightGap`), not `gap` / `when`. */
+  fight?: boolean
+  /** A fight lane that plays only at these levels (The Boys' own lane: at `rare` its AMBUSH turn keeps the old rule). */
+  fightLevels?: FightLevel[]
 }
 export type Slot = { lane: string; id: string; startAt: number; endAt: number; src: 'lane' | 'daily' | 'held' | 'replay' }
 export type Ctx = {
@@ -134,10 +168,22 @@ export class Director {
     return undefined
   }
 
+  /**
+   * A lane's slot geometry. A fight lane's follows the fight level and the job: its working and its resting slots are two
+   * seeded series (a lane with no gap at rest has no slots then).
+   */
+  private geo(l: Lane, working: boolean): { slotMs: number; jitterMs: number; tag: string } | undefined {
+    if (!l.o.fight) return { slotMs: l.slotMs, jitterMs: l.jitterMs, tag: '' }
+    if (l.o.fightLevels && !l.o.fightLevels.includes(LEVEL)) return undefined
+    const g = fightGap(working)
+    return g ? { ...cadence(g), tag: working ? '' : 'i' } : undefined
+  }
   /** The raw candidate of lane `l` in slot `n` (chance and pick applied; no context, no conflicts). */
-  private raw(l: Lane, n: number): Slot | undefined {
+  private raw(l: Lane, n: number, working = true): Slot | undefined {
     if (!l.bits.length) return undefined
-    const s = `${this.seed}|${l.name}|${n}`
+    const g = this.geo(l, working)
+    if (!g) return undefined
+    const s = `${this.seed}|${l.name}|${g.tag}${n}`
     if (u01(`${s}|on`) >= (l.o.chance ?? 1)) return undefined
     let bit = l.bits[0] as Bit
     if (l.o.pick === 'turns') bit = l.bits[((n % l.bits.length) + l.bits.length) % l.bits.length] as Bit
@@ -151,15 +197,17 @@ export class Director {
       const [h0, h1] = l.o.daily
       const off = this.o.dayOffsetMs ?? 0
       startAt = n * DAY - off + Math.floor((h0 + u01(`${s}|t`) * Math.max(0, h1 - h0)) * 3_600_000)
-    } else startAt = n * l.slotMs + Math.floor(u01(`${s}|t`) * l.jitterMs)
+    } else startAt = n * g.slotMs + Math.floor(u01(`${s}|t`) * g.jitterMs)
     return { lane: l.name, id: bit.id, startAt, endAt: startAt + bit.ms, src: l.o.daily ? 'daily' : 'lane' }
   }
-  private slotIndex(l: Lane, t: number): number { return Math.floor((t + (l.o.daily ? (this.o.dayOffsetMs ?? 0) : 0)) / l.slotMs) }
-  /** Raw candidates of lane `l` whose slot could touch [t0, t1]. */
-  private rawIn(l: Lane, t0: number, t1: number): Slot[] {
+  private slotIndex(l: Lane, t: number, slotMs: number): number { return Math.floor((t + (l.o.daily ? (this.o.dayOffsetMs ?? 0) : 0)) / slotMs) }
+  /** Raw candidates of lane `l` whose slot could touch [t0, t1] (a fight lane: in the working or the resting series). */
+  private rawIn(l: Lane, t0: number, t1: number, working = true): Slot[] {
     const out: Slot[] = []
-    const pad = Math.max(...l.bits.map(b => b.ms), 0) + l.breathMs + l.slotMs
-    for (let n = this.slotIndex(l, t0 - pad); n <= this.slotIndex(l, t1 + pad); n++) { const c = this.raw(l, n); if (c) out.push(c) }
+    const g = this.geo(l, working)
+    if (!g || !l.bits.length) return out
+    const pad = Math.max(...l.bits.map(b => b.ms), 0) + l.breathMs + g.slotMs
+    for (let n = this.slotIndex(l, t0 - pad, g.slotMs); n <= this.slotIndex(l, t1 + pad, g.slotMs); n++) { const c = this.raw(l, n, working); if (c) out.push(c) }
     return out
   }
   /** Does a higher lane (index < i) or a held window claim the time of `c`? (Raw candidates: stable whatever the context.) */
@@ -169,11 +217,12 @@ export class Director {
     for (let j = 0; j < i; j++) {
       const hi = this.lanes[j] as Lane
       const gap = Math.max(l.breathMs, hi.breathMs)
-      if (this.rawIn(hi, c.startAt - gap, c.endAt + gap).some(h => near(c, h, gap))) return true
+      if (this.rawIn(hi, c.startAt - gap, c.endAt + gap, ctx.working === true || !hi.o.fight).some(h => near(c, h, gap))) return true
     }
     return false
   }
   private allowed(l: Lane, ctx: Ctx): boolean {
+    if (l.o.fight) return fightGap(ctx.working === true) !== undefined && (!l.o.fightLevels || l.o.fightLevels.includes(LEVEL))
     const w = l.o.when ?? 'any'
     return w === 'any' || (w === 'working' ? ctx.working === true : ctx.working !== true)
   }
@@ -182,9 +231,12 @@ export class Director {
   plan(t0: number, t1: number, ctx: Ctx = {}): Slot[] {
     if (ctx.quiet) return []
     const out: Slot[] = []
+    // At the frequent levels a fight lane also keeps out of a job's first moments (its job-start act).
+    const jobHeld = JOB_AT !== undefined && (LEVEL === 'often' || LEVEL === 'normal') ? { ...ctx, held: [...(ctx.held ?? []), { startAt: JOB_AT - 5_000, endAt: JOB_AT + JOB_BREATH_MS }] } : ctx
     this.lanes.forEach((l, i) => {
       if (!this.allowed(l, ctx)) return
-      for (const c of this.rawIn(l, t0, t1)) if (c.startAt >= t0 && c.startAt < t1 && !this.beaten(c, i, ctx)) out.push(c)
+      const c2 = l.o.fight ? jobHeld : ctx
+      for (const c of this.rawIn(l, t0, t1, ctx.working === true || !l.o.fight)) if (c.startAt >= t0 && c.startAt < t1 && !this.beaten(c, i, c2)) out.push(c)
     })
     return out.sort((a, b) => a.startAt - b.startAt)
   }

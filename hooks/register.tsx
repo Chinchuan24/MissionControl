@@ -52,6 +52,8 @@ import { LIVE_N, glide, isNewReading, isSame, liveText, liveWidth, pin, sentLeng
 import { COLOR_RE, FONT_BAD_RE, ID_RE, TOOL_KEY_RE, contrast, skinCheck, skinNew } from './skinkit'
 import { WARM_PROMPT, WARM_TAG, isWarmDue, isWarmed, warmCall, warmLimitHit } from './warm'
 import type { BandStage } from './stage/keep'
+import { FIGHT_LEVELS, cleanFightLevel, fightLevel, setFightLevel, setJobStart } from './stage/director'
+import type { FightLevel } from './stage/director'
 import { switchFlavour } from './switch-flavours'
 import { BLANK_PICK, BLANK_SPEND, SPEND_KINDS, TODAY_PERIOD, exportSpend, isRescanDue, loadSpend, logSpendDay, monthLabel, monthOf, cleanDays, combineDays, monthsWithData, parseSpendArgs, pickSpendKind, pickSpendMonth, readSpend, setSpendPeriod, shiftMonth, spendCard, typeSpendDay } from './spend'
 import type { SpendDirs, SpendIo, SpendKind, SpendRecord } from './spend'
@@ -2110,6 +2112,8 @@ const boysUnpack = (v: string): { mode: 'brand' | 'book'; since: number } => {
 let BOYS_MODE: { mode: 'brand' | 'book'; since: number } = { mode: 'brand', since: 0 }
 // When SOLID GOLD was put on or taken off (its own transition), 0 after a restart.
 let BOYS_GOLD_SINCE = 0
+/** What each fight level means, in the command's answer. */
+const FIGHT_SAID: Record<FightLevel, string> = { often: 'a fight every 7-10 min while a job runs, every 15-20 min at rest', normal: 'a fight every 15-20 min while a job runs', rare: 'a fight every 30-45 min while a job runs', off: 'none by themselves; /missioncontrol play <name> still replays one' }
 // The Boys' spoiler setting (`boysSpoilers`, OFF by default): the finale and death eggs act only while it is on.
 let BOYS_SPOILERS = false
 const isBoys = (): boolean => SKIN.id === 'the-boys' || SKIN.id === 'solidgold' || SKIN.id === 'noir'
@@ -7418,6 +7422,8 @@ async function startJob($: EngineInterface, asked: string): Promise<void> {
         ids: [...new Set([...(prev.carried?.ids ?? []), ...before.map(a => a.id)])].slice(-50),
       }
     : undefined
+  // The engine keeps the frequent fights out of a job's first moments (its job-start act plays then).
+  setJobStart(at)
   await update($, manager, () => ({
     task: clip(asked.replace(/\s+/g, ' '), 300),
     isWorking: true,
@@ -7853,6 +7859,7 @@ export const register: Register = (on, options) => {
     BOYS_MODE = { mode: (await $.store.get('boysMode').catch(() => undefined)) === 'book' ? 'book' : 'brand', since: 0 }
     BOYS_GOLD_SINCE = 0
     BOYS_SPOILERS = (await $.store.get('boysSpoilers').catch(() => undefined)) === true
+    setFightLevel(cleanFightLevel(await $.store.get('fightLevel').catch(() => undefined)))
     await update($, boysModeAtom, () => `${BOYS_MODE.mode}|0`)
     const savedCal = await $.store.get('calMode').catch(() => undefined)
     CAL_MODE = { mode: savedCal === 'dark' || savedCal === 'light' ? savedCal : 'auto', since: 0 }
@@ -7952,6 +7959,20 @@ export const register: Register = (on, options) => {
       if (!spoil[1]) return { text: `The Boys' spoilers are ${BOYS_SPOILERS ? 'on' : 'off'}. Use /missioncontrol spoilers on or off.` }
       await setFlag($, 'boysSpoilers', spoil[1].toLowerCase() === 'on')
       return { text: BOYS_SPOILERS ? 'Spoilers on: The Boys’ finale eggs can play (S5).' : 'Spoilers off: no finale or death eggs.' }
+    }
+    // `/missioncontrol fights often|normal|rare|off`: how often the fights (and stand-offs) play by themselves, in every skin
+    // (stage/director.ts: every fight lane follows it). Saved in the store; `often` by default. Replays play at every level.
+    const fights = /^fights?(?:\s+(\S+))?\s*$/i.exec((e.args ?? '').trim())
+    if (fights) {
+      if (!fights[1]) return { text: `Fights: ${fightLevel()} (${FIGHT_SAID[fightLevel()]}). Use /missioncontrol fights often, normal, rare or off.` }
+      const level = fights[1].toLowerCase() as FightLevel
+      if (!FIGHT_LEVELS.includes(level)) return { text: `"${fights[1].slice(0, 20)}" is not a level. Pick one: often, normal, rare or off.` }
+      setFightLevel(level)
+      await $.store.set('fightLevel', level).catch(() => undefined)
+      const at = await $.clock.now().catch(() => Date.now())
+      await update($, bandTick, () => at)
+      await update($, paneTick, () => at)
+      return { text: `Fights: ${level} (${FIGHT_SAID[level]}).` }
     }
     // Unlisted on purpose: `/missioncontrol play <name>` replays one of the worn skin's acts now (no help text names it). The shared
     // registry first (stage/replay.ts: every skin's fights), then The Boys' and Invincible's own lists.
