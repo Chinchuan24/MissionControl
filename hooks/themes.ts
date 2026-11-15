@@ -17,10 +17,11 @@ import type { BandStage } from './stage/keep'
 
 import {
   BATCH_TOAST, BB_CSS, BB_GREETING, BB_BOOT, BB_TITLE_WORDS, BB_TOOLS, EMPIRE_BADGES, EMPIRE_WORDS, HEIS_BOOT, HEIS_GREETING,
-  BB_WARNING, crystalGlints, empireRankOf, bbEpisodeAt, yeahScience,
+  BB_WARNING, crystalGlints, empireRankOf, bbEpisodeAt,
 } from './breakingbad'
 import { jesseRoamer, jesseCameo } from './breakingbad-jesse'
-import { BAND_H, bbChip, bbFoot, bbHead, bbPip, classroomCard, crewPx, empireToast, onAirAlt, onAirCard, periodicCard, purityGauge, sansW, walt } from './breakingbad-cards'
+import { BAND_H, bbChip, bbFoot, bbHead, bbPip, brba, classroomCard, crewPx, empireToast, onAirAlt, onAirCard, periodicCard, purityGauge, sansW, walt } from './breakingbad-cards'
+import { BB_SWITCH, HEIS_SWITCH, bbBand, bbBusy, bbPane, bbTick, crystalGauge, hatLogo, heisFlip, liveBust } from './breakingbad-motion'
 import {
   CBI_BADGES, CBI_WORDS, CLOSED_FILES_TOAST, COLD_W, MENT_CSS, MENTALIST_BOOT, MENTALIST_GREETING, MENTALIST_TOOLS, MENTALIST_WORDS, REDJOHN_BOOT, REDJOHN_GREETING, TEA_WARNING,
   cbiRankOf, cbiToast, coldReadCard, coldReads, coldTicker, episodeAt, smiley,
@@ -290,15 +291,36 @@ const bbTheme = (heis: boolean): ThemeEggs => ({
   slim: {
     h: BAND_H,
     sw: sansW,
-    head: (x, y, t, font) => bbHead(x, y, t, font, heis),
-    figure: () => walt(20, 36, 34, 40, heis),
+    // Heisenberg's hat logo is the Blender hat, turning once at the top of each hour; Breaking Bad keeps Br and Ba.
+    head: (x, y, t, font) => {
+      if (!heis) return bbHead(x, y, t, font, false)
+      const logo = hatLogo(x - 1, y)
+      return { svg: logo.svg + brba(x + 26, y - 13.5, t, font, true), w: 62 }
+    },
+    // Walt comes alive: a breath, a blink, a glance at the readouts; the lenses glint when a job is done.
+    figure: ctx => liveBust(live => walt(20, 36, 34, 40, heis, live), heis, { working: Boolean(ctx?.working), party: Boolean(ctx?.party) }),
     crew: (x, y, color) => crewPx(x, y, 1.4, color),
     pip: bbPip,
-    gauge: purityGauge,
+    // PURITY with the blue crystal before it, turning while a job works.
+    gauge: (xr, y, isWorking, done, total, t, font) => crystalGauge(purityGauge(xr, y, isWorking, done, total, t, font), xr, y, isWorking),
     foot: (W, H, t, ctx) => bbFoot(W, H, t, heis, ctx),
   },
   warning: BB_WARNING,
-  cheer: yeahScience,
+  // The cheer is a band act (breakingbad-motion.ts, in `extras`, pinned to the party and kept off the readouts): no stamp here.
+  cheer: () => '',
+  // SAY MY NAME, the Desert Stand-off, the pizza, the cheers (band); the pane's echoes on the CLASSROOM board.
+  extras: o => {
+    const working = Boolean(o.working)
+    if (o.surface === 'band') return bbBand({ W: o.W, H: o.H, at: o.at, working, heis, ...(o.party ? { party: true } : {}), ...(o.partyAt !== undefined ? { partyAt: o.partyAt } : {}), ...(o.stage ? { stage: o.stage } : {}) })
+    return o.card === 'task' ? bbPane({ W: o.W, H: o.H, at: o.at, working, heis }) : ''
+  },
+  tick: (at, working) => bbTick(at, working, heis),
+  switchFlavour: heis ? HEIS_SWITCH : BB_SWITCH,
+  // A busy Breaking Bad pane sits near the drawing's cap (~203 k with three agents; its periodic table is big): a 5.7 k reserve,
+  // the pane echo under 4.7 k, so three agents keep their cards (collapse.test.tsx).
+  paneReserve: 5_700,
+  // The name flips on the episode now and then (Heisenberg only; never over the title).
+  ...(heis ? { epGlitch: heisFlip } : {}),
   // The band keeps to its strongest eggs: the episode, Br and Ba, purity, the chip, the desert, the hat.
   afterimages: crystalGlints,
   cred: { title: 'PERIODIC TABLE', ranks: empireRankOf, words: EMPIRE_WORDS, badges: EMPIRE_BADGES, toast: empireToast, card: (W, c, t, font, frame) => periodicCard(W, c, t, font, frame, heis) },
@@ -313,7 +335,7 @@ const bbTheme = (heis: boolean): ThemeEggs => ({
   words: BB_TITLE_WORDS,
   tools: BB_TOOLS,
   // Jesse roams both panels now and then, and a small cameo takes the place of the takeover.
-  roamer: jesseRoamer(heis),
+  roamer: { ...jesseRoamer(heis), hush: at => bbBusy(at, heis) },
   takeover: (W, H, line, tm) => jesseCameo(W, H, line, tm),
 })
 

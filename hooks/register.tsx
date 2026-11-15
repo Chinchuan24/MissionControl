@@ -7,8 +7,8 @@ import { BREACH_H, BREACH_W, CJK_FONT, EGG_CSS, EGG_TOOLS, EGG_WORDS, GREETING, 
 import type { CyberEgg, Egg, Legend } from './eggs'
 import { PATRICK_JANE_RE, TYGER_RE } from './mentalist'
 import { setMentPlay } from './mentalist-motion'
-import { BB_REVEAL_MS, BB_RIGHT, BB_SKIN_WORDS, BB_TOOLS, SAY_MY_NAME_RE } from './breakingbad'
-import { bbRightLine } from './breakingbad-cards'
+import { BB_RIGHT, BB_SKIN_WORDS, BB_TOOLS, SAY_MY_NAME_RE, WALTER_WHITE_RE } from './breakingbad'
+import { bbPlay, setBbPlay } from './breakingbad-motion'
 import { THEMES, themeKeyOf } from './themes'
 import { SWITCH_CARDS, SWITCH_MS, into as switchInto, sizeOf as svgSizeOf, skinSwitch } from './stage/wipe'
 import { playsFrom, playsOf, registerPlay, runPlay } from './stage/replay'
@@ -2161,9 +2161,6 @@ playsFrom('invincible', fightDirector(1), s => { INV_FX = { kind: `fight:${versi
 // MARK VS CONQUEST (`/missioncontrol play conquest`): the new suit's fight, so only in the new suit.
 registerPlay('invincible', { name: CONQUEST_PLAY, what: 'MARK VS CONQUEST (new suit)', run: at => { if (INV_ERA.era !== 2) return 'Conquest fights the new suit: say "new suit" first.'; INV_FX = { kind: `fight:${CONQUEST}`, at } } })
 const activeFx = (): { kind: string; at: number } | undefined => (isInv() ? INV_FX : isBoys() ? boysState().fx : BCS_FX)
-// When the phrase turned Breaking Bad into Heisenberg (0: it did not): the band's "You're goddamn right!" is drawn from it for
-// BB_REVEAL_MS, pinned to this time, so a redraw keeps it and it ends on its own. Also kept in the store as bbRevealAt.
-let BB_REVEAL_AT = 0
 // The generic skin switch (stage/wipe.ts): set when the person wears a skin from the picker or `/skin`, pinned to that moment. The
 // band and the top pane cards play a short wipe from the old skin's ground to the new one (well under a second; a 2 px rule under
 // reduced motion). Typed unlocks with a transition of their own (CAPRI, SOLID GOLD, NOIR, the Heisenberg reveal, the era swap) never
@@ -2559,8 +2556,8 @@ async function loadSkins($: EngineInterface): Promise<{ folder: string; loaded: 
 }
 
 function applySkin(k: Skin): void {
-  // The reveal belongs to the unlock; any other switch drops it.
-  if (k.id !== 'heisenberg') BB_REVEAL_AT = 0
+  // SAY MY NAME belongs to the unlock; any other switch drops it (breakingbad-motion.ts draws it from this play).
+  if (k.id !== 'heisenberg' && bbPlay()?.kind === 'name') setBbPlay(undefined)
   // The hidden CAPRICORN id is an alias: Edgerunners 2 in CAPRI mode, the palette of the mode below.
   if (k.id === 'capricorn') k = EDGERUNNERS2_SKIN
   if (k.id === 'edgerunners-2' && ER2.mode === 'capri') {
@@ -6458,8 +6455,6 @@ const slimBandSvg = (OW: number, d: HudData): string => {
   const ax = px + pillW + 12
   const actRoom = Math.max(0, (hasReadouts ? r0 - 18 : W - 14) - ax - 12)
   if (d.activity && actRoom >= 60) s.push(Bd(ax, 54, `› ${fitW(d.activity, 11.5, Math.max(0, actRoom - 14))}`))
-  // Heisenberg's unlock line sits over the activity for a few seconds (and ends itself, so no redraw is needed).
-  if (SKIN.id === 'heisenberg' && BB_REVEAL_AT > 0 && d.at >= BB_REVEAL_AT - 1000 && d.at - BB_REVEAL_AT < BB_REVEAL_MS && actRoom >= 60) s.push(bbRightLine(ax, 54, actRoom, c, FONT, BB_REVEAL_AT))
   if (hasReadouts) {
     s.push(sl?.rule ? sl.rule(r0 - 18, 40, r0 - 18, 76) : `<line x1="${r0 - 18}" y1="40" x2="${r0 - 18}" y2="76" stroke="${c.line}"/>`)
     const ctxTone = d.ctxPct >= 95 ? c.alert : d.ctxPct >= 85 ? c.warn : c.text
@@ -9176,14 +9171,29 @@ export const register: Register = (on, options) => {
         await foundSecret($, found).catch(() => undefined)
       }
     }
-    // The same for "say my name" or "what's my name" typed while wearing Breaking Bad: Heisenberg.
-    if (asked && SKIN.id === 'breaking-bad' && SAY_MY_NAME_RE.test(asked)) {
+    // The way back: "walter white" typed while wearing Heisenberg puts Breaking Bad back on (its own switch plays). Heisenberg's
+    // secret flag stays found. The prompt goes on unchanged.
+    let wentBack = false
+    if (asked && SKIN.id === 'heisenberg' && WALTER_WHITE_RE.test(asked)) {
+      const found = SKINS.get('breaking-bad')
+      if (found) {
+        const from = SKIN
+        applySkin(found)
+        await $.store.set('skin', found.id).catch(() => undefined)
+        await update($, skin, () => found.id)
+        await retitle($).catch(() => undefined)
+        $.ui.toast(THEMES.breakingbad.greeting)
+        await noteSwitch($, from).catch(() => undefined)
+        wentBack = true
+      }
+    }
+    // The same for "say my name" or "what's my name" typed while wearing Breaking Bad: Heisenberg. Every time it is typed there
+    // (found before or not), SAY MY NAME plays on the band and the pane (breakingbad-motion.ts, pinned to now), and the toast.
+    if (asked && !wentBack && SKIN.id === 'breaking-bad' && SAY_MY_NAME_RE.test(asked)) {
       const found = SKINS.get('heisenberg')
       if (found) {
         applySkin(found)
-        // Only here, on the switch the phrase makes: the line on the band (from now, before the redraw) and as a toast.
-        BB_REVEAL_AT = await $.clock.now().catch(() => Date.now())
-        await $.store.set('bbRevealAt', BB_REVEAL_AT).catch(() => undefined)
+        setBbPlay({ kind: 'name', at: await $.clock.now().catch(() => Date.now()) })
         await $.store.set('skin', found.id).catch(() => undefined)
         await update($, skin, () => found.id)
         await retitle($).catch(() => undefined)

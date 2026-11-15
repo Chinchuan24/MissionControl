@@ -10,8 +10,7 @@
 import { BADGES, levelOf, nextOf, veil, xpFor } from './extras'
 import type { Beat, Cred, Frame } from './extras'
 import type { Legend } from './eggs'
-import { BB_RIGHT, BB_REVEAL_MS, BB_TOOLS, ELEMENTS, empireRankOf } from './breakingbad'
-import { pin } from './smooth'
+import { BB_TOOLS, ELEMENTS, empireRankOf } from './breakingbad'
 import { BB_HEIS_BUST, BB_WALT_BUST, spriteMarkup } from './cast'
 import type { Sprite } from './cast'
 
@@ -95,19 +94,20 @@ export const hatPx = (x: number, y: number, w: number, ink: string, cls = '', op
   sprite(x, y, w / 13, HAT, { k: ink, h: ink, g: ink }, `${cls ? ` class="${cls}"` : ''} opacity="${op}"`)
 /**
  * A pixel-art bust (cast.ts's BB_WALT_BUST, or the hat one for Heisenberg), scaled to fit a w by h box
- * at (x, y): crisp pixels, centred, standing on the box's floor. The class `bbbust` marks it.
+ * at (x, y): crisp pixels, centred, standing on the box's floor. The class `bbbust` marks it (its `.bd` breathes: breakingbad-motion).
  */
-export const bustPx = (sp: Sprite, x: number, y: number, w: number, h: number): string => {
+export const bustPx = (sp: Sprite, x: number, y: number, w: number, h: number, live = ''): string => {
   const cols = Math.max(...sp.rows.map(r => r.length))
   const nw = cols * 0.5625
   const nh = sp.rows.length * 0.5625
   const k = Math.min(w / nw, h / nh)
   // spriteMarkup draws at its own 0.5625 pixel inside a nw x nh box; the group scales that up to the slot.
   const inner = spriteMarkup(sp, '#FFFFFF', nw, nh)
-  return `<g class="bbbust" shape-rendering="crispEdges" transform="translate(${r1(x + (w - nw * k) / 2)} ${r1(y + h - nh * k)}) scale(${+k.toFixed(4)})">${inner}</g>`
+  return `<g class="bbbust" shape-rendering="crispEdges" transform="translate(${r1(x + (w - nw * k) / 2)} ${r1(y + h - nh * k)}) scale(${+k.toFixed(4)})">${inner}${live}</g>`
 }
-/** Mr. White's portrait for the band's figure slot (a 34 by 40 box at x 20, y 36); Heisenberg wears the hat. */
-export const walt = (x: number, y: number, w: number, h: number, heis: boolean): string => bustPx(heis ? BB_HEIS_BUST : BB_WALT_BUST, x, y, w, h)
+/** Mr. White's portrait for the band's figure slot (a 34 by 40 box at x 20, y 36); Heisenberg wears the hat. `live`: overlays in
+ *  the bust's own pixel space (breakingbad-motion's blink, glance and glint patches), so they breathe with it (`.bbbust .bd`). */
+export const walt = (x: number, y: number, w: number, h: number, heis: boolean, live = ''): string => bustPx(heis ? BB_HEIS_BUST : BB_WALT_BUST, x, y, w, h, live)
 const CREW = ['..sss..', '.sssss.', '..sss..', '...s...', '.ccccc.', 'ccccccc', 'c.ccc.c', 'c.ccc.c', '..c.c..', '..c.c..']
 export const crewPx = (x: number, y: number, px: number, color: string): string => sprite(x, y, px, CREW, { s: '#D8B89A', c: color })
 const RV = ['.wwwwwwwwwww..', 'wbbwwbbwwwwww.', 'wbbwwbbwwwbbww', 'wwwwwwwwwwwwww', 'gggggggggggggg', '.kk.......kk..']
@@ -517,23 +517,6 @@ export const bbChip = (x: number, y: number, ctxPct: number, theme: CardTheme, f
   const ink = name ? '#1A0807' : '#1A1505'
   const w = Math.round(sansW(label, 9.5, 0.8, true) + 32)
   return { w, svg: `<g class="bbchip"><rect x="${x}" y="${y - 12}" width="${w}" height="16" rx="3" fill="${fill}"/>${hatPx(x + 6, y - 7.5, 14, ink)}<text x="${x + 25}" y="${y}" font-family="${font}" font-size="9.5" font-weight="700" letter-spacing=".8" fill="${ink}">${label}</text></g>` }
-}
-/**
- * The unlock line in the band's activity slot (baseline `y`, `room` px wide): a white tag with a crystal-blue edge, slammed in at
- * `startAt` and gone `BB_REVEAL_MS` later. Both moments are pinned to the clock, so a redraw resumes instead of replaying; an opaque
- * patch under it hides the activity text meanwhile, and the same pinned `set` takes both away. Reduced motion: the same text, still.
- * Empty when even the smallest size does not fit (the toast has said it).
- */
-export const bbRightLine = (x: number, y: number, room: number, theme: CardTheme, font: string, startAt: number): string => {
-  let size = 11.5
-  let w = Math.round(sansW(BB_RIGHT, size, 0.3, true) + 22)
-  while (w > room && size > 9) {
-    size -= 0.5
-    w = Math.round(sansW(BB_RIGHT, size, 0.3, true) + 22)
-  }
-  if (w > room) return ''
-  const ink = '#0A0A0B'
-  return `<g class="bbreveal"><set attributeName="opacity" to="0" begin="${pin(startAt + BB_REVEAL_MS)}" fill="freeze"/><rect x="${x - 3}" y="39" width="${Math.max(w, room) + 3}" height="22" fill="${theme.tile}"/><g class="bbright" style="animation-delay:${pin(startAt)}"><rect x="${x}" y="41" width="${w}" height="18" rx="3" fill="#F4F4F4"/><rect x="${x}" y="41" width="3" height="18" rx="1.5" fill="${BLUE}"/><text x="${x + 11}" y="${y}" font-family="${font}" font-size="${size}" font-weight="800" letter-spacing=".3" fill="${ink}">${esc(BB_RIGHT)}</text></g></g>`
 }
 /** Purity as a small gauge from 96 to 100, with a tick at the famous 99.1; right-aligned at `xr`. */
 export const purityOf = (done: number, total: number): number => +(96.2 + 2.9 * (total > 0 ? clamp(done / total) : 0)).toFixed(1)

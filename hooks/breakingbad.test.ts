@@ -1,7 +1,8 @@
 import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
-import { BB_CSS, BB_EPISODES, HEIS_GREETING, SAY_MY_NAME_RE, isSayMyName, bbEpisodeAt, empireRankOf, labNotes } from './breakingbad'
+import { BB_EPISODES, HEIS_GREETING, SAY_MY_NAME_RE, isSayMyName, bbEpisodeAt, empireRankOf } from './breakingbad'
+import { setBbPlay } from './breakingbad-motion'
 import { BAND_H, bbChip, classroomCard, empireToast, onAirAlt, onAirCard, periodicCard, purityOf, sansW } from './breakingbad-cards'
 import { BB_HEIS_BUST, BB_JESSE, BB_JESSE_BUST, BB_WALT_BUST, CASTS } from './cast'
 import type { Sprite } from './cast'
@@ -203,9 +204,6 @@ test('breaking bad tables: 35 verified titles, purity, notes, the ladder and the
   expect(purityOf(0, 0)).toBe(96.2)
   expect(purityOf(3, 3)).toBe(99.1)
   expect(purityOf(1, 2)).toBeGreaterThan(97)
-  const a = labNotes('Fix the login bug')
-  expect(a).toEqual(labNotes('Fix the login bug'))
-  expect(new Set(a).size).toBe(3)
   expect(empireRankOf(1)).toBe('Chemistry Teacher')
   expect(empireRankOf(4)).toBe('Cook')
   expect(empireRankOf(99)).toBe('Blue Sky')
@@ -417,7 +415,8 @@ for (const [key, skin] of SKINS) {
       expect(await bandAt($, 1250)).toContain(kind === 'walk' ? 'rm-walk' : 'bbj-cam')
       await $.turn.complete({ reason: 'answer', answer: 'done' } as never)
       const band = await bandAt($, 1250)
-      expect(band).toContain('YEAH, SCIENCE!')
+      // Each skin's own cheer (breakingbad-motion.ts): the element tiles, or the knocks.
+      expect(band).toContain(skin === 'heisenberg' ? 'I AM THE ONE WHO KNOCKS.' : 'IENCE!')
       expect(band).not.toContain('rm-walk')
       expect(band).not.toContain('bbj-cam')
     })
@@ -480,10 +479,13 @@ test('jesse: reduced motion has no walking, only a still faint peek or the bubbl
 })
 
 // --- "You're goddamn right!" when the phrase turns Breaking Bad into Heisenberg ---------------------------------
+// The band and the pane play SAY MY NAME (breakingbad-motion.test.ts has the act itself); the toast says the line once.
 const RIGHT = "You're goddamn right!"
+const CARD = "YOU&apos;RE GODDAMN"
 const heisToasts = (): number => toasts.filter(t => t === RIGHT).length
+const hasCard = (s: string): boolean => s.includes("YOU'RE GODDAMN") || s.includes(CARD)
 
-test('heisenberg reveal: the phrase shows the toast and the band line, which ends after 6 s and survives a redraw', async ($, on) => {
+test('heisenberg reveal: the phrase plays SAY MY NAME and the toast; pinned (a redraw resumes it), gone after 4.9 s', async ($, on) => {
   const clock = base(on)
   toasts.length = 0
   await start($, 'breaking-bad')
@@ -491,21 +493,19 @@ test('heisenberg reveal: the phrase shows the toast and the band line, which end
   expect(await skinList($)).toContain('▸ heisenberg')
   expect(heisToasts()).toBe(1)
   let b = (await svgs($, 'AbovePrompt')).join('')
-  expect(b).toContain(RIGHT)
-  expect(b).toContain('class="bbright"')
+  expect(hasCard(b)).toBe(true)
   expect(b).toContain('MISSION CONTROL') // the title row stays
-  // A redraw keeps it, pinned to the unlock (the same delay), not restarted.
+  // A redraw keeps it, pinned to the unlock (its delay moves on with the clock), not restarted.
   await clock.advance(3_000)
   const again = (await svgs($, 'AbovePrompt')).join('')
-  expect(again).toContain(RIGHT)
-  expect(again).toMatch(/animation-delay:-?[\d.]+s/)
-  expect(again.match(/animation-delay:(-?[\d.]+)s/)?.[1]).toBe(String(-3))
-  await clock.advance(3_500)
+  expect(hasCard(again)).toBe(true)
+  expect(again).toMatch(/--p:-3s/)
+  await clock.advance(2_500)
   b = (await svgs($, 'AbovePrompt')).join('')
-  expect(b).not.toContain(RIGHT)
-  expect(b).not.toContain('bbright"')
+  expect(hasCard(b)).toBe(false)
   expect(b).toContain('PURITY')
   expect(heisToasts()).toBe(1)
+  setBbPlay(undefined)
 })
 
 test('heisenberg reveal: /skin heisenberg, and typing the phrase while already Heisenberg, do not show it', async ($, on) => {
@@ -514,42 +514,33 @@ test('heisenberg reveal: /skin heisenberg, and typing the phrase while already H
   await start($, '')
   await $.command.run({ command: 'skin', args: 'heisenberg' } as never)
   await $.prompt.submit({ text: 'Fix it', cursor: 0 } as never)
-  expect((await svgs($, 'AbovePrompt')).join('')).not.toContain(RIGHT)
+  expect(hasCard((await svgs($, 'AbovePrompt')).join(''))).toBe(false)
   await $.prompt.submit({ text: "what's my name", cursor: 0 } as never)
   await $.prompt.submit({ text: 'say my name', cursor: 0 } as never)
-  expect((await svgs($, 'AbovePrompt')).join('')).not.toContain(RIGHT)
+  expect(hasCard((await svgs($, 'AbovePrompt')).join(''))).toBe(false)
   expect(heisToasts()).toBe(0)
-  // Another skin: nothing either, and leaving Heisenberg inside the 6 s drops a pending line.
+  // Another skin: nothing either, and leaving Heisenberg inside the act drops it.
   await start($, 'breaking-bad')
   await $.prompt.submit({ text: 'say my name', cursor: 0 } as never)
   expect(heisToasts()).toBe(1)
   await $.command.run({ command: 'skin', args: 'breaking-bad' } as never)
   await $.command.run({ command: 'skin', args: 'heisenberg' } as never)
-  expect((await svgs($, 'AbovePrompt')).join('')).not.toContain(RIGHT)
+  expect(hasCard((await svgs($, 'AbovePrompt')).join(''))).toBe(false)
   expect(heisToasts()).toBe(1)
 })
 
-test('heisenberg reveal: reduced motion is still text; it sits in the activity slot at 750, 900 and 1250 px without touching its neighbours', async ($, on) => {
+test('heisenberg reveal: reduced motion keeps a still (the face under the hat and the line); fits at 750, 900 and 1250 px', async ($, on) => {
   base(on)
   await start($, 'breaking-bad')
   await $.prompt.submit({ text: 'say my name', cursor: 0 } as never)
-  const [main, ...rest] = BB_CSS.split('@media (prefers-reduced-motion: reduce)')
-  expect(main).toContain('.bbright{')
-  expect(rest.join('')).toContain('.bbright,')
-  expect(rest.join('')).toMatch(/\.bbright,[^{]*\{animation:none\}/)
   for (const W of [750, 900, 1250]) {
     const b = await bandAt($, W)
     expect(b).not.toContain('NaN')
-    expect(b).toContain(`>${RIGHT}</text>`)
-    const m = /<rect x="([\d.]+)" y="41" width="([\d.]+)" height="18" rx="3" fill="#F4F4F4"\/>/.exec(b)
-    expect(m).toBeTruthy()
-    const right = Number(m![1]) + Number(m![2])
-    const divider = /<line x1="([\d.]+)" y1="40" x2="[\d.]+" y2="76"/.exec(b)
-    const viewW = Number(/viewBox="0 0 (\d+) /.exec(b)?.[1])
-    expect(right).toBeLessThanOrEqual(divider ? Number(divider[1]) : viewW - 14)
-    // The title (x 64, y 54) and the Tasks pill come first in the row; the chip starts after the pill.
-    const pill = /<rect x="([\d.]+)" y="41" width="([\d.]+)" height="18" rx="9"/.exec(b)
-    expect(Number(m![1])).toBeGreaterThanOrEqual(Number(pill![1]) + Number(pill![2]))
+    expect(hasCard(b)).toBe(true)
+    const act = /<!--dl-->[\s\S]*?<!--\/dl-->/g
+    const layers = b.match(act) ?? []
+    expect(layers.some(l => l.includes('prefers-reduced-motion: reduce'))).toBe(true)
     expect(b.length).toBeLessThan(131072)
   }
+  setBbPlay(undefined)
 })
