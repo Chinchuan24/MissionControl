@@ -18,7 +18,7 @@ import { Act, r1 } from './stage/timeline'
 import type { Key, Seg } from './stage/timeline'
 import * as fx from './stage/fx'
 import * as light from './stage/light'
-import { keepClip } from './stage/keep'
+import { keepClip, meets, spanOf } from './stage/keep'
 import type { BandStage, Rect } from './stage/keep'
 
 export type EggKind = 'saul3d' | 'namaste' | 'ding' | 'chicanery' | '1216'
@@ -39,6 +39,13 @@ const padTo = (sp: Sprite, h: number): Sprite => (sp.rows.length >= h ? sp : { r
 export const floorOf = (H: number): number => H - 7.5
 /** The act's window: under the header rule (y 34) to the foot, from the left edge to the clear span's end. */
 export const windowOf = (W: number, H: number, stage?: BandStage): Rect => [0, 34, Math.round(Math.max(140, Math.min(W - 14, stage?.x1 ?? W * 0.55))), H - 34]
+/** The band's whole clear span as an act window (stage/keep.ts `spanOf`: each row up to its own first readout) and its keep-out
+ *  (the span's readouts plus each row's right part, as holes). Without a stage: `windowOf`. For an act that wants room. */
+export const wideOf = (W: number, H: number, stage?: BandStage): { win: Rect; keep: BandStage | undefined } => {
+  if (!stage) return { win: windowOf(W, H), keep: undefined }
+  const sp = spanOf(H, stage)
+  return { win: [0, sp.r.y, sp.r.x + sp.r.w, sp.r.h], keep: sp.keep }
+}
 /** The widest free run of x in [a, b] for a row band [y0, y1), around the readouts inside the span. */
 export const freeRun = (stage: BandStage | undefined, a: number, b: number, y0: number, y1: number): [number, number] => {
   const cuts = (stage?.keep ?? []).filter(([, y, , h]) => y < y1 && y + h > y0).map(([x, , ww]) => [x - 6, x + ww + 6] as [number, number]).sort((p, q) => p[0] - q[0])
@@ -146,109 +153,142 @@ export const HCAR: Sprite = {
   pal: { s: '#AEB6BD', w: '#33414F', d: '#6E767C', k: '#15161A' },
 }
 export const NAMASTE = { roll: [0.3, 2.0], hit: 2.0, stop: 0.12 } as const
+/**
+ * namaste on the band's whole clear span: a bowling ball you cannot miss (up to 28 px) rolls the length of the roofline into
+ * Howard's car parked at the far end of the floor's free run, sized to that run (48-80 px): the hit-stop, a flash, the star,
+ * the crack and the dent, glass, a dust cloud; Howard (up to 1.5x) walks round to look. Every piece behind the readouts' holes.
+ */
 export const namaste = (o: EggArgs): EggOut => {
   const { W, H, at, gene, stage } = o
   const act = new Act({ id: `bcs-nm-${gene ? 'g' : 's'}-${W}`, ms: EGG_MS.namaste, at, W, H })
   act.freeze(NAMASTE.hit, NAMASTE.stop) // the hit-stop: everything after the impact waits 0.12 s
-  const win = windowOf(W, H, stage)
+  const { win, keep } = wideOf(W, H, stage)
   const x1 = win[0] + win[2]
   const F = floorOf(H)
-  const csc = x1 >= 260 ? 3 : 2.3
-  const cw = 16 * csc
+  // The floor's free run (the readouts in the bottom rows are holes): the car parks at its far end, sized to it.
+  const [ra, rb] = freeRun(keep, 8, x1 - 4, F - 44, F + 1)
+  const run = rb - ra
+  const cw = Math.round(Math.max(48, Math.min(80, run * 0.36)))
+  const csc = cw / 16
   const ch = 8 * csc
-  const howard = x1 >= 230
-  const carR = x1 - (howard ? 32 : 10)
+  const hsc = Math.max(1, Math.min(1.5, csc / 3.3))
+  const howard = run >= cw + 14 * hsc + 70
+  const carR = rb - (howard ? 14 * hsc + 10 : 4)
   const carX = carR - cw
   act.cast('car', look(HCAR, gene), 0, 8).cast('howard', look(BCS_HOWARD, gene), 0.5)
-  // The ball: deep blue with a swirl and three finger holes; it turns as it rolls.
-  const r = 7
+  // The ball: deep blue with a swirl and three finger holes; it turns as it rolls (drawn at 7, scaled).
+  const r = Math.max(9, Math.min(14, csc * 2.8))
+  const bs = r / 7
   const ballC = gene ? '#2A2A2A' : '#1B2A5E'
   const swirl = gene ? '#5A5A5A' : '#3D5BB0'
-  const ball = `<circle r="${r}" fill="${ballC}" stroke="${gene ? '#BDBDBD' : '#9FC2F0'}" stroke-width=".9"/><path d="M-5 2q3 -6 9 -3" stroke="${swirl}" stroke-width="1.6" fill="none"/><circle cx="-1.6" cy="-2.8" r="1.1" fill="#05070D"/><circle cx="1.6" cy="-3" r="1.1" fill="#05070D"/><circle cx="0" cy="0.2" r="1.2" fill="#05070D"/><ellipse cx="-2.6" cy="-3.8" rx="1.6" ry=".9" fill="#FFFFFF" opacity=".35"/>`
+  const ball = `<g transform="scale(${r1(bs)})"><circle r="7" fill="${ballC}" stroke="${gene ? '#BDBDBD' : '#9FC2F0'}" stroke-width=".7"/><path d="M-5 2q3 -6 9 -3" stroke="${swirl}" stroke-width="1.4" fill="none"/><circle cx="-1.6" cy="-2.8" r="1.1" fill="#05070D"/><circle cx="1.6" cy="-3" r="1.1" fill="#05070D"/><circle cx="0" cy="0.2" r="1.2" fill="#05070D"/><ellipse cx="-2.6" cy="-3.8" rx="1.6" ry=".9" fill="#FFFFFF" opacity=".35"/></g>`
   const by = F - r
   const hitX = carX - r + 3
   const roll = (x0: number, x1b: number): number => ((x1b - x0) / r) * (180 / Math.PI)
   const keys: [number, number, number, number?, string?][] = []
   const [t0, t1] = NAMASTE.roll
+  const x0 = win[0] - r * 2
   for (let i = 0; i <= 6; i++) {
     const u = i / 6
-    const xx = -14 + (hitX + 14) * (0.15 * u + 0.85 * u * u) // gathers pace as it comes (a thrown ball, then the lane)
-    keys.push([t0 + (t1 - t0) * u, xx, by, undefined, `rotate(${Math.round(roll(-14, xx))}deg)`])
+    const xx = x0 + (hitX - x0) * (0.15 * u + 0.85 * u * u) // gathers pace as it comes (a thrown ball, then the lane)
+    keys.push([t0 + (t1 - t0) * u, xx, by, undefined, `rotate(${Math.round(roll(x0, xx))}deg)`])
   }
-  const back = hitX - 18
-  keys.push([NAMASTE.hit + 0.45, back, by, undefined, `rotate(${Math.round(roll(-14, hitX) - roll(back, hitX))}deg)`])
-  keys.push([NAMASTE.hit + 1.0, back - 3, by, undefined, `rotate(${Math.round(roll(-14, hitX) - roll(back - 3, hitX))}deg)`])
-  let body = act.mv(ball, [[0, -14, by, undefined, 'rotate(0deg)'], ...keys])
-  // The car shakes on the hit; the crack and the dent stay.
+  const back = hitX - 2.5 * r
+  keys.push([NAMASTE.hit + 0.45, back, by, undefined, `rotate(${Math.round(roll(x0, hitX) - roll(back, hitX))}deg)`])
+  keys.push([NAMASTE.hit + 1.0, back - 4, by, undefined, `rotate(${Math.round(roll(x0, hitX) - roll(back - 4, hitX))}deg)`])
+  keys.push([act.T, back - 4, by, undefined, `rotate(${Math.round(roll(x0, hitX) - roll(back - 4, hitX))}deg)`])
+  let body = act.mv(ball, [[0, x0, by, undefined, 'rotate(0deg)'], ...keys])
+  // The car shakes on the hit (the hit-stop holds it at the dent); the crack and the dent stay.
   const car = act.still('car', carX, F - ch / 2, 1, csc)
-  body += act.kf(car, [[0, 'transform:none'], [NAMASTE.hit, 'transform:none'], [NAMASTE.hit + 0.03, 'transform:translate(2px,-1px)'], [NAMASTE.hit + 0.09, 'transform:translate(-2px,0)'], [NAMASTE.hit + 0.15, 'transform:translate(1px,0)'], [NAMASTE.hit + 0.21, 'transform:none']])
+  body += act.kf(car, [[0, 'transform:none'], [NAMASTE.hit, 'transform:none'], [NAMASTE.hit + 0.03, 'transform:translate(3px,-2px)'], [NAMASTE.hit + 0.09, 'transform:translate(-3px,0)'], [NAMASTE.hit + 0.15, 'transform:translate(1.5px,0)'], [NAMASTE.hit + 0.21, 'transform:none']])
   const cx = carX + 4 * csc
   const cy = F - 4.2 * csc
-  const crack = `<g stroke="#F4F7FA" stroke-width="1.1" fill="none" stroke-linecap="round"><path d="M${r1(cx)} ${r1(cy)}l-4 -5M${r1(cx)} ${r1(cy)}l5 -6l2 -3M${r1(cx)} ${r1(cy)}l7 1l3 3M${r1(cx)} ${r1(cy)}l-1 6M${r1(cx + 5)} ${r1(cy - 6)}l3 1"/></g><path d="M${r1(carX + 1)} ${r1(F - 3 * csc)}q3 2 6 0" stroke="#2A2F35" stroke-width="1.4" fill="none"/>`
+  const k = csc / 3
+  const crack = `<g stroke="#F4F7FA" stroke-width="${r1(1.1 * Math.max(1, k * 0.8))}" fill="none" stroke-linecap="round" transform="translate(${r1(cx)} ${r1(cy)}) scale(${r1(k)})"><path d="M0 0l-4 -5M0 0l5 -6l2 -3M0 0l7 1l3 3M0 0l-1 6M5 -6l3 1"/></g><path d="M${r1(carX + 1)} ${r1(F - 3 * csc)}q${r1(3 * k)} ${r1(2 * k)} ${r1(6 * k)} 0" stroke="#2A2F35" stroke-width="${r1(1.4 * k)}" fill="none"/>`
   body += act.on(crack, NAMASTE.hit, act.T)
-  // The impact: star, sparks of glass, a puff of dust off the roof.
-  body += fx.star3(act, NAMASTE.hit, carX + 1, by - 2, 15, { core: '#FFFFFF', star: gene ? '#E0E0E0' : PROPS.adYellow, ring: '#FFFFFF', ink: gene ? '#333' : PROPS.navy })
-  body += fx.sparks(act, NAMASTE.hit + 0.02, carX + 2, by - 4, { n: 8, seed: 'bcs-nm-glass', color: '#DDEBF5', len: 7 })
-  body += fx.puff(act, NAMASTE.hit + 0.05, carX - 4, F - 4, { s: 0.75, fill: gene ? '#9A9A9A' : '#CBB89A' })
-  body += fx.dust(act, NAMASTE.hit + 0.08, carX - 10, F - 2, { n: 4, seed: 'bcs-nm-dust', color: gene ? '#8A8A8A' : '#B9A688', dx: -8 })
+  // The impact: a flash, the star, sparks of glass, a cloud of dust off the roof.
+  body += fx.flash(act, NAMASTE.hit, { a: 0.22 })
+  body += fx.star3(act, NAMASTE.hit, carX + 1, by - 2, Math.round(10 + r), { core: '#FFFFFF', star: gene ? '#E0E0E0' : PROPS.adYellow, ring: '#FFFFFF', ink: gene ? '#333' : PROPS.navy })
+  body += fx.sparks(act, NAMASTE.hit + 0.02, carX + 2, by - 4, { n: 10, seed: 'bcs-nm-glass', color: '#DDEBF5', len: Math.round(6 + r * 0.4) })
+  body += fx.puff(act, NAMASTE.hit + 0.05, carX - 4, F - 4, { s: r1(0.6 + r / 20), fill: gene ? '#9A9A9A' : '#CBB89A' })
+  body += fx.dust(act, NAMASTE.hit + 0.08, carX - 10, F - 2, { n: 6, seed: 'bcs-nm-dust', color: gene ? '#8A8A8A' : '#B9A688', dx: -12 })
   // Howard comes round the car to look (he faces it), with a "?!".
-  let still = `${car}${crack}<g transform="translate(${r1(back - 3)} ${r1(by)})">${ball}</g>`
+  let still = `${car}${crack}<g transform="translate(${r1(back - 4)} ${r1(by)})">${ball}</g>`
   if (howard) {
-    const hx = x1 - 16
-    const hy = F - 47 / 2 - 0.5
-    body += act.actor('howard', [[NAMASTE.hit + 0.5, act.T, 'howard', -1]], [[NAMASTE.hit + 0.5, x1 + 14, hy, 0, 1], [NAMASTE.hit + 1.05, hx, hy, 0, 1], [act.T, hx, hy, 0, 1]])
-    body += act.cue('pop', NAMASTE.hit + 1.15, C(hx, hy - 27, '?!', 15, gene ? '#F2F2F2' : PROPS.adYellow, 'text-anchor="middle"'), { d: 1.5 })
-    still += act.still('howard', hx, hy, -1)
+    const hx = rb - 7 * hsc - 2
+    const hy = F - (47 * hsc) / 2 - 0.5
+    body += act.actor('howard', [[NAMASTE.hit + 0.5, act.T, 'howard', -1]], [[NAMASTE.hit + 0.5, x1 + 20, hy], [NAMASTE.hit + 1.05, hx, hy], [act.T, hx, hy]], { sc: hsc })
+    body += act.cue('pop', NAMASTE.hit + 1.15, C(hx - 6, hy - 25 * hsc, '?!', Math.round(15 * hsc), gene ? '#F2F2F2' : PROPS.adYellow, 'text-anchor="middle"'), { d: 1.5 })
+    still += act.still('howard', hx, hy, -1, hsc)
   }
-  // The title: S5E4's name, stamped on a manila tab where the row has room.
-  const tw = condW('NAMASTE.', 15, 1) + 22
-  for (const [y0, y1] of [[38, 62], [86, 110]] as const) {
-    const [a, b] = freeRun(stage, y0 < 60 ? 66 : 12, carX - 14, y0, y1)
-    if (b - a < tw + 6) continue
-    const sx = a + (b - a - tw) / 2
-    const stamp = `${tab(sx, y0 + 2, tw, 20, prop('manila', gene))}${C(sx + tw / 2, y0 + 17, 'NAMASTE.', 15, prop('creamInk', gene), 'text-anchor="middle" letter-spacing="1"')}`
-    body += act.slam(stamp, NAMASTE.hit + 0.7, act.T - 0.2)
-    still += stamp
-    break
+  // The title: S5E4's name, stamped on a manila tab where a row has room (20 px where it fits, else 15).
+  stamp: for (const fs of [20, 15]) {
+    const tw = condW('NAMASTE.', fs, 1) + 22
+    for (const [y0, y1] of [[38, 66], [86, 112]] as const) {
+      const [a, b] = freeRun(keep, y0 < 60 ? 66 : 12, carX - 14, y0, y1)
+      if (b - a < tw + 6) continue
+      const sx = a + (b - a - tw) / 2
+      const th = fs + 6
+      const st = `${tab(sx, y0 + 2, tw, th, prop('manila', gene))}${C(sx + tw / 2, y0 + 2 + th * 0.78, 'NAMASTE.', fs, prop('creamInk', gene), 'text-anchor="middle" letter-spacing="1"')}`
+      body += act.slam(st, NAMASTE.hit + 0.7, act.T - 0.2)
+      still += st
+      break stamp
+    }
   }
-  return { svg: frame(act, win, stage, body, still, gene), size: { ball: 2 * r, car: cw, howard: howard ? 47 : 0 } }
+  return { svg: frame(act, win, keep, body, still, gene), size: { ball: 2 * r, car: cw, howard: howard ? Math.round(47 * hsc) : 0 } }
 }
 
 // ---------------------------------------------------------------- ding: Hector rings his bell three times
 export const DINGS = [0.85, 1.6, 2.35] as const
+/** ding on the band's whole clear span: Hector (up to 1.75x, ~66 px) rolls in to a table at the far end of the floor's free run
+ *  and rings a bell you can see (up to 4.2x, 38 px); each DING! (20-26 px) keeps off the readouts' holes. */
 export const ding = (o: EggArgs): EggOut => {
   const { W, H, at, gene, stage } = o
   const act = new Act({ id: `bcs-dg-${gene ? 'g' : 's'}-${W}`, ms: EGG_MS.ding, at, W, H })
-  const win = windowOf(W, H, stage)
+  const { win, keep } = wideOf(W, H, stage)
   const x1 = win[0] + win[2]
   const F = floorOf(H)
+  const [ra, rb] = freeRun(keep, 8, x1 - 4, F - 70, F + 1)
+  const big = rb - ra >= 120
   act.cast('hector', look(BCS_HECTOR, gene), 0.5)
-  const hs = 1.15
+  const hs = big ? 1.75 : 1.3
   const hw = w(BCS_HECTOR) * hs
   const hh = BCS_HECTOR.rows.length * hs
-  const bs = 3
-  // Hector and his bell on a little table, at the right of the span (the readouts on the left stay in their holes).
-  const tx = x1 - 34
-  const hx = tx - hw / 2 - 18
+  const bs = big ? 4.2 : 3.4
+  // Hector and his bell on a little table, at the far end of the floor's free run.
+  const tw = Math.round(9 * bs + 4)
+  const tx = rb - tw / 2 - 4
+  const hx = tx - tw / 2 - hw / 2 - 6
   const hy = F - hh / 2
-  let body = act.actor('hector', [[0, act.T, 'hector']], [[0, x1 + hw, hy], [0.55, hx, hy], [0.7, hx + 1, hy], [act.T, hx, hy]])
-  const table = `<rect x="${r1(tx - 16)}" y="${r1(F - 13)}" width="32" height="4" fill="${prop('woodLight', gene)}"/><rect x="${r1(tx - 13)}" y="${r1(F - 9)}" width="3" height="9" fill="${prop('woodDark', gene)}"/><rect x="${r1(tx + 10)}" y="${r1(F - 9)}" width="3" height="9" fill="${prop('woodDark', gene)}"/>`
-  const bellTop = F - 13 - 7 * bs
+  let body = act.actor('hector', [[0, act.T, 'hector']], [[0, x1 + hw, hy], [0.55, hx, hy], [0.7, hx + 1, hy], [act.T, hx, hy]], { sc: hs })
+  const top = F - 15
+  const table = `<rect x="${r1(tx - tw / 2)}" y="${r1(top)}" width="${tw}" height="5" fill="${prop('woodLight', gene)}"/><rect x="${r1(tx - tw / 2 + 3)}" y="${r1(top + 5)}" width="3" height="10" fill="${prop('woodDark', gene)}"/><rect x="${r1(tx + tw / 2 - 6)}" y="${r1(top + 5)}" width="3" height="10" fill="${prop('woodDark', gene)}"/>`
+  const bellTop = top - 7 * bs
   const bellSvg = `<g transform="translate(${r1(tx - 4.5 * bs)} ${r1(bellTop)}) scale(${bs})" shape-rendering="crispEdges">${Object.entries(BELL.pal).map(([k, c]) => `<path fill="${gene ? grey(c) : c}" d="${BELL.rows.map((row, ry) => [...row].map((ch, rx) => (ch === k ? `M${rx} ${ry}h1v1h-1z` : '')).join('')).join('')}"/>`).join('')}</g>`
   const rows: [number, string][] = [[0, 'transform:none']]
   for (const d of DINGS) rows.push([d, 'transform:none'], [d + 0.05, 'transform:rotate(-12deg)'], [d + 0.12, 'transform:rotate(9deg)'], [d + 0.2, 'transform:rotate(-4deg)'], [d + 0.28, 'transform:none'])
-  body += table + act.kf(bellSvg, rows, { origin: `${r1(tx)}px ${r1(F - 13)}px` })
+  body += table + act.kf(bellSvg, rows, { origin: `${r1(tx)}px ${r1(top)}px` })
   const gold = prop('bell', gene)
-  const arcs = `<g fill="none" stroke="${gold}" stroke-width="1.6" stroke-linecap="round"><path d="M-17 -2q-5 6 0 12"/><path d="M17 -2q5 6 0 12"/><path d="M-23 -6q-7 10 0 20" opacity=".6"/><path d="M23 -6q7 10 0 20" opacity=".6"/></g>`
-  const word = (i: number): string => shout(tx + [-22, 4, -8][i]!, bellTop - 8 - i * 6, 'DING!', 15 + i * 2, gene ? '#F2F2F2' : PROPS.adYellow, gene ? '#333333' : PROPS.navy)
+  const q = bs / 3
+  const arcs = `<g fill="none" stroke="${gold}" stroke-width="${r1(1.6 * q)}" stroke-linecap="round" transform="scale(${r1(q)})"><path d="M-17 -2q-5 6 0 12"/><path d="M17 -2q5 6 0 12"/><path d="M-23 -6q-7 10 0 20" opacity=".6"/><path d="M23 -6q7 10 0 20" opacity=".6"/></g>`
+  // Each DING! above the bell, nudged left until it is clear of every readout's hole (never cut by one).
+  const holes = keep?.keep ?? []
+  const word = (i: number): string => {
+    const fs = (big ? 20 : 16) + i * 3
+    const ww = condW('DING!', fs, 0.8) + 4
+    let x = tx + [-24, 6, -10][i]!
+    const y = bellTop - 6 - i * 7
+    while (x - ww / 2 > win[0] + 4 && holes.some(h => meets([x - ww / 2, y - fs * 0.85, ww, fs], [h[0] - 2, h[1] - 2, h[2] + 4, h[3] + 4]))) x -= 6
+    return shout(x, y, 'DING!', fs, gene ? '#F2F2F2' : PROPS.adYellow, gene ? '#333333' : PROPS.navy)
+  }
   DINGS.forEach((d, i) => {
-    body += act.cue('burst', d + 0.04, arcs, { x: tx, y: bellTop + 10, d: 0.45 })
+    body += act.cue('burst', d + 0.04, arcs, { x: tx, y: bellTop + 3.5 * bs, d: 0.45 })
     body += act.cue('pop', d + 0.04, word(i), { d: 0.9 })
   })
   // The third ding stays up to the end.
   body += act.on(word(2), DINGS[2] + 0.5, act.T - 0.1)
-  const still = `${act.still('hector', hx, hy)}${table}${bellSvg}${word(2)}`
-  return { svg: frame(act, win, stage, body, still, gene), size: { bell: 9 * bs, hector: hh, word: 15 } }
+  const still = `${act.still('hector', hx, hy, 1, hs)}${table}${bellSvg}${word(2)}`
+  return { svg: frame(act, win, keep, body, still, gene), size: { bell: 9 * bs, hector: hh, word: big ? 20 : 16 } }
 }
 
 // ---------------------------------------------------------------- chicanery / 1216: Chuck at the stand, the number flip
@@ -280,12 +320,14 @@ const flipTag = (act: Act, x: number, y: number, size: number, t0: number, t1: n
 export const rant = (o: EggArgs & { kind: '1216' }): EggOut => {
   const { W, H, at, gene, stage, kind } = o
   const act = new Act({ id: `bcs-ch-${kind}-${gene ? 'g' : 's'}-${W}`, ms: EGG_MS[kind], at, W, H })
-  const win = windowOf(W, H, stage)
+  const { win, keep } = wideOf(W, H, stage)
   const x1 = win[0] + win[2]
   const F = floorOf(H)
-  const [a, b] = freeRun(stage, 12, x1 - 8, 86, 128)
-  const tag = flipTag(act, (a + b) / 2, F - 22, 24, 0.2, act.T - 0.2, 0.75, gene)
-  return { svg: frame(act, win, stage, tag.svg, tag.still, gene), size: { number: 24, tag: tag.w } }
+  // As big as the step row and the tip line allow (34 px where there is room, never under 24), between their readouts.
+  const [a, b] = freeRun(keep, 12, x1 - 8, 78, 128)
+  const size = Math.max(24, Math.min(34, Math.floor((b - a - 30) / 2.6)))
+  const tag = flipTag(act, (a + b) / 2, F - size / 2 - 9, size, 0.2, act.T - 0.2, 0.75, gene)
+  return { svg: frame(act, win, keep, tag.svg, tag.still, gene), size: { number: size, tag: tag.w } }
 }
 
 /** The act for a typed egg at `at` (empty for a kind with no band act). */

@@ -4,8 +4,10 @@ import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import { overlaps, readouts } from './stage/keep'
-import { audit } from './stage/budget'
+import { BUDGET, audit } from './stage/budget'
 import { bcsCheer, isAdCheer } from './bettercallsaul'
+import { ding, namaste, rant } from './bettercallsaul-motion'
+import { chicaneryBand } from './bettercallsaul-court'
 
 const NOW = Date.parse('2026-10-20T10:00:00Z')
 const W5 = [450, 600, 750, 900, 1250]
@@ -105,4 +107,41 @@ test('cheer on the real band: a finished job cheers at every band-fit width, and
       expect(audit(b).dupes, `${W}`).toEqual([])
     }
   }
+})
+
+// --- 2. the typed eggs, drawn big enough to see --------------------------------------------------------------------------
+/** The smallest each typed egg's subject may be drawn on the band (px), at every band-fit width. The owner typed namaste and
+ *  could not see a 7 px ball: these hold it. */
+const MIN = { ball: 18, car: 48, howardWide: 60, bell: 27, hector: 49, word: 16, number: 24, figure: 45 } as const
+test('typed eggs: each one drawn at least its minimum size at every band-fit width, both skins, under the band budget', () => {
+  for (const gene of [false, true]) {
+    for (const W of W5) {
+      const st = { ...(STAGES[W] as (typeof STAGES)[number]), wide: { x2: Math.round(W * 0.66), keep: [[Math.round(W * 0.6), 34, W, 50], [Math.round(W * 0.55), 79, W, 31], [Math.round(W * 0.5), 110, W, 24]] as [number, number, number, number][] } }
+      const o = { W, H: 134, at: NOW, gene, stage: st }
+      const n = namaste(o)
+      expect(n.size.ball, `namaste ball ${W}`).toBeGreaterThanOrEqual(MIN.ball)
+      expect(n.size.car, `namaste car ${W}`).toBeGreaterThanOrEqual(MIN.car)
+      if (W >= 900) expect(n.size.howard, `namaste howard ${W}`).toBeGreaterThanOrEqual(MIN.howardWide)
+      const d = ding(o)
+      expect(d.size.bell, `ding bell ${W}`).toBeGreaterThanOrEqual(MIN.bell)
+      expect(d.size.hector, `ding hector ${W}`).toBeGreaterThanOrEqual(MIN.hector)
+      expect(d.size.word, `ding word ${W}`).toBeGreaterThanOrEqual(MIN.word)
+      const t = rant({ ...o, kind: '1216' })
+      expect(t.size.number, `1216 ${W}`).toBeGreaterThanOrEqual(MIN.number)
+      const c = chicaneryBand(o)
+      expect(Math.max(c.size.jimmy ?? 0, c.size.chuck ?? 0), `chicanery ${W}`).toBeGreaterThanOrEqual(MIN.figure)
+      for (const [name, svg] of [['namaste', n.svg], ['ding', d.svg], ['1216', t.svg]] as const) {
+        const a = audit(svg)
+        expect(a.dupes, `${name} ${W}`).toEqual([])
+        expect(a.dupeIds, `${name} ${W}`).toEqual([])
+        expect(a.badText, `${name} ${W}`).toEqual([])
+        expect(a.reduced, `${name} ${W}`).toBe(true)
+        expect(a.chars, `${name} ${W}`).toBeLessThanOrEqual(BUDGET.fightBand.band - 1000)
+      }
+    }
+  }
+  // At 1250 the ball is one you cannot miss (4x the old 7 px), the car 80 px.
+  const big = namaste({ W: 1250, H: 134, at: NOW, gene: false, stage: STAGES[1250] })
+  expect(big.size.ball).toBeGreaterThanOrEqual(26)
+  expect(big.size.car).toBe(80)
 })
