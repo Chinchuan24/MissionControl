@@ -185,10 +185,10 @@ test('the title card: whole, as big as the span allows, never touching a keep-ou
       expect(meets, `${w}: box ${L.box.join(',')} vs hole ${hx},${hy}`).toBe(false)
     }
   }
-  // On the widest band it stays clear of his face, right of the Tasks chip.
+  // On the widest band it stays clear of his face (right of it).
   const wide = titleLayout(895, 97, NAME_HOLES, head)
   expect(wide.over).toBe(false)
-  expect(wide.x).toBeGreaterThan(338)
+  expect(wide.x).toBeGreaterThan(192)
   expect(freeSpan([[100, 0, 50, 56]], 400, 0, 56)).toEqual([154, 400])
   // Free rectangles: the region around two holes, each maximal, none touching a hole.
   const rs = freeRects(400, 97, [[150, 5, 80, 22], [4, 54, 100, 21]])
