@@ -46,7 +46,6 @@ const MIN = {
 } as const
 
 test('wide fights: the tallest fighter of each of the eight is drawn at least its minimum at every band-fit width', () => {
-  const got: string[] = []
   for (const W of WIDTHS) {
     const s = ST[W] as BandStage
     const omni = bandFighterPx(134, s.x1)
@@ -57,14 +56,12 @@ test('wide fights: the tallest fighter of each of the eight is drawn at least it
     const h = (lane ?? bandRegion(BW[W] as number, 132, e)).h
     const psy = er2FighterPx('cyberpsycho', h, Boolean(lane))
     const hud = er2FighterPx('capri-vs-d', h, Boolean(lane))
-    got.push(`${W}: omni ${omni} cq ${cq} boys ${boys} psy ${psy} hud ${hud}`)
     expect(omni, `omni ${W}`).toBeGreaterThanOrEqual(MIN.omni[W])
     expect(cq, `conquest ${W}`).toBeGreaterThanOrEqual(MIN.conquest[W])
     expect(boys, `boys ${W}`).toBeGreaterThanOrEqual(MIN.boys[W])
     expect(psy, `psycho ${W}`).toBeGreaterThanOrEqual(MIN.psycho[W])
     expect(hud, `hud ${W}`).toBeGreaterThanOrEqual(MIN.hud[W])
   }
-  console.log(got.join('\n'))
 })
 
 test('wide fights: a lane is full height, right of the task title and the Tasks chip, clear of every hole; none on a narrow band', () => {
@@ -103,7 +100,6 @@ test('wide fights: a lane is full height, right of the task title and the Tasks 
 })
 
 test('wide fights: every band cut keeps 1 k of headroom under the 32 k cap on the real stages (every look, lane or not)', () => {
-  const worst: string[] = []
   for (const W of WIDTHS) {
     const s = ST[W] as BandStage
     for (const era of [1, 2] as const) for (const v of [0, 1, 2, 3] as const) {
@@ -119,7 +115,6 @@ test('wide fights: every band cut keeps 1 k of headroom under the 32 k cap on th
       expect(a.dupes, `boys ${k} ${m} ${W}`).toEqual([])
       if (a.chars > 31_000) console.log(`OVER boys ${k} ${m} ${W} ${a.chars}`)
       expect(a.chars, `boys ${k} ${m} ${W}`).toBeLessThanOrEqual(BUDGET.fightBand.band - 1_000)
-      if (W === 1250) worst.push(`${k}/${m} ${a.chars}`)
     }
     const e = ER2[W] as BandStage
     const lane = bandLane(132, e)
@@ -130,10 +125,8 @@ test('wide fights: every band cut keeps 1 k of headroom under the 32 k cap on th
       expect(au.dupes).toEqual([])
       if (au.chars > 31_000) console.log(`OVER er2 ${n} ${W} ${au.chars}`)
       expect(au.chars, `er2 ${n} ${W}`).toBeLessThanOrEqual(BUDGET.fightBand.band - 1_000)
-      if (W === 1250) worst.push(`${n} ${au.chars}`)
     }
   }
-  console.log(worst.join(' · '))
 })
 
 // ---------------------------------------------------------------- the REAL band, a fight replayed
