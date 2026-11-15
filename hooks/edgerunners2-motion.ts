@@ -165,11 +165,17 @@ export const LANE_MAX = 520
 /** The band's full-height lane for a fight (wave 4): right of the task title and the Tasks chip, the title row to the floor, free
  *  of every readout and row part (stage/keep.ts `laneIn`); undefined on a band too narrow for one. */
 export const bandLane = (H: number, stage: BandStage): { x: number; y: number; w: number; h: number } | undefined => {
-  const l = laneIn([8, 34, Math.max(0, stage.x1 - 8), H - 37], allHoles(stage), LANE_MIN)
+  const holes = allHoles(stage)
+  // Tall: the title row to the floor, right of the title and the chip (a wide band). Else LOW: under the title row (y 63 down),
+  // right of the step count (900 px): the same size as the title rows gave, and the title never under the fight.
+  const l = laneIn([8, 34, Math.max(0, stage.x1 - 8), H - 37], holes, LANE_MIN) ?? laneIn([8, LOW_TOP, Math.max(0, stage.x1 - 8), H - 3 - LOW_TOP], holes, LOW_MIN)
   return l ? { x: l[0], y: l[1], w: Math.min(LANE_MAX, l[2]), h: l[3] } : undefined
 }
+/** The low lane's top (under the task title's row) and the narrowest one worth it. */
+export const LOW_TOP = 63
+export const LOW_MIN = 260
 /** Each fight's cast scale in a region `h` tall (D and the psycho are padded to 49 rows, the HUD pair to 44). */
-export const er2Sc = (kind: Er2Kind, h: number): number => r1(Math.min(2, (h - 6) / (kind === 'cyberpsycho' ? D_H : 44)))
+export const er2Sc = (kind: Er2Kind, h: number): number => r1(Math.min(2, Math.max(1.25, (h - 6) / (kind === 'cyberpsycho' ? D_H : 44))))
 /** The tallest fighter's drawn height (band px) in a region `h` tall (the old title rows draw 1.25x and 1.3x). */
 export const er2FighterPx = (kind: Er2Kind, h: number, lane: boolean): number => r1((kind === 'cyberpsycho' ? D_H : 44) * (lane ? er2Sc(kind, h) : kind === 'cyberpsycho' ? 1.25 : 1.3))
 
@@ -372,7 +378,8 @@ export const er2FightBand = (W: number, H: number, at: number, working: boolean,
   const ft = er2Fight(at, working, sec)
   if (!ft || at >= ft.startAt + ACT_MS[ft.kind]) return ''
   // Wave 4: on a wide band the fight takes the widest full-height lane right of the task title and the Tasks chip (the title
-  // row down to the floor), its cast scaled to the lane's height (about 1.5x); else the title rows as before.
+  // row down to the floor), its cast scaled to the lane's height (about 1.5x); at 900 a low lane under the title row; else the
+  // title rows as before (a narrow band has no room clear of the title).
   const lane = stage ? bandLane(H, stage) : undefined
   const r = lane ?? bandRegion(W, H, stage)
   const sc = lane ? er2Sc(ft.kind, lane.h) : undefined

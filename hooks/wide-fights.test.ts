@@ -78,6 +78,12 @@ test('wide fights: a lane is full height, right of the task title and the Tasks 
       expect(l[0]).toBeGreaterThanOrEqual((s.keep[0] as Rect)[0] + (s.keep[0] as Rect)[2])
       expect(l[3]).toBeGreaterThanOrEqual(90)
     }
+    // ER2: the tall lane at 1250, a LOW lane under the title row at 900 (the title never under the fight), none narrower.
+    const el = bandLane(132, ER2[W] as BandStage)
+    if (W === 1250) expect(el?.h).toBeGreaterThanOrEqual(90)
+    else if (W === 900) { expect(el?.y).toBeGreaterThanOrEqual(62); expect(el?.w).toBeGreaterThanOrEqual(260) }
+    else expect(el).toBeUndefined()
+    if (el) expect(allHoles(ER2[W] as BandStage).some(hl => meets([el.x, el.y, el.w, el.h], hl)), `${W}: ER2 lane clear`).toBe(false)
     // The Boys' window: the lane at 1250 (from the header rule), else right of the bust, its cast's heads under the title row.
     const w = winOf({ W: BW[W] as number, H: 148, m: 'brand', at: 0, on: 'band', stage: ST[W] as BandStage })
     if (W === 1250) { expect(w.y0).toBe(36); expect(w.sc).toBe(LANE_SC); expect(w.x0).toBeGreaterThanOrEqual(343) }
@@ -194,6 +200,9 @@ for (const [skin, pre, play, cyber] of PLAYS) {
         // Pushed in, the title a hole at every width.
         expect(c[6], `${W}: the title is a hole`).toContain('M61 39h')
         expect(b).toMatch(/kc\)"><g transform="translate\(0 [-\d.]+\) scale\(1\.[1-3]\d*\)">/)
+      } else if (cyber && W === 900) {
+        // ER2's low lane: under the title row, right of the step count.
+        expect(y as number, `${play}: under the title row`).toBeGreaterThanOrEqual(62)
       } else if (W === 1250) {
         // The lane: full height, right of the Tasks chip (so of the title).
         expect(x as number, `${play}: right of the chip`).toBeGreaterThanOrEqual(cyber ? 287 : chipEnd(b))
