@@ -538,6 +538,64 @@ export const cyberFightBand = (egg: CyberEgg, OW: number, at: number, working: b
   return placed(a.layer, r, `${a.act.p}rg`, [...(stage?.keep ?? []), ...(stage?.wide?.keep ?? [])])
 }
 
+// ---------------------------------------------------------------- SAMURAI: the "2023" gig's finale (wave 4)
+/** When the finale starts in the gig (s), and how long it plays: the gig's slot (`ACT_MS.gig`) covers it. */
+export const FIN_AT = 4.9
+export const FIN_MS = 2700
+const SAM = { ink: '#030202', red: '#E10600', yellow: '#FFD400', cyan: '#00F0FF', white: '#F4F4F4', amber: '#FFF4C0' }
+const FIN_H = 46
+const FIN = { leap: padTo(ART.SAM_JOHNNY_FIN_1, FIN_H), slide: padTo(ART.SAM_JOHNNY_FIN_2, FIN_H), fin: padTo(ART.SAM_JOHNNY_FIN_3, FIN_H) }
+/** The rocker's drawn height in a region `h` tall (band px): his three poses padded to 46 rows, feet on the region's floor. */
+export const finPx = (h: number): number => r1(FIN_H * finSc(h))
+const finSc = (h: number): number => r3(Math.min(1.7, (h - 6) / FIN_H))
+/**
+ * The gig ends on the rocker himself, in the fights' lane on the classic band (2.7 s from 4.9 s into the gig): his close-up
+ * cut-in on a red-ruled letterbox, then the CHORD: a shockwave of stage-light rings and a hot flash, and his three stage
+ * finishers: the leap (on an arc), the knee slide (sparks off the boards), the finisher, held under the spot. SAMURAI's own
+ * look (stage lights, amp rings, red and yellow), no Cyberpunk glitch. Reduced motion: the finisher under the spot.
+ */
+export const finaleAct = (o: { at: number; w: number; h: number; id: string }): { layer: string; act: Act } => {
+  // 4 colours a pose (his black, the skin, the guitar's red, the steel), 3 for the close-up: a busy band stays under its 120 k.
+  const act = new Act({ id: o.id, ms: FIN_MS, at: o.at, W: o.w, H: o.h, K: 4 })
+  act.cast('leap', FIN.leap, 0.5).cast('slide', FIN.slide, 0.45).cast('fin', FIN.fin, 0.45).cast('cut', ART.SAM_CUTIN_JOHNNY, 0, 3)
+  const sc = finSc(o.h)
+  const gy = o.h - 3
+  const y = r1(gy - (FIN_H * sc) / 2)
+  const x0 = r1(o.w * 0.2)
+  const x2 = r1(o.w * 0.62)
+  const cx = r1(o.w * 0.5)
+  let body = act.on(`<rect width="${o.w}" height="${o.h}" fill="${SAM.ink}"/>`, 0, 2.62, { fade: 0.12, op: 0.94 })
+  // The stage: two warm cones from above and the boards' edge.
+  body += `<defs><linearGradient id="${act.p}sp" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${SAM.amber}" stop-opacity=".04"/><stop offset="1" stop-color="${SAM.amber}" stop-opacity=".38"/></linearGradient></defs>`
+  body += act.on(`<path d="M${r1(x2 - 4)} 0h8l${r1(26 * sc)} ${gy}h-${r1(52 * sc + 8)}z" fill="url(#${act.p}sp)"/><rect y="${gy}" width="${o.w}" height="1.5" fill="${SAM.red}" opacity=".7"/>`, 0.45, 2.62, { fade: 0.15 })
+  // 0-0.45: his close-up on a letterbox, red rules.
+  const ci = cutStrip(act, 'cut', o.w, o.h, 0.7)
+  body += act.win(0, 0.45, `<rect width="${o.w}" height="${o.h}" fill="#000"/>${ci.lb}<path d="M0 ${r1(ci.y - 1)}H${o.w}M0 ${r1(ci.y + ci.hh + 1)}H${o.w}" stroke="${SAM.red}" stroke-width="1.2"/>`)
+  // 0.45: THE CHORD. Three rings off the boards, red, yellow, red, and a hot flash; the band shakes once.
+  ;[0.45, 0.6, 0.75].forEach((t, i) => { body += fx.ring(act, t, cx, r1(gy - 10), { rx: r1(Math.min(o.w * 0.48, 40 + i * o.w * 0.14)), color: i === 1 ? SAM.yellow : SAM.red, w: 2.6 }) })
+  body += fx.flash(act, 0.45, { a: 0.35, color: SAM.amber, d: 0.08 })
+  // The leap (0.45-0.95, an arc), the knee slide (0.95-1.5, sparks off the boards), the finisher (1.5 to the end).
+  const xs = r1(x0 + (x2 - x0) * 0.45)
+  body += act.actor('j', [[0.45, 0.95, 'leap'], [0.95, 1.5, 'slide'], [1.5, 2.62, 'fin']], [[0.45, x0, y + 4], [0.62, r1((x0 + xs) / 2), r1(y - o.h * 0.22)], [0.95, xs, y], [1.5, x2, y], [2.62, x2, y]], { sc })
+  body += fx.sparks(act, 1.0, xs, gy - 2, { seed: 'smfs', n: 6, color: SAM.yellow, len: 8 })
+  // 1.5: the last hit of the chord on the finisher: a white ring and a cyan rim tick.
+  body += fx.ring(act, 1.52, x2, r1(y - 10 * sc), { rx: r1(30 * sc), color: SAM.white, w: 1.8 })
+  body += act.win(1.52, 1.6, `<rect x="${r1(x2 - 22 * sc)}" y="${r1(y - 20 * sc)}" width="2" height="${r1(30 * sc)}" fill="${SAM.cyan}"/>`)
+  const still = `<rect width="${o.w}" height="${o.h}" fill="${SAM.ink}" opacity=".9"/><path d="M${r1(x2 - 4)} 0h8l${r1(26 * sc)} ${gy}h-${r1(52 * sc + 8)}z" fill="${SAM.amber}" opacity=".18"/>${act.still('fin', x2, y, 1, sc)}`
+  return { layer: act.done(body, still), act }
+}
+/** The finale on the classic SAMURAI band (OW wide), in the fights' lane: '' outside its 2.7 s. `gig`: the gig's start. */
+export const gigFinale = (OW: number, at: number, gig: number | undefined, stage?: BandStage): string => {
+  if (gig === undefined) return ''
+  const t0 = gig + FIN_AT * 1000
+  if (at < t0 - 60_000 || at >= t0 + FIN_MS) return ''
+  const r0 = fightRegion(OW, stage)
+  const L = laneOf(r0.w, r0.h, regionHoles(r0, stage))
+  const r = { ...r0, x: r1(r0.x + L.a), w: r1(L.w) }
+  const a = finaleAct({ at: t0, w: r.w, h: r.h, id: `sm-fin-${OW}-${r.w}x${r.h}` })
+  return placed(a.layer, r, `${a.act.p}rg`, [...(stage?.keep ?? []), ...(stage?.wide?.keep ?? [])])
+}
+
 // ---------------------------------------------------------------- the pane's light echo (in BREACH PROTOCOL's matrix)
 /** The matrix's box in the breach card (eggs.ts breachCard: x0 18, y0 36, five cells of 32, five rows of 17). */
 export const ECHO_BOX = { x: 14, y: 32, w: 168, h: 92 }

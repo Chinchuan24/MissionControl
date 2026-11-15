@@ -40,7 +40,7 @@ import { extrasInto, glitchPanel, hackInto, overlayInto, roamOnBand, roamOverlay
 import type { ThemeCtx, ThemeEggs } from './themes'
 import { canNudge, nudge, pickQuiet, prBadge, quietOf, rememberTask, repoAndBranch, rescueText, retryOnHaiku, whatIf, whatIfText, whatIfTip } from './coach'
 import { flatSmiley, serifClip, serifW } from './mentalist-cards'
-import { CYBER_SWITCH, cyberFightBand, cyberFightEcho, maxtacClimb } from './cyber-fights'
+import { CYBER_SWITCH, cyberFightBand, cyberFightEcho, gigFinale, maxtacClimb } from './cyber-fights'
 import { IDLE_CSS, ACT_MS, WAKE_SAMURAI_RE, bossIdle, cheerAt, cheerOf, city, cyberPlay, diveAct, gigAct, gigAt, idScan, moon, netGrid, playing, relic, sandevistanAct, stage, tower } from './cyber-motion'
 import { BADGES, BEATS_KEPT, BLANK_CRED, BOOT_H, SECRET_BADGE, award, credFor, foundOf, secretFoundFor, withFound, rockerRankOf, bdHeight, bootStrip, braindanceCard, cleanCred, credCard, credHeight, levelOf, rankOf, shiftPick, stepPick } from './extras'
 import type { Beat, Cred } from './extras'
@@ -6910,6 +6910,7 @@ ${hudSpare(W)}
 </g>
 ${egg && !d.lite ? cyberCheer(egg, OW, OH, d) : egg && d.isParty ? celebration(OW, OH, egg, FONT, d.partyAt) : ''}
 ${egg && !d.isParty ? cyberFightBand(egg, OW, d.at, d.isWorking, stage) : ''}
+${egg === 'samurai' && !d.isParty ? gigFinale(OW, d.at, gigAt(d.at, d.isWorking)?.startAt, stage) : ''}
 ${th && d.isParty ? th.cheer(OW, OH, FONT, c, d.partyAt, stage) : ''}
 ${th?.corner ? th.corner(OW, OH, { ctxPct: d.ctxPct, overBudget: Boolean(d.budget && d.budget.usedMs > d.budget.min * 60_000) }) : ''}`,
   )
