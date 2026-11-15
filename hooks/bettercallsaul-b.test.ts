@@ -258,6 +258,16 @@ test('gene: NIPPY! is his own cheer, the mall shutter rolls down and up, one bri
   const still = /<g class="s\w+-s">([\s\S]*)<\/g><\/g><!--\/dl-->/.exec(c)?.[1] ?? ''
   expect(still).toContain('MALL BAKERY')
   expect(still).not.toContain('sr)')
+  // On the band it keeps to the clear span (the stage): its clip is the span minus the readouts inside it, never the numbers.
+  const stage = { x1: 640, keep: [[250, 39, 90, 22], [6, 88, 100, 21]] as [number, number, number, number][] }
+  const banded = geneCheer(1250, 134, NOW, stage)
+  expect(THEMES.gene.cheer(1250, 134, '', {} as never, NOW, stage)).toBe(banded)
+  const clip = /<clipPath id="[\w-]+"><path clip-rule="evenodd" d="([^"]+)"/.exec(banded)?.[1] ?? ''
+  expect(clip.startsWith('M0 34h640v100')).toBe(true)
+  expect(clip).toContain('M250 39h90v22')
+  expect(clip).toContain('M6 88h100v21')
+  // The whole shutter (slats and bar) is as wide as the span, not the band.
+  expect(banded).not.toContain('width="1250"')
 })
 test('gene: his bust blinks behind the glasses and the glasses glint; in the head turn they catch the light and the ad shows', () => {
   const b = bcsFigure(true, { at: NOW })
