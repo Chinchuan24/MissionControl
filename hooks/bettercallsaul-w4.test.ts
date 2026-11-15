@@ -3,10 +3,10 @@
 import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
-import { overlaps, readouts } from './stage/keep'
+import { meets, overlaps, readouts } from './stage/keep'
 import { BUDGET, audit } from './stage/budget'
 import { bcsCheer, isAdCheer } from './bettercallsaul'
-import { ding, namaste, rant } from './bettercallsaul-motion'
+import { EGG_MS, HEAD, TURN, ding, namaste, rant, saul3d, turnStage } from './bettercallsaul-motion'
 import { chicaneryBand } from './bettercallsaul-court'
 
 const NOW = Date.parse('2026-10-20T10:00:00Z')
@@ -144,4 +144,32 @@ test('typed eggs: each one drawn at least its minimum size at every band-fit wid
   const big = namaste({ W: 1250, H: 134, at: NOW, gene: false, stage: STAGES[1250] })
   expect(big.size.ball).toBeGreaterThanOrEqual(26)
   expect(big.size.car).toBe(80)
+})
+
+// --- 3. the 3D head turn on its own stage ------------------------------------------------------------------------------------
+test('saul3d: the head leaves the 45 px bust for a stage in the clear span, turns there large under the spotlight, then goes home', () => {
+  for (const gene of [false, true]) {
+    for (const W of W5) {
+      const st = turnStage(W, 134, STAGES[W])
+      // The stage is in the clear span, right of the bust, its head at least 1.5x (67 px), never over a readout's hole.
+      expect(st.sc, `${W}`).toBeGreaterThanOrEqual(1.5)
+      expect(st.rect[0], `${W}`).toBeGreaterThanOrEqual(62)
+      for (const h of (STAGES[W] as (typeof STAGES)[number]).keep) expect(meets(st.rect, h), `${W} ${h}`).toBe(false)
+      const out = saul3d({ W, H: 134, at: NOW, gene, stage: STAGES[W] })
+      expect(out.size.head, `${W}`).toBeGreaterThanOrEqual(67)
+      // It starts and ends on the bust: mapped home (its foot on the bust's foot, 1x) at both ends of the act.
+      const home = `translate(${HEAD.x - st.x}px,${HEAD.foot - st.foot}px) scale(${Math.round((HEAD.sc / st.sc) * 10) / 10}`
+      expect(out.svg, `${W}`).toContain(home)
+      expect(TURN.out[1]).toBeLessThanOrEqual(TURN.from)
+      expect(TURN.back[0]).toBeGreaterThan(TURN.snap + 0.6)
+      expect(TURN.back[1]).toBeLessThanOrEqual(EGG_MS.saul3d / 1000)
+      const a = audit(out.svg)
+      expect(a.dupes, `${W}`).toEqual([])
+      expect(a.dupeIds, `${W}`).toEqual([])
+      expect(a.reduced).toBe(true)
+      expect(a.chars, `${gene ? 'gene' : 'saul'} ${W}`).toBeLessThanOrEqual(BUDGET.fightBand.band - 1000)
+    }
+  }
+  // Off the band (no stage): the bust's own spot at 1x, as before.
+  expect(turnStage(1250, 134).sc).toBe(HEAD.sc)
 })

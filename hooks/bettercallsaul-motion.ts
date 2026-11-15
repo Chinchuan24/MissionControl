@@ -18,7 +18,7 @@ import { Act, r1 } from './stage/timeline'
 import type { Key, Seg } from './stage/timeline'
 import * as fx from './stage/fx'
 import * as light from './stage/light'
-import { keepClip, meets, spanOf } from './stage/keep'
+import { freeRects, keepClip, meets, spanOf } from './stage/keep'
 import type { BandStage, Rect } from './stage/keep'
 
 export type EggKind = 'saul3d' | 'namaste' | 'ding' | 'chicanery' | '1216'
@@ -73,11 +73,33 @@ const shout = (x: number, y: number, text: string, size: number, fill: string, i
 
 // ---------------------------------------------------------------- saul3d: the head turns all the way round
 /** The turn's beats: the dip, the 8 views (slower at front and back), the snap back to front with an overshoot. */
-export const TURN = { dip: 0.3, from: 0.42, holds: [0.14, 0.2, 0.18, 0.2, 0.3, 0.2, 0.18, 0.2], snap: 2.02 } as const
+export const TURN = { dip: 0.3, from: 0.72, holds: [0.14, 0.2, 0.18, 0.2, 0.3, 0.2, 0.18, 0.2], snap: 2.32, out: [0.3, 0.7], back: [3.25, 3.7] } as const
 /** Where GENE's glasses catch the light in his turn: view, facing, lens x from the turn axis and y from the head's top (sprite px). */
 export const GENE_GLINTS: [string, 1 | -1, number, number][] = [['v1', 1, 2, 14], ['v2', 1, 8, 13], ['v2', -1, 8, 13], ['v1', -1, 2, 14]]
 /** The head's place: on the bust's spot in the task row (x 14 to 60), bottom on the row's floor, full size (45 px tall). */
 export const HEAD = { x: 37, foot: 82, sc: 1 } as const
+/**
+ * Where the turn plays big: the band's whole clear span (stage/keep.ts spanOf), in the free rectangle where the head can be
+ * largest (up to 2x, 90 px), its foot on that rectangle's floor. Without a stage: the bust's own spot at 1x.
+ */
+export const turnStage = (W: number, H: number, stage?: BandStage): { x: number; foot: number; sc: number; rect: Rect } => {
+  const { win, keep } = wideOf(W, H, stage)
+  const holes = (keep?.keep ?? []).map(([hx, hy, hw, hh]) => [hx - win[0], hy - win[1], hw, hh] as Rect)
+  let best: { x: number; foot: number; sc: number; rect: Rect } = { x: HEAD.x, foot: HEAD.foot, sc: HEAD.sc, rect: [3, 35, 60, 48] }
+  if (!stage) return best
+  for (const [fx, fy, fw, fh] of freeRects(win[2], win[3], holes, 6)) {
+    const sc = Math.round(Math.min(2, (fh - 4) / 45, (fw - 8) / 38) * 20) / 20
+    // Not the bust's own corner (the head leaves it for the stage): the rectangle must start right of it.
+    if (fx + win[0] < 62 && fx + fw + win[0] < 140) continue
+    // The largest head wins; on a tie, the roomier rectangle (the line fits beside the head).
+    if (sc > best.sc || (sc === best.sc && fw > best.rect[2] + 20)) {
+      const left = Math.max(fx + win[0], 64)
+      const right = fx + win[0] + fw
+      best = { x: Math.round(left + Math.min((right - left) / 2, 38 * sc * 0.5 + 40)), foot: Math.round(fy + win[1] + fh - 2), sc, rect: [left, fy + win[1], right - left, fh] }
+    }
+  }
+  return best
+}
 export const saul3d = (o: EggArgs): EggOut => {
   const { W, H, at, gene, stage } = o
   const act = new Act({ id: `bcs-3d-${gene ? 'g' : 's'}-${W}`, ms: EGG_MS.saul3d, at, W, H, K: 7 })
@@ -85,65 +107,76 @@ export const saul3d = (o: EggArgs): EggOut => {
   const keys = ['v0', 'v1', 'v2', 'v3', 'v4']
   const axes = gene ? [17 / 34, 15 / 32, 12 / 24, 15 / 30, 16 / 33] : [19 / 38, 19 / 37, 14 / 29, 17 / 34, 17 / 36]
   keys.forEach((k, i) => act.cast(k, padTo((turn[i] as { sp: Sprite }).sp, 45), axes[i]))
-  const { x, foot, sc } = HEAD
+  // The head leaves the bust for the stage (scaling up as it goes), turns all the way round there under the swinging
+  // spotlight, snaps back to front, then goes home to the bust.
+  const st = turnStage(W, H, stage)
+  const { x, foot, sc } = st
   const cy = foot - (45 * sc) / 2
-  // The 8 views in order, each a window; front before and after.
   const segs: Seg[] = [[0, TURN.from, 'v0']]
   let t = TURN.from
   const order: [string, 1 | -1][] = [['v0', 1], ['v1', 1], ['v2', 1], ['v3', 1], ['v4', 1], ['v3', -1], ['v2', -1], ['v1', -1]]
   order.forEach(([k, d], i) => { const h = TURN.holds[i] as number; segs.push([+t.toFixed(3), +(t + h).toFixed(3), k, d]); t += h })
   segs.push([+t.toFixed(3), act.T, 'v0'])
-  const path: Key[] = [[0, x, cy], [TURN.dip, x, cy + 1.2, 0, undefined, 0.95], [TURN.from, x, cy - 0.8, 0, undefined, 1.03], [TURN.from + 0.18, x, cy, 0, undefined, 1], [act.T, x, cy, 0, undefined, 1]]
+  const path: Key[] = [[0, x, cy], [TURN.from - 0.1, x, cy + 1.2 * sc, 0, undefined, 0.95], [TURN.from, x, cy - 0.8 * sc, 0, undefined, 1.03], [TURN.from + 0.18, x, cy, 0, undefined, 1], [act.T, x, cy, 0, undefined, 1]]
   const head = act.actor('head', segs, path, { sc })
   // The snap back to front: an overshoot about the foot.
   const pop = act.kf(head, [[0, 'transform:none'], [TURN.snap, 'transform:none'], [TURN.snap + 0.1, 'transform:scale(1.12)'], [TURN.snap + 0.3, 'transform:scale(.97)'], [TURN.snap + 0.45, 'transform:none']], { origin: `${x}px ${foot}px` })
-  // The stage: a dark card behind the bust, a spotlight that swings with the turn, a lit floor under it.
+  // Out to the stage and home again: the head drawn on the stage, mapped onto the bust (its foot on the bust's foot, 1x) at
+  // either end, with an eased glide between.
+  const home = `transform:translate(${r1(HEAD.x - x)}px,${r1(HEAD.foot - foot)}px) scale(${r1(HEAD.sc / sc)})`
+  const [o0, o1] = TURN.out
+  const [b0, b1] = TURN.back
+  const travel = sc > HEAD.sc ? act.kf(pop, [[0, home], [o0, home], [o1, 'transform:none'], [b0, 'transform:none'], [b1, home], [act.T, home]], { origin: `${x}px ${foot}px`, ease: 'settle' }) : pop
+  // The stage: a dark card over the free rectangle, a spotlight that swings with the turn, a lit floor under it.
   const warm = gene ? '#E8E8E8' : '#FFE7A8'
-  const card = act.on(`<rect x="3" y="35" width="60" height="48" rx="4" fill="#0B0806" opacity=".88"/>`, 0, act.T - 0.1, { fade: 0.2 })
-  const ray = light.godRay({ id: `${act.p}r`, x, y: 30, len: 56, spread: 60, color: warm, op: 0.42 })
-  const swing = act.kf(ray.svg, [[0, 'transform:rotate(-16deg)'], [TURN.from, 'transform:rotate(-16deg)'], [1.2, 'transform:rotate(14deg)'], [TURN.snap, 'transform:rotate(-6deg)'], [2.6, 'transform:none']], { origin: `${x}px 30px` })
-  const floorLit = `<ellipse cx="${x}" cy="${foot - 1}" rx="22" ry="3.2" fill="${warm}" opacity=".3"/>`
-  const lights = act.on(`${swing}${floorLit}`, 0.05, act.T - 0.3, { fade: 0.25 })
+  const [rx, ry, rw0, rh] = st.rect
+  // The card is as wide as what stands on it: the head (and Saul's line beside it), not the whole free rectangle.
+  const lineEnd = gene ? 0 : x + 12 * sc + 8 * Math.max(1.4, 1.4 * sc) + 8 + condW("S'ALL GOOD, MAN!", sc >= 1.6 ? 17 : 14, 0.8)
+  const rw = Math.min(rw0, Math.max(x + 19 * sc + 24, lineEnd <= rx + rw0 - 4 ? lineEnd + 12 : 0) - rx)
+  const cardR = `<rect x="${r1(rx)}" y="${r1(ry)}" width="${r1(rw)}" height="${r1(rh)}" rx="4" fill="#0B0806" opacity=".88"/>`
+  const card = act.on(cardR, 0.15, b1 + 0.05, { fade: 0.25 })
+  const ray = light.godRay({ id: `${act.p}r`, x, y: ry - 4, len: foot - ry + 6, spread: Math.round(46 * sc), color: warm, op: 0.42 })
+  const swing = act.kf(ray.svg, [[0, 'transform:rotate(-18deg)'], [TURN.from, 'transform:rotate(-18deg)'], [1.5, 'transform:rotate(16deg)'], [TURN.snap, 'transform:rotate(-6deg)'], [2.9, 'transform:none']], { origin: `${x}px ${ry - 4}px` })
+  const floorLit = `<ellipse cx="${x}" cy="${foot - 1}" rx="${r1(22 * sc)}" ry="${r1(3.2 * sc)}" fill="${warm}" opacity=".3"/>`
+  const lights = act.on(`${swing}${floorLit}`, o1 - 0.15, b0 + 0.1, { fade: 0.25 })
   // The glint across the face once it is back to front.
   const clipId = `${act.p}h`
   const glint = light.sweep({ id: `${act.p}g`, x: x - 19 * sc, y: cy - 22.5 * sc, w: 38 * sc, h: 45 * sc, clip: clipId, act, t0: TURN.snap + 0.15, t1: TURN.snap + 0.6, color: '#FFF6DA', op: 0.65 })
   const clip = `<defs>${light.clipTo(act.bank, 'v0', clipId, x, cy, 1, sc)}</defs>`
-  let body = `${card}${lights}${pop}${clip}${glint.svg}`
-  let still = `<rect x="3" y="35" width="60" height="48" rx="4" fill="#0B0806" opacity=".88"/>${floorLit}${act.still('v1', x, cy, 1, sc)}`
-  const size: Record<string, number> = { head: 45 * sc }
+  let body = `${card}${lights}${travel}${clip}${glint.svg}`
+  let still = `${cardR}${floorLit}${act.still('v1', x, cy, 1, sc)}`
+  const size: Record<string, number> = { head: 45 * sc, bust: 45 * HEAD.sc }
   if (gene) {
     // His glasses catch the light as he turns (the ¾ and profile views, both ways), and once he is round to the front the little
     // ad for Saul shows in his lenses again (the only colour in GENE: two pixels, red and yellow).
-    const spark = (gx: number, gy: number): string => `<path d="M${r1(gx)} ${r1(gy - 2.2)}l.6 1.6 1.6 .6 -1.6 .6 -.6 1.6 -.6 -1.6 -1.6 -.6 1.6 -.6z" fill="#FFFFFF"/>`
+    const spark = (gx: number, gy: number): string => `<path d="M${r1(gx)} ${r1(gy - 2.2 * sc)}l${r1(0.6 * sc)} ${r1(1.6 * sc)} ${r1(1.6 * sc)} ${r1(0.6 * sc)} ${r1(-1.6 * sc)} ${r1(0.6 * sc)} ${r1(-0.6 * sc)} ${r1(1.6 * sc)} ${r1(-0.6 * sc)} ${r1(-1.6 * sc)} ${r1(-1.6 * sc)} ${r1(-0.6 * sc)} ${r1(1.6 * sc)} ${r1(-0.6 * sc)}z" fill="#FFFFFF"/>`
     const top = cy - 22.5 * sc
     for (const [k, d, lx, ly] of GENE_GLINTS) {
       const i = order.findIndex(([kk, dd]) => kk === k && dd === d)
       const seg = segs[i + 1]
       if (seg) body += act.win(seg[0] + 0.03, seg[1] - 0.02, spark(x + lx * d * sc, top + ly * sc))
     }
-    body += act.win(TURN.snap + 0.2, act.T - 0.3, `<rect x="${r1(x - 4 * sc)}" y="${r1(top + 14 * sc)}" width="1" height="1" fill="#D7262C"/><rect x="${r1(x + 4 * sc)}" y="${r1(top + 14 * sc)}" width="1" height="1" fill="#FFD23F"/>`)
+    const px1 = Math.max(1, Math.round(sc))
+    body += act.win(TURN.snap + 0.2, b0, `<rect x="${r1(x - 4 * sc)}" y="${r1(top + 14 * sc)}" width="${px1}" height="${px1}" fill="#D7262C"/><rect x="${r1(x + 4 * sc)}" y="${r1(top + 14 * sc)}" width="${px1}" height="${px1}" fill="#FFD23F"/>`)
     size.glints = GENE_GLINTS.length
   }
   if (!gene) {
-    // Finger guns, then (with room in the task row) Saul himself steps in, arms wide, and the line slams down.
-    const guns = act.win(TURN.snap + 0.25, act.T - 0.3, fingerGuns(x + 12, cy + 4, 1.4, false))
-    body += guns
-    still += fingerGuns(x + 12, cy + 4, 1.4, false)
-    const [a, b] = freeRun(stage, 66, windowOf(W, H, stage)[0] + windowOf(W, H, stage)[2], 36, 83)
-    const sw = w(BCS_SAUL)
+    // Finger guns at the face once it is round, and (with room on the stage) the line slams down beside the head.
+    const gs = Math.max(1.4, 1.4 * sc)
+    const gx = x + 12 * sc
+    const gy = cy + 4 * sc
+    body += act.win(TURN.snap + 0.25, b0, fingerGuns(gx, gy, gs, false))
+    still += fingerGuns(gx, gy, gs, false)
     const line = "S'ALL GOOD, MAN!"
-    const lw = condW(line, 15, 0.8)
-    if (W >= 900 && b - a >= sw + lw + 30) {
-      act.cast('saul', BCS_SAUL, 0.5)
-      const sx = a + sw / 2 + 6
-      const scrim = act.on(`<rect x="${a - 4}" y="35" width="${r1(sw + lw + 34)}" height="48" rx="4" fill="#0B0806" opacity=".82"/>`, TURN.snap + 0.2, act.T - 0.15, { fade: 0.2 })
-      const saul = act.actor('saul', [[TURN.snap + 0.25, act.T, 'saul']], [[TURN.snap + 0.25, sx, 84 + 24, 0, 0], [TURN.snap + 0.5, sx, 82 - 23.5, 0, 1], [TURN.snap + 0.62, sx, 82 - 23.5 + 1, 0, 1], [act.T, sx, 82 - 23.5, 0, 1]])
-      const words = act.slam(shout(sx + sw / 2 + 8, 64, line, 15, PROPS.adYellow, PROPS.navy, 'start'), TURN.snap + 0.55, act.T - 0.2)
-      body += `${scrim}${saul}${words}`
-      size.saul = 47
+    const fs = sc >= 1.6 ? 17 : 14
+    const lx = gx + 8 * gs + 8
+    if (lx + condW(line, fs, 0.8) <= rx + rw0 - 4) {
+      const words = act.slam(shout(lx, cy + 2, line, fs, PROPS.adYellow, PROPS.navy, 'start'), TURN.snap + 0.4, b0)
+      body += words
+      size.line = fs
     }
   }
-  return { svg: frame(act, windowOf(W, H, stage), stage, body, still, gene, { scrim: 0 }), size }
+  return { svg: frame(act, wideOf(W, H, stage).win, wideOf(W, H, stage).keep, body, still, gene, { scrim: 0 }), size }
 }
 
 // ---------------------------------------------------------------- namaste: the bowling ball and Howard's car

@@ -65,11 +65,11 @@ test('eggs: every act is drawn big enough to see, under the band act budget, wit
   }
   // GENE stays grey: no Saul blue, no ad red or yellow in GENE's acts.
   // (saul3d's front view shows the bust's own exception once he is round: the two one-pixel lens ads, red and yellow.)
-  for (const [k, out] of ALL(true)) expect(/#(5589D8|D7262C|FFD23F|1B2A5E)/i.test(out.svg.replace(/<rect [^>]*width="1" height="1" fill="#(D7262C|FFD23F)"\/>/g, '')), k).toBe(false)
+  for (const [k, out] of ALL(true)) expect(/#(5589D8|D7262C|FFD23F|1B2A5E)/i.test(out.svg.replace(/<rect [^>]*width="\d" height="\d" fill="#(D7262C|FFD23F)"\/>/g, '')), k).toBe(false)
   // saul3d is a real turn: five head poses (8 views with the mirrored three), not a size pop.
   const s3 = (ALL(false)[0] as [string, EggOut])[1].svg
   expect((s3.match(/<g id="s\w+fv[0-4]">/g) ?? []).length).toBe(5)
-  expect(s3).toContain('scale(-1 1)')
+  expect(s3).toMatch(/scale\(-[\d.]+ [\d.]+\)/)
   expect(HEAD.sc * 45).toBeGreaterThan(40)
   expect(EGG_MS.saul3d).toBe(4000)
 })
