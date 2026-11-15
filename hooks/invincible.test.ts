@@ -1227,9 +1227,11 @@ const allSvg = async ($: Engine) => (await bandAt($, 1250, false)) + (await svgs
 
 test('replay: refused unless Invincible is worn', async ($, on) => {
   base(on, 100_000, quietAt())
-  // A skin with no plays of its own (The Mentalist answers with its own list now).
+  // Every other skin answers with its own list now (Crab Classic's claw-off and the rest): Invincible's fight never starts.
   await start($, 'crab-classic')
-  expect(await play($, 'fight')).toBe('Wear the Invincible skin first.')
+  const said = await play($, 'fight')
+  expect(said).toContain('Play which? Crab Classic has')
+  expect(said).not.toContain('▶')
 })
 
 /** A quiet moment (no fight, no showdown) with no cameo due either. */

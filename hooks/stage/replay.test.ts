@@ -61,12 +61,15 @@ const cmd = async ($: Engine, command: string, args: string) => String(((await $
 
 // The plugin runs in its own module graph: a test cannot register into it, so this checks the command's old answers survive
 // the shared registry being asked first (the registry's own behaviour is the two tests above).
-test('replay: /missioncontrol play still answers for skins with no shared plays (Boys and Invincible lists unchanged)', async ($, on) => {
+test('replay: /missioncontrol play answers a missing name with the worn skin's list (Boys and Invincible lists unchanged)', async ($, on) => {
   base(on)
   await $.session.start({ source: 'startup', cwd: '/repo', surface: 'desktop', isInteractive: true } as never)
-  // A skin with no plays of its own (The Mentalist has its own now: the-read, parlour-reveal, case-closed).
+  // Every skin has plays of its own now (wave 3 gave the last ones theirs: Crab Classic has cards, shake, clack, claw-off), so a
+  // name the worn skin lacks answers with that skin's list and never starts another skin's act.
   expect(await cmd($, 'skin', 'crab-classic')).toContain('Skin:')
-  expect(await cmd($, 'missioncontrol', 'play duel')).toBe('Wear the Invincible skin first.')
+  const crabs = await cmd($, 'missioncontrol', 'play duel')
+  expect(crabs).toContain('Play which? Crab Classic has')
+  expect(crabs).toContain('claw-off')
   expect(await cmd($, 'skin', 'the-boys')).toContain('Skin:')
   const list = await cmd($, 'missioncontrol', 'play nope')
   expect(list).toContain('Play which? The Boys has')
