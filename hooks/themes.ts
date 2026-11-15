@@ -17,14 +17,16 @@ import type { BandStage } from './stage/keep'
 
 import {
   BATCH_TOAST, BB_CSS, BB_GREETING, BB_BOOT, BB_TITLE_WORDS, BB_TOOLS, EMPIRE_BADGES, EMPIRE_WORDS, HEIS_BOOT, HEIS_GREETING,
-  BB_WARNING, crystalGlints, empireRankOf, bbEpisodeAt, yeahScience,
+  BB_WARNING, crystalGlints, empireRankOf, bbEpisodeAt,
 } from './breakingbad'
 import { jesseRoamer, jesseCameo } from './breakingbad-jesse'
-import { BAND_H, bbChip, bbFoot, bbHead, bbPip, classroomCard, crewPx, empireToast, onAirAlt, onAirCard, periodicCard, purityGauge, sansW, walt } from './breakingbad-cards'
+import { BAND_H, bbChip, bbFoot, bbHead, bbPip, brba, classroomCard, crewPx, empireToast, onAirAlt, onAirCard, periodicCard, purityGauge, sansW, walt } from './breakingbad-cards'
+import { BB_SWITCH, HEIS_SWITCH, bbBand, bbBusy, bbPane, bbTick, crystalGauge, hatLogo, heisFlip, liveBust } from './breakingbad-motion'
 import {
   CBI_BADGES, CBI_WORDS, CLOSED_FILES_TOAST, COLD_W, MENT_CSS, MENTALIST_BOOT, MENTALIST_GREETING, MENTALIST_TOOLS, MENTALIST_WORDS, REDJOHN_BOOT, REDJOHN_GREETING, TEA_WARNING,
-  caseClosed, cbiRankOf, cbiToast, coldReadCard, coldReads, coldTicker, episodeAt, hiddenSmiley, smiley,
+  cbiRankOf, cbiToast, coldReadCard, coldReads, coldTicker, episodeAt, smiley,
 } from './mentalist'
+import { MENT_SWITCH, RJ_SWITCH, bandFigure, mentBand, mentPane, mentTick, paintedCorner, paneFigure } from './mentalist-motion'
 import { MENT_EXTRA_CSS, cardGlyphs, hypnosis, mentSkyline, redJohnHeat, smileGlitch, teaSteam } from './mentalist-extra'
 import { caseBoard, caseBoardAlt, ctxChip, personnelFile } from './mentalist-cards'
 import { CAPRICORN_BOOT, CAPRICORN_GREETING, ER2_BAND_H, ER2_BOOT, ER2_CSS, ER2_GREETING, ER2_TITLE_WORDS, ER2_TOOLS, ER2_WARNING, TK_CSS, er2Cheer, er2Chip, er2Crew, er2EpW, er2Ep, er2EpisodeAt, er2Figure, er2Foot, er2Gauge, er2Halo, er2Name, er2PaneCreep, er2PaneSpots, er2Peek, er2Pill, er2Pip, er2Takeover, er2Tear, er2W, isNear } from './edgerunners2'
@@ -55,12 +57,12 @@ import { CAPRI_SWITCH, D_SWITCH, er2FightBand, er2FightPane, fightLive, playing 
 /** What the band's figure slot knows: the clock, the context, and whether the job-done celebration is drawing. */
 /** What the log card knows of the clock (Edgerunners 2's tape: it runs while a job works, rewinds on a new beat, CUT! when done). */
 export type LogNow = { at: number; working?: boolean; doneAt?: number }
-export type FigureCtx = { at: number; ctxPct: number; party?: boolean; fx?: { kind: string; at: number }; /** A job is running. */ working?: boolean; /** The job's progress, 0 to 100 (absent before a plan). */ progress?: number; /** When the last job's celebration began (Better Call Saul's glance). */ partyAt?: number }
+export type FigureCtx = { at: number; ctxPct: number; party?: boolean; fx?: { kind: string; at: number }; /** A job is running. */ working?: boolean; /** The job's progress, 0 to 100 (absent before a plan). */ progress?: number; /** When the last job's celebration began (Better Call Saul's glance). */ partyAt?: number; /** At rest after a step failed (the Mentalist sets his cup down). */ failed?: boolean }
 export type ThemeKey = 'mentalist' | 'redjohn' | 'breakingbad' | 'heisenberg' | 'edgerunners2' | 'capricorn' | 'bettercallsaul' | 'gene' | 'invincible' | 'invincible2' | 'caliper' | 'caliperlight' | 'boys' | 'boys2' | 'solidgold' | 'boysnoir'
 /** The pane cards a roaming act can belong to: the level card, the task card, the log. */
 export type PaneCard = 'cred' | 'task' | 'log'
 /** What a theme's rare scheduled eggs know (all from the clock, so an idle draw still shows them). */
-export type ExtraArgs = { W: number; H: number; surface: 'band' | 'pane'; at: number; ctxPct: number; /** The band only: the running job's start and its number today (Edgerunners 2's slate). */ job?: { at: number; n: number }; party?: boolean; card?: PaneCard; unplugAt?: number; fx?: { kind: string; at: number }; /** A job is running (a theme's fights only play then). */ working?: boolean; /** When the last era swap started (Invincible's title-card slam transition). */ swapAt?: number; /** The band only: the task title and the width it is drawn in (The Boys' title SPIN). */ task?: string; titleW?: number; /** The band only: where a band act may play, and the readouts it must keep clear (stage/keep.ts). */ stage?: BandStage }
+export type ExtraArgs = { W: number; H: number; surface: 'band' | 'pane'; at: number; ctxPct: number; /** The band only: the running job's start and its number today (Edgerunners 2's slate). */ job?: { at: number; n: number }; party?: boolean; /** The job-done celebration's start (a theme that draws its cheer as a band act, pinned). */ partyAt?: number; card?: PaneCard; unplugAt?: number; fx?: { kind: string; at: number }; /** A job is running (a theme's fights only play then). */ working?: boolean; /** When the last era swap started (Invincible's title-card slam transition). */ swapAt?: number; /** The band only: the task title and the width it is drawn in (The Boys' title SPIN). */ task?: string; titleW?: number; /** The band only: where a band act may play, and the readouts it must keep clear (stage/keep.ts). */ stage?: BandStage }
 /** One node of the hierarchy as a theme's `org` drawer sees it (a structural copy of the engine's). */
 export type ThemeOrg = { label: string; color: string; kind: string; status?: string; isQuiet?: boolean; children: ThemeOrg[] }
 /** The skin colours a theme's drawers read. */
@@ -227,6 +229,12 @@ export type ThemeEggs = {
   heatFromTime?: (ms: number) => number
   /** The task title with a glitch; `titleW` is the room it has. */
   glitch?: (x: number, y: number, text: string, attrs: string, titleW: number) => string
+  /** The slim band's figure in the theme's own hand, for a theme with no `slim` (the Mentalist's tea ritual). */
+  figure?: (ctx: FigureCtx) => string
+  /** An overlay on the slim band's episode (never the title): `ep` is the episode's <text>, `x` its left edge, `y` its baseline. */
+  epGlitch?: (ep: string, x: number, y: number) => string
+  /** What the panels must redraw for besides their data (an act coming due: its id and start), or ''. */
+  tick?: (at: number, working: boolean) => string
 }
 
 const MENT_COLORS = { accent: '#8DB4EA', accent2: '#DCE6F5', done: '#7CC9A0', warn: '#E8C26A', text: '#F2F5FA', subtext: '#B4C0D3', muted: '#93A0B5', tile: '#0E1524', track: '#18223A', line: '#22304D' }
@@ -238,7 +246,9 @@ const caseTheme = (red: boolean): ThemeEggs => ({
   slimBand: true,
   coldLine: task => coldReads(task, 1)[0] ?? '',
   idle: teaSteam,
-  glitch: (x, y, text, attrs, titleW) => smileGlitch(x, y, text, attrs, MENT_COLORS, titleW),
+  // The smiley's flicker lives on the episode (it once hid the title); Jane's tea ritual is the band's figure (Red John keeps his own).
+  epGlitch: smileGlitch,
+  ...(red ? {} : { figure: bandFigure }),
   afterimages: (_figure, box) => ({ defs: '', svg: hypnosis(box.x + box.w / 2, box.y + box.h / 2, MENT_COLORS, 0) }),
   pane: {
     backdrop: (W, H, at, t) => `<g opacity=".55">${cardGlyphs(W, H, at, t)}</g><g transform="translate(0 ${H - 26})" opacity=".7">${mentSkyline(W, 24, t, red)}</g>`,
@@ -246,8 +256,19 @@ const caseTheme = (red: boolean): ThemeEggs => ({
     heatW: 52,
   },
   warning: TEA_WARNING,
-  cheer: caseClosed,
-  corner: red ? undefined : (W, H, x) => (x.ctxPct >= 95 || x.overBudget ? hiddenSmiley(W, H) : ''),
+  // The cheer is a band act (mentalist-motion.ts, in `extras`, pinned to the party and kept off the readouts): no stamp here.
+  cheer: () => '',
+  corner: (W, H, x) => (x.ctxPct >= 95 || x.overBudget ? paintedCorner(W, H) : ''),
+  // THE READ, the Parlour Reveal, the cheers, Red John's title card and walk-by (band); the pane acts and the tea on COLD READ.
+  extras: o => {
+    const working = Boolean(o.working)
+    if (o.surface === 'band') return mentBand({ W: o.W, H: o.H, at: o.at, working, red, ...(o.party ? { party: true } : {}), ...(o.partyAt !== undefined ? { partyAt: o.partyAt } : {}), ...(o.stage ? { stage: o.stage } : {}) })
+    if (o.card !== 'task') return ''
+    return mentPane({ W: o.W, H: o.H, at: o.at, working, red }) || (red ? '' : paneFigure(o.W, o.H, { working, party: Boolean(o.party) }))
+  },
+  tick: (at, working) => mentTick(at, working, red),
+  switchFlavour: red ? RJ_SWITCH : MENT_SWITCH,
+  ...(red ? {} : { paneReserve: 16_000 }),
   logo: red ? (x, y) => smiley(x, y, 11, 1, 'rjs') : undefined,
   cred: { title: 'PERSONNEL FILE', ranks: cbiRankOf, words: CBI_WORDS, badges: CBI_BADGES, toast: cbiToast, card: (W, c, t, font, frame) => personnelFile(W, c, t, font, frame) },
   card: {
@@ -271,15 +292,36 @@ const bbTheme = (heis: boolean): ThemeEggs => ({
   slim: {
     h: BAND_H,
     sw: sansW,
-    head: (x, y, t, font) => bbHead(x, y, t, font, heis),
-    figure: () => walt(20, 36, 34, 40, heis),
+    // Heisenberg's hat logo is the Blender hat, turning once at the top of each hour; Breaking Bad keeps Br and Ba.
+    head: (x, y, t, font) => {
+      if (!heis) return bbHead(x, y, t, font, false)
+      const logo = hatLogo(x - 1, y)
+      return { svg: logo.svg + brba(x + 26, y - 13.5, t, font, true), w: 62 }
+    },
+    // Walt comes alive: a breath, a blink, a glance at the readouts; the lenses glint when a job is done.
+    figure: ctx => liveBust(live => walt(20, 36, 34, 40, heis, live), heis, { working: Boolean(ctx?.working), party: Boolean(ctx?.party) }),
     crew: (x, y, color) => crewPx(x, y, 1.4, color),
     pip: bbPip,
-    gauge: purityGauge,
+    // PURITY with the blue crystal before it, turning while a job works.
+    gauge: (xr, y, isWorking, done, total, t, font) => crystalGauge(purityGauge(xr, y, isWorking, done, total, t, font), xr, y, isWorking),
     foot: (W, H, t, ctx) => bbFoot(W, H, t, heis, ctx),
   },
   warning: BB_WARNING,
-  cheer: yeahScience,
+  // The cheer is a band act (breakingbad-motion.ts, in `extras`, pinned to the party and kept off the readouts): no stamp here.
+  cheer: () => '',
+  // SAY MY NAME, the Desert Stand-off, the pizza, the cheers (band); the pane's echoes on the CLASSROOM board.
+  extras: o => {
+    const working = Boolean(o.working)
+    if (o.surface === 'band') return bbBand({ W: o.W, H: o.H, at: o.at, working, heis, ...(o.party ? { party: true } : {}), ...(o.partyAt !== undefined ? { partyAt: o.partyAt } : {}), ...(o.stage ? { stage: o.stage } : {}) })
+    return o.card === 'task' ? bbPane({ W: o.W, H: o.H, at: o.at, working, heis }) : ''
+  },
+  tick: (at, working) => bbTick(at, working, heis),
+  switchFlavour: heis ? HEIS_SWITCH : BB_SWITCH,
+  // A busy Breaking Bad pane sits near the drawing's cap (~203 k with three agents; its periodic table is big): a 5.7 k reserve,
+  // the pane echo under 4.7 k, so three agents keep their cards (collapse.test.tsx).
+  paneReserve: 5_700,
+  // The name flips on the episode now and then (Heisenberg only; never over the title).
+  ...(heis ? { epGlitch: heisFlip } : {}),
   // The band keeps to its strongest eggs: the episode, Br and Ba, purity, the chip, the desert, the hat.
   afterimages: crystalGlints,
   cred: { title: 'PERIODIC TABLE', ranks: empireRankOf, words: EMPIRE_WORDS, badges: EMPIRE_BADGES, toast: empireToast, card: (W, c, t, font, frame) => periodicCard(W, c, t, font, frame, heis) },
@@ -294,7 +336,7 @@ const bbTheme = (heis: boolean): ThemeEggs => ({
   words: BB_TITLE_WORDS,
   tools: BB_TOOLS,
   // Jesse roams both panels now and then, and a small cameo takes the place of the takeover.
-  roamer: jesseRoamer(heis),
+  roamer: { ...jesseRoamer(heis), hush: at => bbBusy(at, heis) },
   takeover: (W, H, line, tm) => jesseCameo(W, H, line, tm),
 })
 

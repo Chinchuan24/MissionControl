@@ -5,9 +5,10 @@ import { BLANK_BILLING, KEY_IN_COMMAND, draft, maskKey, unmaskKey, guideText, is
 import { CASTS, CAST_CSS, hashOf, spriteMarkup } from './cast'
 import { BREACH_H, BREACH_W, CJK_FONT, EGG_CSS, EGG_TOOLS, EGG_WORDS, GREETING, KATAKANA, breachCard, breachTicker, celebration, heatStars, legendsCard, legendsHeight, psychoChip, radio, relicText, sandevistan, skyline, sysTag } from './eggs'
 import type { CyberEgg, Egg, Legend } from './eggs'
-import { TYGER_RE } from './mentalist'
-import { BB_REVEAL_MS, BB_RIGHT, BB_SKIN_WORDS, BB_TOOLS, SAY_MY_NAME_RE } from './breakingbad'
-import { bbRightLine } from './breakingbad-cards'
+import { PATRICK_JANE_RE, TYGER_RE } from './mentalist'
+import { setMentPlay } from './mentalist-motion'
+import { BB_RIGHT, BB_SKIN_WORDS, BB_TOOLS, SAY_MY_NAME_RE, WALTER_WHITE_RE } from './breakingbad'
+import { bbPlay, setBbPlay } from './breakingbad-motion'
 import { THEMES, themeKeyOf } from './themes'
 import { SWITCH_CARDS, SWITCH_MS, into as switchInto, sizeOf as svgSizeOf, skinSwitch } from './stage/wipe'
 import { playsFrom, playsOf, registerPlay, runPlay } from './stage/replay'
@@ -2162,9 +2163,6 @@ playsFrom('invincible', fightDirector(1), s => { INV_FX = { kind: `fight:${versi
 // MARK VS CONQUEST (`/missioncontrol play conquest`): the new suit's fight, so only in the new suit.
 registerPlay('invincible', { name: CONQUEST_PLAY, what: 'MARK VS CONQUEST (new suit)', run: at => { if (INV_ERA.era !== 2) return 'Conquest fights the new suit: say "new suit" first.'; INV_FX = { kind: `fight:${CONQUEST}`, at } } })
 const activeFx = (): { kind: string; at: number } | undefined => (isInv() ? INV_FX : isBoys() ? boysState().fx : BCS_FX)
-// When the phrase turned Breaking Bad into Heisenberg (0: it did not): the band's "You're goddamn right!" is drawn from it for
-// BB_REVEAL_MS, pinned to this time, so a redraw keeps it and it ends on its own. Also kept in the store as bbRevealAt.
-let BB_REVEAL_AT = 0
 // The generic skin switch (stage/wipe.ts): set when the person wears a skin from the picker or `/skin`, pinned to that moment. The
 // band and the top pane cards play a short wipe from the old skin's ground to the new one (well under a second; a 2 px rule under
 // reduced motion). Typed unlocks with a transition of their own (CAPRI, SOLID GOLD, NOIR, the Heisenberg reveal, the era swap) never
@@ -2567,8 +2565,8 @@ async function loadSkins($: EngineInterface): Promise<{ folder: string; loaded: 
 }
 
 function applySkin(k: Skin): void {
-  // The reveal belongs to the unlock; any other switch drops it.
-  if (k.id !== 'heisenberg') BB_REVEAL_AT = 0
+  // SAY MY NAME belongs to the unlock; any other switch drops it (breakingbad-motion.ts draws it from this play).
+  if (k.id !== 'heisenberg' && bbPlay()?.kind === 'name') setBbPlay(undefined)
   // The hidden CAPRICORN id is an alias: Edgerunners 2 in CAPRI mode, the palette of the mode below.
   if (k.id === 'capricorn') k = EDGERUNNERS2_SKIN
   if (k.id === 'edgerunners-2' && ER2.mode === 'capri') {
@@ -6430,9 +6428,12 @@ const slimBandSvg = (OW: number, d: HudData): string => {
   if (showEp) {
     const ex = xr - clockW - 14
     if (clockW) s.push(`<line x1="${r2(ex + 7)}" y1="${y - 10}" x2="${r2(ex + 7)}" y2="${y + 2}" stroke="${c.line}"/>`)
+    const epText = `<text x="${r2(clockW ? ex - 4 : xr)}" y="${y}" text-anchor="end" font-family="${FONT}" font-size="11.5" fill="${c.muted}"><tspan font-size="9.5" font-weight="700" letter-spacing=".8">${xml(ep[0])}</tspan>${epMode === 0 ? `  <tspan font-style="italic" fill="${c.subtext}">${xml(ep[1])}</tspan>` : ''}</text>`
     if (sl?.ep) s.push(sl.ep.draw(clockW ? ex - 4 : xr, y, ep[0], ep[1], epMode === 0, c))
-    else s.push(`<text x="${r2(clockW ? ex - 4 : xr)}" y="${y}" text-anchor="end" font-family="${FONT}" font-size="11.5" fill="${c.muted}"><tspan font-size="9.5" font-weight="700" letter-spacing=".8">${xml(ep[0])}</tspan>${epMode === 0 ? `  <tspan font-style="italic" fill="${c.subtext}">${xml(ep[1])}</tspan>` : ''}</text>`)
+    else s.push(epText)
     epLeft = (clockW ? ex - 4 : xr) - epWof()
+    // A theme's flicker on the episode (the Mentalist's red smiley): an overlay in the gap before it, never on the title.
+    if (!sl?.ep && th.epGlitch) s.push(th.epGlitch(epText, epLeft, y))
   }
   if (showGauge && sl) s.push(sl.gauge(epLeft - 26, y, d.isWorking, d.steps.filter(st => st === 'done').length, d.steps.length, c, FONT, tctx).svg)
   const cold = th.coldLine?.(d.title) ?? ''
@@ -6440,7 +6441,8 @@ const slimBandSvg = (OW: number, d: HudData): string => {
   if (cold && crRight - baseEnd > 220) s.push(`<text x="${r2(crRight)}" y="${y}" text-anchor="end" font-family="${FONT}" font-size="11.5" font-style="italic" fill="${c.muted}">${xml(serifClip(`“${cold}”`, 11.5, crRight - baseEnd))}</text>`)
   s.push(sl?.rule ? sl.rule(14, 32.5, W - 14, 32.5) : `<line x1="14" y1="32.5" x2="${W - 14}" y2="32.5" stroke="${c.line}"/>`)
   // ---- task row
-  const fig = sl ? sl.figure({ at: d.at, ctxPct: d.ctxPct, party: d.isParty, working: d.isWorking, ...(d.progress === null ? {} : { progress: Math.round(d.progress * 100) }), ...(activeFx() && th.extras ? { fx: activeFx() as { kind: string; at: number } } : {}), ...(d.partyAt === undefined ? {} : { partyAt: d.partyAt }) }) : `${crab(14, 38, 'boss', false, d.isWorking, 1.05)}${crown(14, 38, 1.05)}`
+  const fig = sl ? sl.figure({ at: d.at, ctxPct: d.ctxPct, party: d.isParty, working: d.isWorking, ...(d.progress === null ? {} : { progress: Math.round(d.progress * 100) }), ...(activeFx() && th.extras ? { fx: activeFx() as { kind: string; at: number } } : {}), ...(d.partyAt === undefined ? {} : { partyAt: d.partyAt }) })
+    : th.figure ? th.figure({ at: d.at, ctxPct: d.ctxPct, party: d.isParty, working: d.isWorking, failed: !d.isWorking && !d.isParty && d.steps.includes('failed'), ...(d.partyAt === undefined ? {} : { partyAt: d.partyAt }) }) : `${crab(14, 38, 'boss', false, d.isWorking, 1.05)}${crown(14, 38, 1.05)}`
   s.push(dancing(fig, d.isParty))
   const tx = 64
   // Below 1100 px the three readouts shrink to short labels and values (no bars), so they stay on screen.
@@ -6462,8 +6464,6 @@ const slimBandSvg = (OW: number, d: HudData): string => {
   const ax = px + pillW + 12
   const actRoom = Math.max(0, (hasReadouts ? r0 - 18 : W - 14) - ax - 12)
   if (d.activity && actRoom >= 60) s.push(Bd(ax, 54, `› ${fitW(d.activity, 11.5, Math.max(0, actRoom - 14))}`))
-  // Heisenberg's unlock line sits over the activity for a few seconds (and ends itself, so no redraw is needed).
-  if (SKIN.id === 'heisenberg' && BB_REVEAL_AT > 0 && d.at >= BB_REVEAL_AT - 1000 && d.at - BB_REVEAL_AT < BB_REVEAL_MS && actRoom >= 60) s.push(bbRightLine(ax, 54, actRoom, c, FONT, BB_REVEAL_AT))
   if (hasReadouts) {
     s.push(sl?.rule ? sl.rule(r0 - 18, 40, r0 - 18, 76) : `<line x1="${r0 - 18}" y1="40" x2="${r0 - 18}" y2="76" stroke="${c.line}"/>`)
     const ctxTone = d.ctxPct >= 95 ? c.alert : d.ctxPct >= 85 ? c.warn : c.text
@@ -6599,7 +6599,7 @@ const slimBandSvg = (OW: number, d: HudData): string => {
   const tipLive = d.tip.level === 2
   s.push(`<circle${tipLive ? ' class="live"' : ''} cx="${x0 + 4}" cy="${yb - 4}" r="3.5" fill="${MOOD_COLOR[d.tip.level]}"/>`)
   s.push(Bd(tipX, yb, fitW(d.tip.text, 11.5, Math.max(0, rx - tipX - 12)), tipLive ? c.text : c.subtext))
-  if (!sl && (d.ctxPct >= 95 || overBudget)) s.push(flatSmiley(W - 21, H - 19, 9, RJ, 0.3, 'rjs'))
+  if (!sl && (d.ctxPct >= 95 || overBudget)) s.push(th.corner ? th.corner(W, H, tctx) : flatSmiley(W - 21, H - 19, 9, RJ, 0.3, 'rjs'))
   // A roaming character (a walk, a peek at the episode, a sit on the gauge, now and then a takeover) goes last, over the celebration.
   const roam = th.roamer
     ? roamOverlay(th, { W, H, surface: 'band', at: d.at, ctxPct: d.ctxPct, party: d.isParty, spots: { ...(showEp && sl?.ep ? { peek: { x: epLeft, y: 22 } } : {}), ...(th.roamer.bandSpots?.(W, H) ?? {}), ...((sl?.tear || th.roamer.sitBar) && !th.roamer.sit && segs > 0 ? { sit: { x: tx + ((segs * 6 - 2) * (pct ?? 0)) / 100, y: sl?.tear ? 64 : gy } } : {}) } })
@@ -6618,7 +6618,7 @@ const slimBandSvg = (OW: number, d: HudData): string => {
     x1: Math.round(Math.min(crewLeft - 6, pctX - 6, rx - 2, hasReadouts ? r0 - 24 : W)),
     keep: [[px - 3, 39, pillW + 6, 22], [x0 - 8, 88, stepEnd - x0 + 8, 21]],
   }
-  const extras = th.extras ? th.extras({ W, H, surface: 'band', stage, at: d.at, ctxPct: d.ctxPct, ...(d.isWorking && d.taskFrom ? { job: { at: d.taskFrom, n: d.today.tasks } } : {}), ...(d.isParty ? { party: true } : {}), ...(BCS_UNPLUG_AT !== undefined ? { unplugAt: BCS_UNPLUG_AT } : {}), ...(activeFx() ? { fx: activeFx() as { kind: string; at: number } } : {}), working: d.isWorking, ...(swapAtNow() !== undefined ? { swapAt: swapAtNow() } : {}), task: d.title, titleW }) : ''
+  const extras = th.extras ? th.extras({ W, H, surface: 'band', stage, at: d.at, ctxPct: d.ctxPct, ...(d.isWorking && d.taskFrom ? { job: { at: d.taskFrom, n: d.today.tasks } } : {}), ...(d.isParty ? { party: true, ...(d.partyAt !== undefined ? { partyAt: d.partyAt } : {}) } : {}), ...(BCS_UNPLUG_AT !== undefined ? { unplugAt: BCS_UNPLUG_AT } : {}), ...(activeFx() ? { fx: activeFx() as { kind: string; at: number } } : {}), working: d.isWorking, ...(swapAtNow() !== undefined ? { swapAt: swapAtNow() } : {}), task: d.title, titleW }) : ''
   const body = `${s.join('\n')}${extras}${d.isParty ? th.cheer(W, H, FONT, c, d.partyAt) : ''}${d.isParty && th.roamer?.hushParty ? '' : roam}${trLayer}`
   return shakeInto(glitchPanel(svg(W, H, body), th, { at: d.at, ctxPct: d.ctxPct, party: d.isParty }), th, { W, H, surface: 'band', at: d.at, working: d.isWorking, party: d.isParty, fx: activeFx(), ...(swapAtNow() !== undefined ? { swapAt: swapAtNow() } : {}) })
 }
@@ -7428,6 +7428,8 @@ const bandReading = (v: ReturnType<typeof bandView>, at: number): string => {
   return JSON.stringify([
     hasStrip || eggOf() ? wallMinute(at) : 0,
     dayOf(at),
+    // A theme's act coming due (its id and pinned start): the band draws it ahead, so it begins on time even at rest.
+    themeOf()?.tick?.(at, hud.isWorking) ?? '',
     {
       ...hud,
       at: 0,
@@ -7454,6 +7456,8 @@ const paneReading = (all: AgentRun[], rawBoss: Manager, info: Env, w: Watch, bg:
   return JSON.stringify([
     isLive ? wallMinute(at) : 0,
     dayOf(at),
+    // A theme's act coming due (the pane's echo of it, pinned): drawn ahead, so it begins on time.
+    themeOf()?.tick?.(at, Boolean(boss.isWorking)) ?? '',
     isCleared(rawBoss, at),
     (rawBoss.celebrateUntil ?? 0) > at,
     (info.limits ?? []).map(l => [resetLabel(l.resetsAt, at), resetsIn(l.resetsAt, at)]),
@@ -9146,10 +9150,26 @@ export const register: Register = (on, options) => {
     // The person's latest typed prompt: the Staffing brain reads a named model or effort from it, and lets Fable through only if it names Fable.
     if (asked) lastAsked = asked
     if (!e.isMeta) pendingCommand = isPersons && e.command ? `/${e.command.name}${e.command.args && !looksLikeKey(e.command.args) ? ` ${e.command.args}` : ''}` : '' // a pasted key never becomes a job's name
-    // The hidden skin: "tyger tyger" typed while wearing The Mentalist. The prompt goes on unchanged.
-    if (asked && SKIN.id === 'mentalist' && TYGER_RE.test(asked)) {
+    // The way back: "patrick jane" typed while wearing Red John puts The Mentalist back on (its own switch plays). Red John's
+    // secret flag stays found. The prompt goes on unchanged.
+    if (asked && SKIN.id === 'red-john' && PATRICK_JANE_RE.test(asked)) {
+      const found = SKINS.get('mentalist')
+      if (found) {
+        const from = SKIN
+        applySkin(found)
+        await $.store.set('skin', found.id).catch(() => undefined)
+        await update($, skin, () => found.id)
+        await retitle($).catch(() => undefined)
+        $.ui.toast(THEMES.mentalist.greeting)
+        await noteSwitch($, from).catch(() => undefined)
+      }
+    }
+    // The hidden skin: "tyger tyger" typed while wearing The Mentalist. The prompt goes on unchanged. The band plays the
+    // "Tyger Tyger" title card, pinned to now (`/missioncontrol play tyger-tyger` replays it).
+    else if (asked && SKIN.id === 'mentalist' && TYGER_RE.test(asked)) {
       const found = SKINS.get('red-john')
       if (found) {
+        setMentPlay({ kind: 'tyger', at: await $.clock.now().catch(() => Date.now()) })
         applySkin(found)
         await $.store.set('skin', found.id).catch(() => undefined)
         await update($, skin, () => found.id)
@@ -9169,14 +9189,29 @@ export const register: Register = (on, options) => {
         await foundSecret($, found).catch(() => undefined)
       }
     }
-    // The same for "say my name" or "what's my name" typed while wearing Breaking Bad: Heisenberg.
-    if (asked && SKIN.id === 'breaking-bad' && SAY_MY_NAME_RE.test(asked)) {
+    // The way back: "walter white" typed while wearing Heisenberg puts Breaking Bad back on (its own switch plays). Heisenberg's
+    // secret flag stays found. The prompt goes on unchanged.
+    let wentBack = false
+    if (asked && SKIN.id === 'heisenberg' && WALTER_WHITE_RE.test(asked)) {
+      const found = SKINS.get('breaking-bad')
+      if (found) {
+        const from = SKIN
+        applySkin(found)
+        await $.store.set('skin', found.id).catch(() => undefined)
+        await update($, skin, () => found.id)
+        await retitle($).catch(() => undefined)
+        $.ui.toast(THEMES.breakingbad.greeting)
+        await noteSwitch($, from).catch(() => undefined)
+        wentBack = true
+      }
+    }
+    // The same for "say my name" or "what's my name" typed while wearing Breaking Bad: Heisenberg. Every time it is typed there
+    // (found before or not), SAY MY NAME plays on the band and the pane (breakingbad-motion.ts, pinned to now), and the toast.
+    if (asked && !wentBack && SKIN.id === 'breaking-bad' && SAY_MY_NAME_RE.test(asked)) {
       const found = SKINS.get('heisenberg')
       if (found) {
         applySkin(found)
-        // Only here, on the switch the phrase makes: the line on the band (from now, before the redraw) and as a toast.
-        BB_REVEAL_AT = await $.clock.now().catch(() => Date.now())
-        await $.store.set('bbRevealAt', BB_REVEAL_AT).catch(() => undefined)
+        setBbPlay({ kind: 'name', at: await $.clock.now().catch(() => Date.now()) })
         await $.store.set('skin', found.id).catch(() => undefined)
         await update($, skin, () => found.id)
         await retitle($).catch(() => undefined)
