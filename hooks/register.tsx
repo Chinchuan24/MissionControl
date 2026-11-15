@@ -6858,9 +6858,14 @@ ${egg ? EGG_CSS : th ? th.css : ''}
   // Where a Cyberpunk fight may play (stage/keep.ts), in the band's own coordinates: the clear span left of the gauge's percent
   // and the readout column, and the status pill inside it as a keep-out hole. The fight keeps under the header's line.
   const rowY = HUD_PAD + HUD_HEAD - 2
+  const x1 = Math.round(Math.min(HUD_PAD + left + barW + 8 - 6, hasReadouts ? HUD_PAD + W - right - 6 : OW - 14))
+  // Wide (wave 4): the title row AND the crew row under it, right of the row labels, up to the crew's role chips (and never past
+  // the gauge's percent): a fight drawn there is about 1.7x as tall. The crew's "+N" count, when the row has one, is a hole.
+  const chips = crewChipsLeft(W, d)
   const stage: BandStage = {
-    x1: Math.round(Math.min(HUD_PAD + left + barW + 8 - 6, hasReadouts ? HUD_PAD + W - right - 6 : OW - 14)),
+    x1,
     keep: [[HUD_PAD + left + titleW + 8 - 3, rowY + 9 - 3, fullPill.w + 6, 21]],
+    wide: { x2: Math.round(Math.min(x1, HUD_PAD + chips.left - 6)), keep: chips.more ? [[HUD_PAD + chips.more - 3, rowY + HUD_TOP + 8 + 2, 34, 16]] : [] },
   }
   return svg(
     OW,
@@ -6902,7 +6907,7 @@ ${hudLines(W, d)}
 ${hudSpare(W)}
 </g>
 ${egg && !d.lite ? cyberCheer(egg, OW, OH, d) : egg && d.isParty ? celebration(OW, OH, egg, FONT, d.partyAt) : ''}
-${egg && !d.lite && !d.isParty ? cyberFightBand(egg, OW, d.at, d.isWorking, stage) : ''}
+${egg && !d.isParty ? cyberFightBand(egg, OW, d.at, d.isWorking, stage) : ''}
 ${th && d.isParty ? th.cheer(OW, OH, FONT, c, d.partyAt, stage) : ''}
 ${th?.corner ? th.corner(OW, OH, { ctxPct: d.ctxPct, overBudget: Boolean(d.budget && d.budget.usedMs > d.budget.min * 60_000) }) : ''}`,
   )
@@ -6989,6 +6994,25 @@ const hudSpare = (W: number): string =>
   }).join('\n')
 
 // Lines three to five: the crew, the steps, the tip and today.
+/**
+ * Where the classic band's crew row hands its right part to the role chips (inner x, as hudLines lays them out: the row's end
+ * when there are none), and the x of its "+N" count when the crabs overflow. A fight on the wide stage stops left of the chips.
+ */
+const crewChipsLeft = (W: number, d: HudData): { left: number; more?: number } => {
+  const crabX = 14 + 64
+  if (!d.crew.length) return { left: W - 14 }
+  let rx = W - 14
+  let left = W - 14
+  for (const r of [...d.roles].reverse().slice(0, 4)) {
+    const w = Math.round(textWidth(`${r.role} ${r.count}`, 10.5) + 16)
+    if (rx - w < crabX + 24 + 28) break
+    rx -= w
+    left = rx
+    rx -= 6
+  }
+  const room = Math.max(1, Math.floor((rx - 8 - 24 - crabX) / 24))
+  return d.crew.length > room ? { left, more: crabX + room * 24 + 2 } : { left }
+}
 const hudLines = (W: number, d: HudData): string => {
   const c = SKIN.colors
   const x0 = 14
