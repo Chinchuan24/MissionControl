@@ -2750,6 +2750,9 @@ const drawnChars = (n: unknown, sourceLength: (source: string) => number = src =
 // layouts, cards to slim rows to the short view and back, redraw after redraw.
 const DRAW_SLACK = 10_000
 let paneLevel = 0
+// How many running agents the last drawing gave a card by the pane's own rule (the fallback's `cards`). While the person's
+// change holds the layout (paneHold), a card they open never takes another agent's card away, and none is handed out.
+let paneCards: number | undefined
 // The crew as it was when the person last opened, collapsed or folded something. While it is the
 // same, the pane never steps up to a richer fallback: a card less made room for one, and the
 // step redrew every other card and picture (others' cards snapping open, sections coming back)
@@ -8996,17 +8999,29 @@ export const register: Register = (on, options) => {
       // Level `level` of the fallbacks fits: with room to spare when richer than the last drawn.
       // Never richer while the person's last change holds it (paneHold): the click redraws its own card only.
       const fits = (level: number, size: number): boolean => (level >= paneLevel || paneHold !== crewKey) && size + reserve <= DRAW_MAX - (level < paneLevel ? DRAW_SLACK : 0)
-      const take = <T,>(level: number, v: T): T => {
+      const take = <T,>(level: number, v: T, cards?: number): T => {
         paneLevel = level
+        paneCards = cards
         return keep(v)
       }
       const stepView = (st: PaneStep) => full(st.org === 'rich' ? rich : st.org === 'light' ? light() : '', treeWith(st.cards, st.keep), st.lite, new Set(st.drop))
       // A crew with more slim rows than crabs can fit skips drawing them all to measure.
       const isCrowd = tree.filter(isSlim).length > MAX_CRAB_ROWS
+      // Held by the person's own change (an Open on a full pane): the room for the card they opened comes out of the parts
+      // (crabs, the hierarchy's drawing, finished rows, sections), never out of other agents' cards, and no step hands a card
+      // out either: every step keeps exactly the cards drawn before the click. Only when nothing fits that way, the plain ladder.
+      const held = paneHold === crewKey ? paneCards : undefined
+      if (held !== undefined) {
+        for (const [level, st] of PANE_STEPS.entries()) {
+          if (st.cards < held || (level === 0 && isCrowd)) continue
+          const view = stepView({ ...st, cards: held })
+          if (fits(level, sizeOf(view))) return take(level, view, held)
+        }
+      }
       for (const [level, st] of PANE_STEPS.entries()) {
         if (level === 0 && isCrowd) continue
         const view = stepView(st)
-        if (fits(level, sizeOf(view))) return take(level, view)
+        if (fits(level, sizeOf(view))) return take(level, view, st.cards)
       }
       const base = PANE_STEPS.length
       const short = compactView(rich)
