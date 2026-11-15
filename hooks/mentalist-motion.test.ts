@@ -327,10 +327,11 @@ test('THE READ on the band span: the two and every line stand whole in a free re
     const r = readAct({ at: NOW, w, h: 97, id: `t-read-span-${w}`, holes })
     const lines = [...r.layer.matchAll(/>(a blink\.|Seven of hearts\.)<\/text>/g)]
     expect(lines.length, `${w}: the tell, the reveal, the still's reveal`).toBeGreaterThanOrEqual(3)
-    for (const [, x, y, size, text] of r.layer.matchAll(/<text x="([\d.]+)" y="([\d.]+)"(?: text-anchor="middle")? font-family="[^"]*" font-size="([\d.]+)"[^>]*>(a blink\.|Seven of hearts\.)<\/text>/g)) {
+    for (const [, x, y, mid, size, text] of r.layer.matchAll(/<text x="([\d.]+)" y="([\d.]+)"( text-anchor="middle")? font-family="[^"]*" font-size="([\d.]+)"[^>]*>(a blink\.|Seven of hearts\.)<\/text>/g)) {
       const fs = Number(size)
       const tw = (text as string).length * fs * 0.5
-      const left = text === 'a blink.' ? Number(x) : Number(x) - tw / 2
+      // (Final review: the reveal stands where it fits whole, start-anchored; the old place was centred.)
+      const left = mid ? Number(x) - tw / 2 : Number(x)
       expect(left, `${w} ${text}`).toBeGreaterThanOrEqual(0)
       expect(left + tw, `${w} ${text}`).toBeLessThanOrEqual(w)
       for (const [hx, hy, hw, hh] of holes) {

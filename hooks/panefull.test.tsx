@@ -71,6 +71,9 @@ const PLAN = Array.from({ length: 8 }, (_, i) => `Engineer: piece ${i + 1} of th
 /** A session as it looks after a long afternoon: a plan, `active` agents at work, `done` finished (some nested). */
 const session = async ($: Engine, wear: (typeof WEARS)[number], active: number, done: number) => {
   await $.session.start({ source: 'startup', cwd: '/repo', surface: 'desktop', isInteractive: true } as never)
+  // Pinned to the fight schedule the test computes (stage/director.ts's own default, the old 30-45 min rule); the plugin's
+  // setting defaults to `often` (fight-level.test.ts).
+  await $.command.run({ command: 'missioncontrol', args: 'fights rare' } as never)
   const said = String(((await $.command.run({ command: 'skin', args: wear.skin } as never)) as { text?: string }).text)
   expect(said, `${wear.label} is worn`).toMatch(/^Skin: /)
   await $.prompt.submit({ text: 'Big job', cursor: 0 } as never)
@@ -178,6 +181,7 @@ for (const wear of WEARS)
   test(`always full: ${wear.label}: a 23-task plan, 2 at work, 6 finished and 40 tool calls draw the full pane`, { timeoutMs: 60_000 }, async ($, on) => {
     base(on)
     await $.session.start({ source: 'startup', cwd: '/repo', surface: 'desktop', isInteractive: true } as never)
+    await $.command.run({ command: 'missioncontrol', args: 'fights rare' } as never)
     await $.command.run({ command: 'skin', args: wear.skin } as never)
     await $.prompt.submit({ text: 'Big job', cursor: 0 } as never)
     if (wear.after) await $.prompt.submit({ text: wear.after, cursor: 0 } as never)

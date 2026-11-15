@@ -785,6 +785,30 @@ export const cqFrame = (W: number, H: number): { k: number; Wv: number; Hv: numb
   return { k, Wv, Hv: Math.round((H - top) / k), x: r1((W - Wv * k) / 2), top }
 }
 
+// ---------------------------------------------------------------- the band's push-in (wave 4)
+/** The band cut's sprite scale for a virtual width (the choreography needs its room: a narrow stage plays smaller). */
+const scOf = (W: number): number => (W < 620 ? 1.15 : W < 800 ? 1.3 : 1.45)
+/** The most the band cut is pushed in (a 134 px band: the vertical room binds first, about 1.24 at 1250). */
+export const PUSH_MAX = 1.35
+/**
+ * How the band cut fills the real band: laid out on a virtual stage `W` wide (its action box, 0.67 of it, scaled by `k`, ends
+ * at the clear span's edge `x1`), at sprite scale `sc`, then scaled by `k` and lifted by `ty` so the tallest fighter's head (the
+ * design's top) sits on the header rule (y 34) and the floor (y 118) at the band's foot. `k` is as large as the band allows:
+ * its height (the design's top to floor in the 100 px under the header), its width (the cut needs a 360 px virtual stage).
+ */
+export const push = (H: number, x1: number, cq = false): { k: number; ty: number; W: number; sc: number } => {
+  const span = (x1 - 4) / 0.67
+  const top = (sc: number): number => Math.round(H * 0.5) + 4 - ((cq ? 52 : 47) * sc) / 2 - 1
+  const fit = (k: number) => { const W = Math.round(Math.max(360, Math.min(span, 1600) / k)); return { W, sc: scOf(W) } }
+  let k = Math.max(1, Math.min(PUSH_MAX, span / 360))
+  for (let i = 0; i < 3; i++) k = Math.max(1, Math.min(PUSH_MAX, span / 360, (H - 32) / (H - 16 - top(fit(k).sc))))
+  k = r3(k)
+  const f = fit(k)
+  return { k, ty: r1(34 - top(f.sc) * k), W: f.W, sc: f.sc }
+}
+/** The tallest fighter's drawn height on the band (band px): Omni-Man (47 rows) or Conquest (52), at the cut's scale times its push. */
+export const bandFighterPx = (H: number, x1: number, cq = false): number => { const p = push(H, x1, cq); return r1((cq ? 52 : 47) * p.sc * p.k) }
+
 // ---------------------------------------------------------------- surfaces
 export type FightArgs = { W: number; H: number; era: Era; startAt: number; /** Colours kept per frame. */ K?: number; big?: boolean; /** Which version (default 0). */ v?: Version; /** The band only: the clear span and the readouts to keep clear (stage/keep.ts). */ stage?: BandStage }
 type Built = { svg: string; chain: string[]; frames: number; shake: string; cut: Cut }
@@ -793,33 +817,40 @@ const build = (a: FightArgs, surface: 'band' | ActIndex): Built => {
   const v = a.v ?? 0
   const T = timing(v)
   const st = surface === 'band' ? a.stage : undefined
-  const key = `${surface}|${v}|${a.era}|${a.W}|${a.H}|${a.startAt}|${a.K ?? 4}|${st ? `${st.x1}:${st.keep.join(';')}` : ''}`
+  const key = `${surface}|${v}|${a.era}|${a.W}|${a.H}|${a.startAt}|${a.K ?? 4}|${st ? `${st.x1}:${st.keep.join(';')}:${st.title ?? ''}` : ''}`
   const hit = CACHE.get(key)
   if (hit) return hit
   const band = surface === 'band'
   const off = band ? 0 : (T.off[surface] as number)
-  // On the real band the cut is laid out on a virtual width whose action box (0.67 of it) ends at the band's clear span, so
-  // it never reaches the crew, the percent, TODAY or the readouts; a narrow span plays it smaller.
-  const W = st ? Math.max(360, Math.min(a.W, Math.round((st.x1 - 4) / 0.67))) : a.W
-  const box: [number, number, number, number] = band ? [0, 0, Math.round(W * 0.67), a.H] : [0, 0, a.W, a.H]
   const cq = v === CONQUEST
-  const sc = band ? (W < 620 ? 1.15 : W < 800 ? 1.3 : 1.45) : 1.9
-  const fr = cq && !band ? cqFrame(a.W, a.H) : undefined
+  // On the real band the cut is laid out on a virtual width whose action box (0.67 of it) ends at the band's clear span, so
+  // it never reaches the crew, the percent, TODAY or the readouts; a narrow span plays it smaller. Wave 4: the cut is pushed in
+  // (`push`), so the fighters fill the band's height under its header rule.
+  const pk = st ? push(a.H, st.x1, cq) : { k: 1, ty: 0, W: a.W, sc: 1.45 }
+  const W = st ? pk.W : a.W
+  const box: [number, number, number, number] = band ? [0, 0, Math.round(W * 0.67), a.H] : [0, 0, a.W, a.H]
+  const sc = band ? (st ? pk.sc : scOf(W)) : 1.9
+  // Every pane act (wave 4: THE FIGHT's three too, as MARK VS CONQUEST's two) is framed under the card's title row and pushed
+  // in to fill a wide card.
+  const fr = !band ? cqFrame(a.W, a.H) : undefined
   const c = fr
     ? new Cut(`invf-p${surface}-${v}-${a.era}-${a.W}x${a.H}`, a.startAt, off, a.era, sc, fr.Wv, fr.Hv, [0, 0, fr.Wv, fr.Hv], a.K ?? 4, T.ms, cq)
     : new Cut(`invf-${band ? 'b' : `p${surface}`}-${v}-${a.era}-${a.W}x${a.H}`, a.startAt, off, a.era, sc, W, a.H, box, a.K ?? 4, T.ms, cq, st ? 2 : undefined)
   // The card under the fight: a veil (COVER STORY is the fight's own panel; GDA WALL's live feed stays readable through it),
   // and the downtown arena where the card has the room for it (GDA WALL; COVER STORY's card is at its 60 k).
-  if (fr) c.set += `<rect x="${r1(-fr.x / fr.k)}" width="${r1(a.W / fr.k)}" height="${fr.Hv}" fill="${PROPS.ink}" opacity="${surface === 0 ? 0.8 : 0.5}"/>${surface === 1 ? arena(c, Math.round(fr.Hv * 0.32)) : ''}`
-  if (st) c.keep = st.keep
+  if (fr && cq) c.set += `<rect x="${r1(-fr.x / fr.k)}" width="${r1(a.W / fr.k)}" height="${fr.Hv}" fill="${PROPS.ink}" opacity="${surface === 0 ? 0.8 : 0.5}"/>${surface === 1 ? arena(c, Math.round(fr.Hv * 0.32)) : ''}`
+  // The readouts and the task title, in the cut's own (pushed) coordinates: a word that would sit on one drops under it.
+  const holes = st ? [...st.keep, ...(st.title ? [st.title] : [])] : []
+  if (st) c.keep = holes.map(([x, y, w, h]) => [r1(x / pk.k), r1((y - pk.ty) / pk.k), r1(w / pk.k), r1(h / pk.k)] as [number, number, number, number])
   if (band) { c.act.extraCss.delete(FIGHT_CSS); c.act.extraCss.add(BAND_CSS) }
   if (band) { if (cq) conquestBand(c); else bandCut(c, v as 0 | 1 | 2) }
   else if (cq) conquestAct(c, surface)
   else actCut(c, surface)
   const done0 = c.done(band ? T.band : (T.len[surface] as number))
   const done = fr ? `<g transform="translate(${fr.x} ${fr.top}) scale(${fr.k})">${done0}</g>` : done0
-  // The keep-out: the window under the header rule, left of the clear span, minus the Tasks chip and the step count.
-  const svg = st ? `${keepClip(`${c.act.p}kc`, [0, 34, st.x1, a.H - 34], st.keep)}<g clip-path="url(#${c.act.p}kc)">${done}</g>` : done
+  // The keep-out: the window under the header rule, left of the clear span, minus the Tasks chip, the step count and the task
+  // title (Mark passes BEHIND the title, never over it); inside it, the push-in.
+  const svg = st ? `${keepClip(`${c.act.p}kc`, [0, 34, st.x1, a.H - 34], holes)}<g clip-path="url(#${c.act.p}kc)"><g transform="translate(0 ${pk.ty}) scale(${pk.k})">${done}</g></g>` : done
   const chain = c.act.chainKeys()
   const out: Built = { svg, chain, frames: c.act.bank.count(), shake: c.shake(), cut: c }
   if (CACHE.size > 24) CACHE.delete(CACHE.keys().next().value as string)

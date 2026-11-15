@@ -324,10 +324,9 @@ test('two cards collapsed in quick succession both stay collapsed (no lost write
   expect(labels).toContain('open-a2=Open ▸')
 })
 
-// The sources of a drawing by picture: the agent rows by agent, the rest by what they show. Breaking Bad's
-// cards number their SVG ids afresh at each drawing (a known, separate cost of every redraw): read without them.
-const unnumbered = (src: string) => src.replace(/\b(id="|url\(#)([A-Za-z]+)\d+/g, '$1$2')
-const pictures = (root: unknown) => new Map(svgs(root).map((v, i) => [/^Engineer: piece (\d+)/.exec(v.alt)?.[1] ? `a${Number(/piece (\d+)/.exec(v.alt)?.[1]) + 1}` : `${i}:${v.alt.split(':')[0]}`, unnumbered(v.source)]))
+// The sources of a drawing by picture: the agent rows by agent, the rest by what they show. Read as sent: Breaking Bad's
+// cards once numbered their SVG ids afresh at each drawing (every card drawn anew at every tick); their ids are stable now.
+const pictures = (root: unknown) => new Map(svgs(root).map((v, i) => [/^Engineer: piece (\d+)/.exec(v.alt)?.[1] ? `a${Number(/piece (\d+)/.exec(v.alt)?.[1]) + 1}` : `${i}:${v.alt.split(':')[0]}`, v.source]))
 for (const skin of ['breaking-bad', 'crab-classic', 'the-boys', 'edgerunners-2'])
   test(`${skin}: a Collapse redraws only the clicked card, and the layout holds while the work goes on`, { timeoutMs: 20_000 }, async ($, on) => {
     const clock = await working($, on, skin, 5)
@@ -376,3 +375,70 @@ test('an opened running card is kept in the store: a reload keeps it open, a gon
   expect(slimOpen(after.buttons).length).toBe(1)
   expect(after.buttons.some(b => b.label === '▴ Collapse')).toBe(true)
 })
+
+
+// --- "Opening a card on a pane that is already full makes the other cards shrink." The opened card is over and above the
+// pane's own cards; on a full pane it did not fit, and the size fallback stepped down to fewer cards: the agents above it lost
+// theirs on the click. Now the room comes out of the parts (crabs, the hierarchy's drawing, sections), never other cards.
+for (const skin of ['breaking-bad', 'mentalist', 'better-call-saul', 'edgerunners-2', 'crab-classic'])
+  test(`${skin}: opening a card on a full pane takes no other agent's card, and the layout holds after`, { timeoutMs: 20_000 }, async ($, on) => {
+    const clock = await working($, on, skin, 6)
+    const ui = await mount($)
+    await clock.advance(20_000)
+    const before = await ui.drawn()
+    const x = firstSlim(before)
+    expect(x, 'a slim row to open').toBeDefined()
+    const cards = shapes(before).filter(sh => sh.endsWith(':C')).map(sh => sh.split(':')[0] as string)
+    expect(cards.length, `${skin}: cards before`).toBeGreaterThanOrEqual(1)
+    await ui.press({ key: `open-${x}` })
+    const after = await ui.drawn()
+    expect(shapeOf(after, x)).toBe('C')
+    // Every card that was there is still a card, drawn as before (the same image: not even redrawn).
+    const was = pictures(before)
+    const now = pictures(after)
+    for (const id of cards) {
+      expect(shapeOf(after, id), `${skin}: ${id} keeps its card`).toBe('C')
+      expect(now.get(id) === was.get(id), `${skin}: ${id} not redrawn`).toBe(true)
+    }
+    // No other agent is handed a card either, and the ticks that follow keep that layout.
+    const layoutNow = shapes(after)
+    expect(layoutNow.filter(sh => sh.endsWith(':C')).length).toBe(cards.length + 1)
+    for (let i = 0; i < 3; i++) {
+      await clock.advance(10_000)
+      expect(shapes(await ui.drawn())).toEqual(layoutNow)
+    }
+    expect(sentChars(await ui.drawn())).toBeLessThan(262_144)
+    await ui.unmount()
+  })
+
+// --- "Breaking Bad's cards get new internal ids on every redraw." On air, the Classroom and the band's desert numbered
+// their <defs> ids from a counter, so every drawing was a new image (the app redrew the three of them at every tick).
+for (const skin of ['breaking-bad', 'heisenberg'])
+  test(`${skin}: a card drawn twice for the same moment is the same image (stable def ids), pane and band`, async ($, on) => {
+    await working($, on, skin, 3)
+    const draw = async () => {
+      const ui = await mount($)
+      const all = svgs(await ui.drawn())
+      await ui.unmount()
+      return all
+    }
+    const a = await draw()
+    const b = await draw()
+    const byAlt = (all: { alt: string; source: string }[]) => new Map(all.map(v => [v.alt, v.source]))
+    const [ma, mb] = [byAlt(a), byAlt(b)]
+    const named = [...ma.keys()].filter(k => /^(Classroom|On air)/.test(k))
+    expect(named.length, `${skin}: the Classroom and On air cards`).toBe(2)
+    for (const k of named) {
+      expect(ma.get(k)).toMatch(/id="bb(chalk|scan)\d+"/)
+      expect(mb.get(k) === ma.get(k), k).toBe(true)
+    }
+    const band = async () => {
+      const ui = await $.ui.mount({ plugin: 'crab-progress', surface: 'desktop', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: true, maxRows: 14, bodyColumns: 126 } } as never)
+      const src = (await ui.findAll({ type: 'Svg' })).map(el => String(el.props.source)).join('')
+      await ui.unmount()
+      return src
+    }
+    const [b1, b2] = [await band(), await band()]
+    expect(b1).toMatch(/id="bbclip\d+"/)
+    expect(b2 === b1).toBe(true)
+  })

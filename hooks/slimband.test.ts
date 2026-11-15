@@ -34,6 +34,7 @@ const base = (on: On, skin: string) => {
 }
 const band = async ($: Engine, skin: string, W: number): Promise<string> => {
   await $.session.start({ source: 'startup', cwd: '/repo', surface: 'desktop', isInteractive: true } as never)
+  // At the plugin's default fight level (`often`): THE READ may be on the Mentalist's band; its lines keep clear of every text.
   if (skin === 'heisenberg' || skin === 'capricorn' || skin === 'edgerunners-2' || skin === 'better-call-saul' || skin === 'gene' || skin === 'invincible' || skin === 'caliper') await $.command.run({ command: 'skin', args: skin } as never)
   await $.prompt.submit({ text: 'crack the case', cursor: 0 } as never)
   // @ts-ignore TS2589: the plugin's tool-name types are deep; the same call is already ignored in the other tests' budget

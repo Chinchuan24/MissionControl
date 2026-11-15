@@ -23,7 +23,7 @@ import { Fight, fightLane } from './stage/choreo'
 import { Director, localOffsetMs } from './stage/director'
 import { quantise } from './stage/frames'
 import * as fx from './stage/fx'
-import { keepClip } from './stage/keep'
+import { allHoles, holesIn, keepClip } from './stage/keep'
 import type { BandStage, Rect } from './stage/keep'
 import { registerPlay } from './stage/replay'
 import { Act, r1, r3 } from './stage/timeline'
@@ -108,22 +108,104 @@ const fold2 = (sp: Sprite, grey: string, red: string): Sprite => {
  * The band's act region: the title row and the gauge row under the header's line (the header, with its chips, the model and the
  * CYBERPSYCHOSIS / MAXTAC chip from 85%, is never covered), up to the band's clear span (stage/keep.ts): left of the gauge's
  * percent and the readout column. With no stage (a unit test) the span is the band's old rule, 352 px at most.
+ * When the band hands a WIDE stage (the classic band: the title row AND the crew row, right of the row labels, up to the crew's
+ * role chips), the fight takes it: 78 px tall where the title row alone is 46, so the fighters are drawn about 1.7x as large.
+ * A wide span narrower than `WIDE_MIN` keeps the title row (the crew's chips fill a narrow band's crew row).
  */
+export const WIDE_MIN = 300
+export const WIDE_H = 78
 export const fightRegion = (OW: number, stage?: BandStage): { x: number; y: number; w: number; h: number } => {
+  if (stage?.wide) {
+    const w = Math.round(Math.min(640, stage.wide.x2 - WIDE_X))
+    if (w >= WIDE_MIN) return { x: WIDE_X, y: 34, w, h: WIDE_H }
+  }
   const w = Math.round(stage ? Math.min(352, stage.x1 - 8) : Math.max(220, Math.min(OW - 352, 352)))
   return { x: 8, y: 34, w, h: 46 }
 }
+/** Where the wide region starts: right of the row labels (CREW, STEPS) and the boss's box. */
+export const WIDE_X = 84
+/** The holes of a stage that fall in region `r`, in the region's own coordinates (`title`: the task title's box too). */
+export const regionHoles = (r: { x: number; y: number; w: number; h: number }, stage?: BandStage, title = false): Rect[] =>
+  holesIn([r.x, r.y, r.w, r.h], stage ? (title ? allHoles(stage) : [...stage.keep, ...(stage.wide?.keep ?? [])]) : []).map(([x, y, w, h]) => [r1(x - r.x), r1(y - r.y), r1(w), r1(h)] as Rect)
+/** A low lane's top (under the task title's row: the gauge and the crew rows) and the narrowest one worth a fight. */
+export const LOW_Y = 63
+export const LOW_MIN = 180
+/**
+ * Where a band act plays on the classic band (wave 4 final): NEVER over the task title, at every width. A wide band: the widest
+ * full-height lane of the region right of the title and the Tasks chip (as wave 4 drew it, 900 and up). Else a LOW lane under
+ * the title's row (the gauge and the crew rows), from the row labels to the wide stage's edge, at least `LOW_MIN` wide (750).
+ * Else none (600 and under: the title, its chip and the gauge's percent fill the span; the pane's echo plays alone).
+ * With no stage (a unit test) the region as before.
+ */
+export const actRegion = (OW: number, stage?: BandStage): { x: number; y: number; w: number; h: number } | undefined => {
+  const r0 = fightRegion(OW, stage)
+  if (!stage) return r0
+  const holes = regionHoles(r0, stage, true)
+  const L = laneOf(r0.w, r0.h, holes)
+  // Clear of every hole; or a stage with no title box (the old rule: its holes stay holes in the clip).
+  if (!stage.title || !holes.some(([x, , w]) => x < L.a + L.w && x + w > L.a)) return { ...r0, x: r1(r0.x + L.a), w: r1(L.w) }
+  const w = Math.round(Math.min(640, (stage.wide?.x2 ?? stage.x1) - WIDE_X))
+  return w >= LOW_MIN ? { x: WIDE_X, y: LOW_Y, w, h: 34 + WIDE_H - LOW_Y } : undefined
+}
+/**
+ * The act's stage inside its region: the widest full-height lane free of every hole (the Tasks chip), so no fighter is ever cut
+ * by a hole; the whole region when that lane is under 200 px (a narrow band: the fighters pass behind the chip, as before).
+ */
+export const laneOf = (w: number, h: number, holes: Rect[] = []): { a: number; w: number } => {
+  const xs = [0, w, ...holes.flatMap(([x, , hw]) => [x - 4, x + hw + 4])].map(v => Math.max(0, Math.min(w, v))).sort((p, q) => p - q)
+  let best = { a: 0, w: 0 }
+  for (let i = 0; i < xs.length - 1; i++) {
+    const a = xs[i] as number
+    const b = xs[i + 1] as number
+    if (b - a > best.w && !holes.some(([x, y, hw, hh]) => x < b && x + hw > a && y < h && y + hh > 0)) best = { a, w: b - a }
+  }
+  return best.w >= 200 ? { a: r1(best.a), w: r1(best.w) } : { a: 0, w }
+}
+/** The widest x span of [0, w] free of the holes that meet rows y0..y1 (a title's line). */
+export const spanFree = (w: number, holes: Rect[], y0: number, y1: number): [number, number] => {
+  const hit = holes.filter(([, y, , hh]) => y < y1 && y + hh > y0).sort((p, q) => p[0] - q[0])
+  let best: [number, number] = [0, 0]
+  let a = 0
+  for (const [x, , hw] of [...hit, [w, 0, 0, 0] as Rect]) { if (x - 3 - a > best[1] - best[0]) best = [a, x - 3]; a = Math.max(a, x + hw + 3) }
+  return best[1] > best[0] ? best : [0, w]
+}
+/** A title's font size that fits `text` (heavy condensed caps, `ls` letter-spacing) into `room` px, at most `max`. */
+/** How tall each fight's tallest fighter is drawn in a lane `w` by `h` (the acts' own scale rule: the height, or the width, binds). */
+export const FIGHTER: Record<FightKind, { tall: number; per: number }> = { maxtac: { tall: 52, per: 250 }, boardroom: { tall: 54, per: 250 }, 'ice-duel': { tall: 44, per: 220 } }
+export const fighterPx = (kind: FightKind, w: number, h: number): number => r1(Math.min(h - 6, (FIGHTER[kind].tall * w) / FIGHTER[kind].per))
+/** MAXTAC's closing line. */
+export const MAXTAC_TITLE = 'MAXTAC: /compact, CHOOM'
+/** The width the title's heavy condensed caps take at `size` (with 1.2 letter-spacing): a generous estimate. */
+export const titleW = (text: string, size: number, ls = 1.2, em = 0.56): number => r1(text.length * (size * em + ls))
+/**
+ * Where a boxed title line goes whole: the biggest size (from `max` down to 7) whose box fits a span of its rows free of the
+ * holes, high in the region first, else low (under a chip). Its box runs from y - fs + 1 to y + 0.7 fs + 1.
+ */
+export const titleSpot = (text: string, w: number, h: number, holes: Rect[], max: number): { fs: number; x: number; y: number } => {
+  for (let fs = max; fs >= 7; fs -= 0.5) {
+    const need = titleW(text, fs) + 14
+    for (const y of [Math.max(fs + 1, h * 0.3), h - 0.7 * fs - 2]) {
+      const sp = spanFree(w, holes, y - fs + 1, y + 0.7 * fs + 1)
+      if (sp[1] - sp[0] >= need && y - fs + 1 >= 0) return { fs, x: r1((sp[0] + sp[1]) / 2), y: r1(y) }
+    }
+  }
+  return { fs: 7, x: r1(w / 2), y: r1(Math.max(8, h * 0.3)) }
+}
+export const fitSize = (text: string, room: number, max: number, ls = 1.2, em = 0.56): number => r1(Math.max(7, Math.min(max, (room - text.length * ls) / (text.length * em))))
 /** The act placed at the region, clipped to it minus the band's readouts inside it (keep-out holes, in the band's coordinates). */
 const placed = (layer: string, r: { x: number; y: number; w: number; h: number }, id: string, keep: Rect[] = []): string =>
   `<defs>${keepClip(id, [r.x, r.y, r.w, r.h], keep)}</defs><g clip-path="url(#${id})"><g transform="translate(${r1(r.x)} ${r1(r.y)})">${layer}</g></g>`
 /** A letterbox with a cut-in strip (80 x 20) centred in it: the beat before the big hit. */
-const cutStrip = (act: Act, key: string, w: number, h: number, frac = 0.76): { lb: string; y: number; hh: number; sc: number; x: number } => {
+const cutStrip = (act: Act, key: string, w: number, h: number, frac = 0.76, lane = { a: 0, w }): { lb: string; y: number; hh: number; sc: number; x: number } => {
   const hh = r1(h * frac)
   const y = r1((h - hh) / 2)
-  const sc = r3(Math.min(hh / 20, (w - 8) / 80))
-  const x = r1(w / 2 - 40 * sc)
+  const sc = r3(Math.min(hh / 20, (lane.w - 8) / 80))
+  const x = r1(lane.a + lane.w / 2 - 40 * sc)
   return { lb: act.bank.use(key, x, r1(y + hh / 2), 1, sc), y, hh, sc, x }
 }
+
+/** An act's arguments: its region's size, and the band's keep-out holes inside it (region coordinates). */
+export type ActArgs = { at: number; w: number; h: number; id: string; holes?: Rect[] }
 
 // ---------------------------------------------------------------- FIGHT 1: THE MAXTAC RAID (2077)
 /** The MaxTac AV, in vector (a heavy armoured flyer, side on, its light bar red and blue), centred on (0, 0) at scale `s`. */
@@ -147,17 +229,19 @@ const T_KO = padTo(fold2(ART.CP77_MAXTAC_KNOCKED, '#2C2E36', '#FF1A40'), T_H)
  *   2.95 time snaps back (a chromatic blink): both troopers are knocked out of frame (crash), he lands, the AV pulls away
  *   4.0  MAXTAC: /compact, CHOOM in neon. Reduced motion: the landing with the title.
  */
-export const maxtacAct = (o: { at: number; w: number; h: number; id: string }): { layer: string; act: Act; fight: Fight } => {
+export const maxtacAct = (o: ActArgs): { layer: string; act: Act; fight: Fight } => {
   const act = new Act({ id: o.id, ms: FIGHT_MS.maxtac, at: o.at, W: o.w, H: o.h, K: 3 })
-  const sc = r3(Math.min(1.25, (o.h - 6) / T_H))
+  // The fight plays in the widest lane free of the band's holes (the Tasks chip); the scrim and the strobe take the whole region.
+  const L = laneOf(o.w, o.h, o.holes)
+  const sc = r3(Math.min((o.h - 6) / T_H, L.w / 250))
   const gy = o.h - 3
   const cy = (hh: number) => r1(gy - (hh * sc) / 2)
   act.cast('dDash', D_DASH, 0.5).cast('dPunch', D_PUNCH, 0.5).cast('dLand', D_LAND, 0.5).cast('tAim', T_AIM, 0.5).cast('tKo', T_KO, 0.5)
   const cam = new Camera(act)
   const f = new Fight(act, { sc, ink: CP.ink, star: { core: CP.white, star: CP.yellow, ring: CP.cyan }, spark: CP.yellow, dust: '#8A8FA8', lines: CP.cyan, smear: CP.green, impactBg: '#0A0A12', impactFg: CP.yellow, font: FONT }, cam)
-  const xl = r1(o.w * 0.15)
-  const xr = r1(o.w * 0.83)
-  const xd = r1(o.w * 0.47)
+  const xl = r1(L.a + L.w * 0.15)
+  const xr = r1(L.a + L.w * 0.83)
+  const xd = r1(L.a + L.w * 0.47)
   const p = act.p
   f.fighter('d', 'dLand', xd, cy(D_H), 1).fighter('tl', 'tAim', xl, -44, 1).fighter('tr', 'tAim', xr, -44, -1)
   // 0.95: the drop, from above the frame through the AV.
@@ -176,9 +260,9 @@ export const maxtacAct = (o: { at: number; w: number; h: number; id: string }): 
   f.at(2.86).hit('tr', { impact: true, flash: 0.3, shake: 3, freeze: 0.24, y: r1(cy(T_H) - 9 * sc) })
   // 2.95: time comes back. The tap lands and both fly out of frame; he drops and lands; then the cocky stance.
   f.at(2.95).hit('tl', { flash: false, shake: false, freeze: false, x: r1(xl + 8 * sc), y: r1(cy(T_H) - 8 * sc) })
-  f.knockback('tr', r1(o.w * 0.1), { pose: 'tKo', d: 0.38, arc: 10, land: 'crash' })
+  f.knockback('tr', r1(L.w * 0.1), { pose: 'tKo', d: 0.38, arc: 10, land: 'crash' })
   f.with().exit('tl', { dir: -1, d: 0.3, fade: true })
-  f.at(3.0).approach('d', r1(o.w * 0.6), 0.28, { pose: 'dLand', y: cy(D_H), ease: 'settle', lines: false, ghosts: false })
+  f.at(3.0).approach('d', r1(L.a + L.w * 0.6), 0.28, { pose: 'dLand', y: cy(D_H), ease: 'settle', lines: false, ghosts: false })
   let body = scrim(act, 5.45, CP.ink, 0.95)
   // The strobe: red from the left, blue from the right, in turns (6 Hz), loud at the start and once more when time comes back.
   body += `<defs><linearGradient id="${p}sr" x1="0" x2="1"><stop offset="0" stop-color="${CP.red}" stop-opacity=".5"/><stop offset=".55" stop-color="${CP.red}" stop-opacity="0"/></linearGradient><linearGradient id="${p}sb" x1="1" x2="0"><stop offset="0" stop-color="${CP.blue}" stop-opacity=".5"/><stop offset=".55" stop-color="${CP.blue}" stop-opacity="0"/></linearGradient><linearGradient id="${p}sl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF" stop-opacity=".4"/><stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/></linearGradient></defs>`
@@ -191,10 +275,10 @@ export const maxtacAct = (o: { at: number; w: number; h: number; id: string }): 
   const stars = act.on(kf(act, `<text x="${hx}" y="23" text-anchor="end" font-size="10" letter-spacing="1" fill="${CP.red}">★★★★★</text>`, [[0, 'clip-path:inset(0 100% 0 0)'], [0.12, 'clip-path:inset(0 100% 0 0)'], [0.6, 'clip-path:inset(0 0 0 0)']], { ease: 'steps(5,end)' }), 0.05, 1.7)
   body += act.on(`<text x="${hx}" y="10" text-anchor="end" font-family="${MONO}" font-size="7" font-weight="700" letter-spacing="1" fill="${CP.white}">NCPD // MAXTAC</text>`, 0.05, 1.7, { fade: 0.08 }) + stars
   // The AV: drops in with its searchlight, hovers, pulls away when the raid is lost.
-  const avx = r1(o.w * 0.5)
+  const avx = r1(L.a + L.w * 0.5)
   const avs = r3(sc * 0.95)
   const beam = `<path d="M-7 ${r1(10 * avs)}L7 ${r1(10 * avs)}L${r1(34 * sc)} ${r1(gy - 14)}L-${r1(34 * sc)} ${r1(gy - 14)}Z" fill="url(#${p}sl)"/>`
-  body += act.mv(`${act.win(1.0, 2.25, beam)}${avShape(avs)}`, [[0, avx, -30, 1], [0.5, avx, -30, 1], [0.95, avx, 14, 1], [3.3, avx, 14, 1], [3.95, r1(avx + o.w * 0.2), -34, 1], [5.6, r1(avx + o.w * 0.2), -34, 1]], { ease: 'settle' })
+  body += act.mv(`${act.win(1.0, 2.25, beam)}${avShape(avs)}`, [[0, avx, -30, 1], [0.5, avx, -30, 1], [0.95, avx, 14, 1], [3.3, avx, 14, 1], [3.95, r1(avx + L.w * 0.2), -34, 1], [5.6, r1(avx + L.w * 0.2), -34, 1]], { ease: 'settle' })
   // Dust where they land; laser sights on David while they aim.
   body += fx.dust(act, 1.17, xr, gy, { seed: `${p}dr`, n: 3, dx: -6 })
   const my = r1(cy(T_H) - 5 * sc)
@@ -213,25 +297,32 @@ export const maxtacAct = (o: { at: number; w: number; h: number; id: string }): 
   body += fx.flash(act, 2.95, { a: 0.3, color: CP.green, d: 0.12 })
   // 1.75-2.3: the cut-in. His eyes in a letterbox, yellow rules, SANDEVISTAN // ON.
   act.cast('cut', ART.CP77_CUTIN_DAVID, 0)
-  const ci = cutStrip(act, 'cut', o.w, o.h)
-  body += act.win(1.75, 2.28, `<rect width="${o.w}" height="${o.h}" fill="#000"/>${ci.lb}<path d="M0 ${r1(ci.y - 1)}H${o.w}M0 ${r1(ci.y + ci.hh + 1)}H${o.w}" stroke="${CP.yellow}" stroke-width="1.2"/><text x="${r1(o.w - 6)}" y="${r1(ci.y + ci.hh - 3)}" text-anchor="end" font-family="${MONO}" font-size="7" font-weight="700" letter-spacing="1" fill="${CP.green}">SANDEVISTAN // ON</text>`)
-  // 4.0: the title in neon tubes.
-  const tx = r1(o.w / 2)
-  const ty = r1(o.h * 0.3)
-  const title = `<rect x="${r1(tx - 118)}" y="${r1(ty - 15)}" width="236" height="27" fill="${CP.ink}" stroke="${CP.yellow}" stroke-opacity=".6"/><text x="${tx}" y="${r1(ty + 5)}" text-anchor="middle" font-family="${FONT}" font-size="16" font-weight="900" letter-spacing="1.2" fill="#FFF8B0" stroke="${CP.yellow}" stroke-width=".7">MAXTAC: /compact, CHOOM</text>`
+  const ci = cutStrip(act, 'cut', o.w, o.h, 0.76, L)
+  body += act.win(1.75, 2.28, `<rect width="${o.w}" height="${o.h}" fill="#000"/>${ci.lb}<path d="M0 ${r1(ci.y - 1)}H${o.w}M0 ${r1(ci.y + ci.hh + 1)}H${o.w}" stroke="${CP.yellow}" stroke-width="1.2"/><text x="${r1(L.a + L.w - 6)}" y="${r1(ci.y + ci.hh - 3)}" text-anchor="end" font-family="${MONO}" font-size="7" font-weight="700" letter-spacing="1" fill="${CP.green}">SANDEVISTAN // ON</text>`)
+  // 4.0: the title in neon tubes, WHOLE: the biggest size that fits the widest span of its rows free of the band's holes (it
+  // was a fixed 236 px box: cut off by a narrow region or behind the Tasks chip).
+  const tp = titleSpot(MAXTAC_TITLE, o.w, o.h, o.holes ?? [], o.h >= 70 ? 20 : 16)
+  const tfs = tp.fs
+  const tbw = r1(titleW(MAXTAC_TITLE, tfs) + 12)
+  const tx = r1(Math.max(tbw / 2 + 1, Math.min(o.w - tbw / 2 - 1, tp.x)))
+  const ty = tp.y
+  const title = `<rect x="${r1(tx - tbw / 2)}" y="${r1(ty - tfs + 1)}" width="${tbw}" height="${r1(tfs * 1.7)}" fill="${CP.ink}" stroke="${CP.yellow}" stroke-opacity=".6"/><text x="${tx}" y="${r1(ty + 5)}" text-anchor="middle" font-family="${FONT}" font-size="${tfs}" font-weight="900" letter-spacing="1.2" fill="#FFF8B0" stroke="${CP.yellow}" stroke-width=".7">${MAXTAC_TITLE}</text>`
   body += act.slam(title, 4.0, 5.45)
-  const still = `<rect width="${o.w}" height="${o.h}" fill="${CP.ink}" opacity=".9"/>${act.still('dLand', r1(o.w * 0.6), cy(D_H), 1, sc)}${title}`
+  const still = `<rect width="${o.w}" height="${o.h}" fill="${CP.ink}" opacity=".9"/>${act.still('dLand', r1(L.a + L.w * 0.6), cy(D_H), 1, sc)}${title}`
   return { layer: act.done(body, still), act, fight: f }
 }
 
 // ---------------------------------------------------------------- FIGHT 2: THE BOARDROOM STAND-OFF (Arasaka)
 const S_H = 54
-// The cyborg in two inks (his armour one cold grey, his lights red): a heavy out of the dark, and he fits the band's budget.
-const SM_AIM = padTo(fold2(ART.ARA_SMASHER_AIM, '#34343C', '#E3001B'), S_H)
-const SM_GRAB = padTo(fold2(ART.ARA_SMASHER_GRAB, '#34343C', '#E3001B'), S_H)
-const SM_STOMP = padTo(fold2(ART.ARA_SMASHER_STOMP, '#34343C', '#E3001B'), S_H)
+// The cyborg in two inks (his armour one cold steel, his lights hot red): a heavy out of the dark, and he fits the band's budget.
+// Wave 4: the steel is lifted (#34343C read as black on the band: the reviewer's 3/10) so he reads under the cold key light.
+export const SM_STEEL = '#6E7586'
+const SM_AIM = padTo(fold2(ART.ARA_SMASHER_AIM, SM_STEEL, '#FF2A40'), S_H)
+const SM_GRAB = padTo(fold2(ART.ARA_SMASHER_GRAB, SM_STEEL, '#FF2A40'), S_H)
+const SM_STOMP = padTo(fold2(ART.ARA_SMASHER_STOMP, SM_STEEL, '#FF2A40'), S_H)
 const G_H = 44
 const GHOST = padTo(ART.ARA_GHOST, G_H)
+const GHOST_T = padTo(ART.ARA_GHOST_TERMINATED, G_H)
 /** The boardroom, isometric and clean: a long black table with a red light strip on its edge, chairs along the far side, the
  *  floor a dark plate with one red hairline. Vector (a few hundred chars), crisp at any scale. Base of the table at `gy`. */
 const isoRoom = (rx: number, gy: number, s: number): string => {
@@ -244,7 +335,7 @@ const isoRoom = (rx: number, gy: number, s: number): string => {
   let chairs = ''
   for (let i = 0; i < 4; i++) { const cx = r1(rx - L + k * 2.4 + i * ((2 * L - k * 3) / 4)); chairs += `M${cx} ${r1(ty - k * 0.6 - 9 * s)}h${r1(7 * s)}v${r1(9 * s)}h-${r1(7 * s)}Z` }
   const floor = `M${r1(rx - L - 26 * s)} ${r1(gy + 2)}L${r1(rx + L + 20 * s)} ${r1(gy + 2)}L${r1(rx + L + 34 * s)} ${r1(gy - 12 * s)}L${r1(rx - L - 12 * s)} ${r1(gy - 12 * s)}Z`
-  return `<path d="${floor}" fill="#121216"/><path d="M${r1(rx - L - 26 * s)} ${r1(gy + 2)}L${r1(rx + L + 20 * s)} ${r1(gy + 2)}" stroke="${AR.red}" stroke-width=".6" opacity=".6"/><path d="${chairs}" fill="#1C1C22"/><path d="M${r1(rx - L + 6 * s)} ${r1(ty + 4 * s)}v${r1(10 * s)}M${r1(rx + L - k - 6 * s)} ${r1(ty + 4 * s)}v${r1(10 * s)}" stroke="#18181C" stroke-width="${r1(2.4 * s)}"/><path d="${front}" fill="#0B0B0E"/><path d="${side}" fill="#141418"/><path d="${top}" fill="#26262C"/><path d="M${r1(rx - L)} ${ty}L${r1(rx + L - k)} ${ty}" stroke="${AR.red}" stroke-width="1"/>`
+  return `<path d="${floor}" fill="#1C1E26"/><path d="M${r1(rx - L - 26 * s)} ${r1(gy + 2)}L${r1(rx + L + 20 * s)} ${r1(gy + 2)}" stroke="${AR.red}" stroke-width="1" opacity=".8"/><path d="${chairs}" fill="#2C2F3A" stroke="#7F8BA6" stroke-width=".5"/><path d="M${r1(rx - L + 6 * s)} ${r1(ty + 4 * s)}v${r1(10 * s)}M${r1(rx + L - k - 6 * s)} ${r1(ty + 4 * s)}v${r1(10 * s)}" stroke="#262832" stroke-width="${r1(2.4 * s)}"/><path d="${front}" fill="#14151B"/><path d="${side}" fill="#20222A"/><path d="${top}" fill="#3C404C"/><path d="M${r1(rx - L + k * 1.4)} ${r1(ty - k * 0.6)}L${r1(rx + L + k * 0.4)} ${r1(ty - k * 0.6)}" stroke="#AFC3E6" stroke-width=".7" opacity=".8"/><path d="M${r1(rx - L)} ${ty}L${r1(rx + L - k)} ${ty}" stroke="${AR.hot}" stroke-width="1.6"/>`
 }
 /**
  * The boardroom stand-off in a region `w` by `h`, 6.2 s. Arasaka's motion: precise, symmetrical, eased, never a glitch.
@@ -256,21 +347,22 @@ const isoRoom = (rx: number, gy: number, s: number): string => {
  *   3.3  THE GRAB (hit-stop); 3.75 THE STOMP: an impact frame, a 1 px jolt; the ghost is scanned away top to bottom
  *   4.2  TERMINATED · 解雇 is stamped; the mattes open: THE BOARD RECOMMENDS /compact. Reduced motion: the stamp over the stomp.
  */
-export const boardroomAct = (o: { at: number; w: number; h: number; id: string }): { layer: string; act: Act; fight: Fight } => {
+export const boardroomAct = (o: ActArgs): { layer: string; act: Act; fight: Fight } => {
   const act = new Act({ id: o.id, ms: FIGHT_MS.boardroom, at: o.at, W: o.w, H: o.h, K: 3 })
-  const sc = r3(Math.min(1.15, (o.h - 6) / S_H))
+  const L = laneOf(o.w, o.h, o.holes)
+  const sc = r3(Math.min((o.h - 6) / S_H, L.w / 250))
   const gy = o.h - 3
   const cy = (hh: number, s = sc) => r1(gy - (hh * s) / 2)
-  act.cast('aim', SM_AIM, 0.42).cast('grab', SM_GRAB, 0.36).cast('stomp', SM_STOMP, 0.45).cast('ghost', GHOST, 0.5).cast('sab', ART.ARA_SABURO_SEATED, 0.5)
+  act.cast('aim', SM_AIM, 0.42).cast('grab', SM_GRAB, 0.36).cast('stomp', SM_STOMP, 0.45).cast('ghost', GHOST, 0.5, 2).cast('term', GHOST_T, 0.5, 2).cast('sab', ART.ARA_SABURO_SEATED, 0.5)
   const cam = new Camera(act)
   const f = new Fight(act, { sc, ink: AR.black, star: { core: AR.bone, star: AR.bone, ring: AR.red }, spark: AR.bone, dust: '#3A3D44', lines: AR.bone, smear: AR.bone, impactBg: AR.black, impactFg: AR.bone, font: FONT }, cam)
   const p = act.p
   // The set: the table across the middle, the chairman at its head (left), the ghost at its foot (right).
-  const rx = r1(o.w * 0.5)
-  const rs = r3(Math.min(1, (o.h - 10) / 52))
+  const rx = r1(L.a + L.w * 0.5)
+  const rs = r3(Math.min(1.35, (o.h - 10) / 52, L.w / 300))
   const xs = r1(rx - 64 * rs)
   const xg = r1(rx + 70 * rs)
-  const xm = r1(Math.max(24 * sc, rx - 118 * rs))
+  const xm = r1(Math.max(L.a + 24 * sc, rx - 118 * rs))
   f.fighter('g', 'ghost', xg, cy(G_H), -1).fighter('m', 'aim', xm, cy(S_H), 1)
   // THE STAND-OFF: the push (stare), the ghost steps up to the table; the chairman never moves.
   f.at(0.9).stare('m', 'g', 0.8, { push: 0.05 })
@@ -286,9 +378,19 @@ export const boardroomAct = (o: { at: number; w: number; h: number; id: string }
   f.hit('g', { impact: true, flash: 0.18, shake: 1, freeze: 0.2, sparks: false, y: r1(gy - 6) })
   // Stomped down into the floor (then scanned away): no body is left on the boardroom floor.
   f.approach('g', r1(xg - 4), 0.12, { ease: 'snap', y: r1(cy(G_H) + 12 * sc), lines: false, ghosts: false })
+  // The ghost's TERMINATED frame (restored: it was cut for the old 46 px band's budget) as the scan line takes it.
+  f.at(3.95).pose('g', 'term')
   let body = scrim(act, 6.05, AR.ink, 0.95)
+  // The light, lifted (it read as black: 3/10). A night window wall behind the table (cold blue, mullions), a cold key light
+  // from above on the table and the far end (gradients and opacity only, no blend modes), the red strip on the table's edge.
+  const nm = Math.max(3, Math.round(L.w / 64))
+  const wall = `<defs><linearGradient id="${p}wl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#26324C"/><stop offset="1" stop-color="#0C0F18"/></linearGradient><linearGradient id="${p}ky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#CFE0FF" stop-opacity=".34"/><stop offset="1" stop-color="#CFE0FF" stop-opacity="0"/></linearGradient></defs><rect x="${r1(L.a)}" width="${r1(L.w)}" height="${r1(gy - 14 * rs)}" fill="url(#${p}wl)" opacity=".9"/><path d="${Array.from({ length: nm }, (_, i) => `M${Math.round(L.a + (i + 0.5) * (L.w / nm))} 0v${Math.round(gy - 14 * rs)}`).join('')}" stroke="#3B4A6C" stroke-width="1"/>`
+  const key = `<path d="M${r1(rx - 30 * rs)} 0L${r1(rx + 40 * rs)} 0L${r1(rx + 96 * rs)} ${gy}L${r1(rx - 92 * rs)} ${gy}Z" fill="url(#${p}ky)"/>`
+  body += act.on(wall, 0.2, 6.0, { fade: 0.35 }) + act.on(key, 0.5, 6.0, { fade: 0.5 })
   // The boardroom (isometric), the chairman seated at its head: still, lit from above.
-  const room = `${isoRoom(rx, gy, rs)}${act.bank.use('sab', xs, r1(gy - 2 - (37 * rs) / 2), 1, rs)}`
+  // The set and the stamp are drawn ONCE (defs) and used by the act and its still: the budget that pays for the TERMINATED frame.
+  const shared = `<g id="${p}rm">${isoRoom(rx, gy, rs)}${act.bank.use('sab', xs, r1(gy - 2 - (37 * rs) / 2), 1, rs)}</g>`
+  const room = `<use href="#${p}rm"/>`
   body += act.on(room, 0.2, 6.0, { fade: 0.35 })
   // The shadow: before he steps out, only his outline and two red optics, behind the chairman.
   // The ghost resolves at the far end (eased, no noise), and the label of what it is.
@@ -310,21 +412,26 @@ export const boardroomAct = (o: { at: number; w: number; h: number; id: string }
   body += kf(act, `<rect x="${gx0}" y="${gTop}" width="${r1(40 * sc + 20)}" height="1.2" fill="${AR.hot}"/>`, [[0, 'opacity:0;transform:translateY(0px)'], [3.94, 'opacity:0;transform:translateY(0px)'], [3.95, 'opacity:1;transform:translateY(0px)'], [4.35, `opacity:1;transform:translateY(${r1(gy - gTop)}px)`], [4.45, `opacity:0;transform:translateY(${r1(gy - gTop)}px)`]], { ease: 'ease-in-out' })
   // 1.75-2.33: the cut-in, a clean matte: black, two red rules, the cyborg's face, ARASAKA SECURITY.
   act.cast('cut', ART.ARA_CUTIN_SMASHER, 0)
-  const ci = cutStrip(act, 'cut', o.w, o.h, 0.7)
-  body += act.on(`<rect width="${o.w}" height="${o.h}" fill="${AR.black}"/>${ci.lb}<path d="M0 ${r1(ci.y - 1)}H${o.w}M0 ${r1(ci.y + ci.hh + 1)}H${o.w}" stroke="${AR.red}" stroke-width=".8"/><text x="${r1(o.w - 6)}" y="${r1(ci.y + ci.hh - 3)}" text-anchor="end" font-family="${FONT}" font-size="7" font-weight="700" letter-spacing="2" fill="${AR.bone}">ARASAKA SECURITY</text>`, 1.8, 2.33, { fade: 0.06 })
+  const ci = cutStrip(act, 'cut', o.w, o.h, 0.7, L)
+  // A cold rim on the cut-in's matte edge (the light he steps into), the red rules, the label.
+  body += act.on(`<rect width="${o.w}" height="${o.h}" fill="${AR.black}"/><rect x="${r1(ci.x - 3)}" y="${ci.y}" width="2" height="${ci.hh}" fill="#AFC3E6" opacity=".8"/>${ci.lb}<path d="M0 ${r1(ci.y - 1)}H${o.w}M0 ${r1(ci.y + ci.hh + 1)}H${o.w}" stroke="${AR.red}" stroke-width="${o.h >= 70 ? 1.4 : 0.8}"/><text x="${r1(L.a + L.w - 6)}" y="${r1(ci.y + ci.hh - 3)}" text-anchor="end" font-family="${FONT}" font-size="${o.h >= 70 ? 9 : 7}" font-weight="700" letter-spacing="2" fill="${AR.bone}">ARASAKA SECURITY</text>`, 1.8, 2.33, { fade: 0.06 })
   // The mattes: they close in at the start (a clean 16:9) and open at the end.
   const mh = r1(o.h * 0.1)
   const matte = (top: boolean) => kf(act, `<rect y="${top ? 0 : r1(o.h - mh)}" width="${o.w}" height="${mh}" fill="${AR.black}"/>`, [[0, 'transform:scaleY(0)'], [0.45, 'transform:scaleY(1)'], [5.2, 'transform:scaleY(1)'], [5.6, 'transform:scaleY(0)']], { ease: 'ease-in-out', origin: `0px ${top ? 0 : o.h}px` })
   body += matte(true) + matte(false)
   // 4.2: the stamp. 4.9: the board's line.
   const cjk = `${FONT.replace(/,?sans-serif$/, '')},${CJK_FONT}`
-  const sx = r1(Math.min(o.w - 70, xg))
+  const big = o.h >= 70
+  const sw = big ? 156 : 124
+  const sx = r1(Math.max(L.a + sw / 2 + 4, Math.min(L.a + L.w - sw / 2 - 6, xg)))
   const sy = r1(o.h * 0.48)
-  const stamp = `<g transform="rotate(-4 ${sx} ${sy})"><rect x="${r1(sx - 62)}" y="${r1(sy - 12)}" width="124" height="24" fill="none" stroke="${AR.red}" stroke-width="2.2"/><text x="${sx}" y="${r1(sy + 5)}" text-anchor="middle" font-family="${cjk}" font-size="13" font-weight="900" letter-spacing="1.5" fill="${AR.red}">TERMINATED · 解雇</text></g>`
-  body += kf(act, stamp, [[0, 'opacity:0;transform:scale(1.15)'], [4.2, 'opacity:0;transform:scale(1.15)'], [4.32, 'opacity:1;transform:scale(1)'], [5.75, 'opacity:1;transform:scale(1)'], [6.05, 'opacity:0;transform:scale(1)']], { ease: 'cubic-bezier(.6,0,.9,.5)', origin: `${sx}px ${sy}px` })
-  body += act.on(`<text x="${r1(o.w * 0.04)}" y="${r1(o.h * 0.3)}" font-family="${FONT}" font-size="8.5" font-weight="700" letter-spacing="1.6" fill="${AR.bone}">THE BOARD RECOMMENDS /compact</text>`, 4.9, 6.05, { fade: 0.25 })
-  const still = `<rect width="${o.w}" height="${o.h}" fill="${AR.ink}" opacity=".93"/>${room}${act.still('stomp', r1(xg - 64 * sc + 40 * sc - 40 * sc), cy(S_H), 1, sc)}${stamp}`
-  return { layer: act.done(body, still), act, fight: f }
+  const stamp = `<g transform="rotate(-4 ${sx} ${sy})"><rect x="${r1(sx - sw / 2)}" y="${r1(sy - (big ? 15 : 12))}" width="${sw}" height="${big ? 30 : 24}" fill="${AR.ink}" fill-opacity=".55" stroke="${AR.hot}" stroke-width="${big ? 2.6 : 2.2}"/><text x="${sx}" y="${r1(sy + (big ? 6 : 5))}" text-anchor="middle" font-family="${cjk}" font-size="${big ? 16 : 13}" font-weight="900" letter-spacing="1.5" fill="${AR.hot}">TERMINATED · 解雇</text></g>`
+  const stampDef = `<g id="${p}sp">${stamp}</g>`
+  const stampUse = `<use href="#${p}sp"/>`
+  body += kf(act, stampUse, [[0, 'opacity:0;transform:scale(1.15)'], [4.2, 'opacity:0;transform:scale(1.15)'], [4.32, 'opacity:1;transform:scale(1)'], [5.75, 'opacity:1;transform:scale(1)'], [6.05, 'opacity:0;transform:scale(1)']], { ease: 'cubic-bezier(.6,0,.9,.5)', origin: `${sx}px ${sy}px` })
+  body += act.on(`<text x="${r1(L.a + 6)}" y="${r1(o.h * 0.3)}" font-family="${FONT}" font-size="${big ? 10 : 8.5}" font-weight="700" letter-spacing="1.6" fill="${AR.bone}">THE BOARD RECOMMENDS /compact</text>`, 4.9, 6.05, { fade: 0.25 })
+  const still = `<rect width="${o.w}" height="${o.h}" fill="${AR.ink}" opacity=".93"/>${room}${act.still('stomp', r1(xg - 64 * sc + 40 * sc - 40 * sc), cy(S_H), 1, sc)}${stampUse}`
+  return { layer: `<defs>${shared}${stampDef}</defs>${act.done(body, still)}`, act, fight: f }
 }
 
 // ---------------------------------------------------------------- FIGHT 3: THE ICE DUEL (Lucy)
@@ -346,9 +453,10 @@ const NOTHING: Sprite = { rows: ['.'], pal: {} } as Sprite
  *   3.15 THE LASH: the monowire cracks the lattice (impact frame, hit-stop), cracks run, the eye shuts, the shards fall away
  *   4.1  she stands (VICTORY) and the moon rises where the ICE was: ICE BYPASSED. Reduced motion: the lash with the title.
  */
-export const iceAct = (o: { at: number; w: number; h: number; id: string }): { layer: string; act: Act; fight: Fight } => {
+export const iceAct = (o: ActArgs): { layer: string; act: Act; fight: Fight } => {
   const act = new Act({ id: o.id, ms: FIGHT_MS['ice-duel'], at: o.at, W: o.w, H: o.h, K: 3 })
-  const sc = r3(Math.min(1.3, (o.h - 6) / L_H))
+  const L = laneOf(o.w, o.h, o.holes)
+  const sc = r3(Math.min((o.h - 6) / L_H, L.w / 220))
   const gy = o.h - 3
   const cy = (hh: number) => r1(gy - (hh * sc) / 2)
   act.cast('dive', L_DIVE, 0.5).cast('crouch', L_CROUCH, 0.5).cast('recoil', L_RECOIL, 0.5).cast('wind', L_WIND, 0.5).cast('lash', L_LASH, 0.3).cast('win', L_WIN, 0.5).cast('ice', NOTHING, 0.5)
@@ -356,9 +464,9 @@ export const iceAct = (o: { at: number; w: number; h: number; id: string }): { l
   const f = new Fight(act, { sc, ink: LU.ink, star: { core: LU.white, star: LU.cyan, ring: LU.pink }, spark: LU.cyan, dust: LU.pink, lines: LU.cyan, smear: LU.cyan, impactBg: LU.ink, impactFg: LU.cyan, font: FONT }, cam)
   const p = act.p
   let body0 = ''
-  const xl = r1(o.w * 0.26)
-  const wx0 = r1(o.w * 0.6)
-  const wx1 = r1(o.w * 0.94)
+  const xl = r1(L.a + L.w * 0.26)
+  const wx0 = r1(L.a + L.w * 0.6)
+  const wx1 = r1(L.a + L.w * 0.94)
   const wmid = r1((wx0 + wx1) / 2)
   const wy = r1(o.h * 0.44)
   f.fighter('l', 'dive', -40, r1(cy(L_H) - 16), 1).fighter('ice', 'ice', wx0, wy, -1)
@@ -419,27 +527,102 @@ export const iceAct = (o: { at: number; w: number; h: number; id: string }): { l
   }
   // 2.6-3.1: the cut-in. Her eyes in a wireframe letterbox, pink and cyan rules, MONOWIRE.
   act.cast('cut', ART.LUCY_CUTIN, 0)
-  const ci = cutStrip(act, 'cut', o.w, o.h)
+  const ci = cutStrip(act, 'cut', o.w, o.h, 0.76, L)
   body += act.win(2.6, 3.1, `<rect width="${o.w}" height="${o.h}" fill="${LU.ink}"/>${ci.lb}<path d="M0 ${r1(ci.y - 1)}H${o.w}" stroke="${LU.pink}" stroke-width="1"/><path d="M0 ${r1(ci.y + ci.hh + 1)}H${o.w}" stroke="${LU.cyan}" stroke-width="1"/><text x="${r1(o.w - 6)}" y="${r1(ci.y + ci.hh - 3)}" text-anchor="end" font-family="${MONO}" font-size="7" font-weight="700" letter-spacing="1" fill="${LU.cyan}">MONOWIRE</text>`)
   // 4.1: the moon rises where the ICE was; ICE BYPASSED.
   act.cast('moon', ART.LUCY_MOON_0, 0.5)
   const mx = r1(wmid)
   body += act.mv(`<g opacity=".9">${act.bank.use('moon', 0, 0, 1, r3(Math.min(0.85, (o.h * 0.5) / 40)))}</g>`, [[0, mx, r1(o.h + 30), 0], [4.0, mx, r1(o.h + 30), 0], [4.8, mx, r1(o.h * 0.4), 1], [5.4, mx, r1(o.h * 0.36), 1], [5.6, mx, r1(o.h * 0.36), 0]], { ease: 'settle' })
-  const title = `<text x="${r1(o.w * 0.47)}" y="${r1(o.h * 0.28)}" text-anchor="middle" font-family="${FONT}" font-size="15" font-weight="800" letter-spacing="2" fill="${LU.pink}" stroke="${LU.ink}" stroke-width="2" paint-order="stroke">ICE BYPASSED</text>`
+  const iy = r1(Math.max(14, o.h * 0.28))
+  const isp = spanFree(o.w, o.holes ?? [], iy - 15, iy + 4)
+  const ifs = fitSize('ICE BYPASSED', isp[1] - isp[0] - 8, o.h >= 70 ? 20 : 15, 2)
+  const title = `<text x="${r1((isp[0] + isp[1]) / 2)}" y="${iy}" text-anchor="middle" font-family="${FONT}" font-size="${ifs}" font-weight="800" letter-spacing="2" fill="${LU.pink}" stroke="${LU.ink}" stroke-width="2" paint-order="stroke">ICE BYPASSED</text>`
   body += act.slam(title, 4.3, 5.45)
   const still = `<rect width="${o.w}" height="${o.h}" fill="${LU.ink}" opacity=".92"/>${netGrid({ W: o.w, y: horizon, h: o.h - horizon, color: LU.pink, op: 0.3 })}${act.still('lash', xl + 8, cy(L_H), 1, sc)}${title}`
   return { layer: act.done(body, still), act, fight: f }
 }
 
-const ACTS: Record<FightKind, (o: { at: number; w: number; h: number; id: string }) => { layer: string; act: Act; fight: Fight }> = { maxtac: maxtacAct, boardroom: boardroomAct, 'ice-duel': iceAct }
+const ACTS: Record<FightKind, (o: ActArgs) => { layer: string; act: Act; fight: Fight }> = { maxtac: maxtacAct, boardroom: boardroomAct, 'ice-duel': iceAct }
 
 /** The fight on the classic Cyberpunk band (OW wide): placed in its region, kept clear of the band's readouts, '' when none is due. */
 export const cyberFightBand = (egg: CyberEgg, OW: number, at: number, working: boolean, stage?: BandStage): string => {
   const ft = fightAt(egg, at, working)
   if (!ft || at >= ft.startAt + FIGHT_MS[ft.kind]) return ''
-  const r = fightRegion(OW, stage)
-  const a = ACTS[ft.kind]({ at: ft.startAt, w: r.w, h: r.h, id: `cyf-${ft.kind}-band-${OW}-${r.w}` })
-  return placed(a.layer, r, `${a.act.p}rg`, stage?.keep)
+  // The act takes the widest lane free of the band's holes, and only that: the task's title and the Tasks chip on its left stay
+  // in plain sight (no scrim over them), the fight plays whole on their right, or under them (actRegion); none on a band with no
+  // room clear of the title.
+  const r = actRegion(OW, stage)
+  if (!r) return ''
+  const holes = regionHoles(r, stage)
+  const a = ACTS[ft.kind]({ at: ft.startAt, w: r.w, h: r.h, id: `cyf-${ft.kind}-band-${OW}-${r.w}x${r.h}y${r.y}-${holes.map(q => q.join(':')).join(';')}`, holes })
+  return placed(a.layer, r, `${a.act.p}rg`, stage ? allHoles(stage) : [])
+}
+
+// ---------------------------------------------------------------- SAMURAI: the "2023" gig's finale (wave 4)
+/** When the finale starts in the gig (s), and how long it plays: the gig's slot (`ACT_MS.gig`) covers it. */
+export const FIN_AT = 4.9
+export const FIN_MS = 2700
+const SAM = { ink: '#030202', red: '#E10600', yellow: '#FFD400', cyan: '#00F0FF', white: '#F4F4F4', amber: '#FFF4C0' }
+const FIN_H = 46
+const FIN = { leap: padTo(ART.SAM_JOHNNY_FIN_1, FIN_H), slide: padTo(ART.SAM_JOHNNY_FIN_2, FIN_H), fin: padTo(ART.SAM_JOHNNY_FIN_3, FIN_H) }
+/** The camera's push onto the finisher (the hold under the spot): a medium shot, his head under the lane's top, cut at the shins. */
+export const FIN_PUSH = 1.45
+/** The rocker's height in a region `h` tall (band px) at the hold, pushed in (the leap and the slide play in the wide shot). */
+export const finPx = (h: number): number => r1(FIN_H * finSc(h) * FIN_PUSH)
+// The wide shot: his poses padded to 46 rows, feet on the floor, a little under the lane's height so the leap leaves the ground.
+const finSc = (h: number): number => r3(Math.min(1.6, ((h - 5) / FIN_H) * 0.92))
+/**
+ * The gig ends on the rocker himself, in the fights' lane on the classic band (2.7 s from 4.9 s into the gig): his close-up
+ * cut-in on a red-ruled letterbox, then the CHORD: a shockwave of stage-light rings and a burst of light off the boards, and his
+ * three stage finishers: the leap (on an arc), the knee slide (sparks off the boards), the finisher, where the camera pushes in
+ * to a medium shot under the spot and holds. SAMURAI's own look (stage lights, amp rings, red and yellow), no Cyberpunk glitch.
+ * Reduced motion: the finisher under the spot, pushed in.
+ */
+export const finaleAct = (o: { at: number; w: number; h: number; id: string }): { layer: string; act: Act } => {
+  // 4 colours for the held finisher (his black, the skin, the guitar's red, the steel), 3 for the rest: a busy band stays under 120 k.
+  const act = new Act({ id: o.id, ms: FIN_MS, at: o.at, W: o.w, H: o.h, K: 4 })
+  // The leap (half a second in the air) in 2 colours, the slide in 3; the held finisher keeps 4: the busy band's 120 k line.
+  act.cast('leap', FIN.leap, 0.5, 2).cast('slide', FIN.slide, 0.45, 3).cast('fin', FIN.fin, 0.45).cast('cut', ART.SAM_CUTIN_JOHNNY, 0, 3)
+  const sc = finSc(o.h)
+  const gy = o.h - 3
+  const y = r1(gy - (FIN_H * sc) / 2)
+  const x0 = r1(o.w * 0.2)
+  const x2 = r1(o.w * 0.62)
+  const cx = r1(o.w * 0.5)
+  // The push's anchor: just under his head, so the head stays in the lane as he grows.
+  const py = r1(gy - FIN_H * sc + 3)
+  let body = act.on(`<rect width="${o.w}" height="${o.h}" fill="${SAM.ink}"/>`, 0, 2.62, { fade: 0.12, op: 0.94 })
+  // The stage: a warm cone from above and the boards' edge. The chord's light: a burst off the boards, never a flat box.
+  body += `<defs><linearGradient id="${act.p}sp" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${SAM.amber}" stop-opacity=".04"/><stop offset="1" stop-color="${SAM.amber}" stop-opacity=".38"/></linearGradient><radialGradient id="${act.p}fl" cx=".5" cy="1" r=".62"><stop offset="0" stop-color="${SAM.amber}" stop-opacity=".75"/><stop offset="1" stop-color="${SAM.red}" stop-opacity="0"/></radialGradient></defs>`
+  let set = act.on(`<path d="M${r1(x2 - 4)} 0h8l${r1(26 * sc)} ${gy}h-${r1(52 * sc + 8)}z" fill="url(#${act.p}sp)"/><rect y="${gy}" width="${o.w}" height="1.5" fill="${SAM.red}" opacity=".7"/>`, 0.45, 2.62, { fade: 0.15 })
+  // 0.45: THE CHORD. Two rings off the boards, red then yellow, and the burst of light.
+  ;[0.45, 0.62].forEach((t, i) => { set += fx.ring(act, t, cx, r1(gy - 10), { rx: r1(Math.min(o.w * 0.48, 40 + i * o.w * 0.2)), color: i ? SAM.yellow : SAM.red, w: 2.6 }) })
+  set += act.cue('show', 0.45, `<rect width="${o.w}" height="${o.h}" fill="url(#${act.p}fl)"/>`, { d: 0.14 })
+  // The leap (0.45-0.95, an arc that keeps his head in the lane), the knee slide (0.95-1.5, sparks off the boards), the finisher.
+  const xs = r1(x0 + (x2 - x0) * 0.45)
+  const lift = r1(Math.max(4, Math.min(o.h * 0.22, gy - 42 * sc - 1)))
+  set += act.actor('j', [[0.45, 0.95, 'leap'], [0.95, 1.5, 'slide'], [1.5, 2.62, 'fin']], [[0.45, x0, y + 4], [0.62, r1((x0 + xs) / 2), r1(y - lift)], [0.95, xs, y], [1.5, x2, y], [2.62, x2, y]], { sc })
+  set += fx.sparks(act, 1.0, xs, gy - 2, { seed: 'smfs', n: 5, color: SAM.yellow, len: 8 })
+  // 1.5: the last hit of the chord on the finisher: a white ring, as the camera pushes in.
+  set += fx.ring(act, 1.52, x2, r1(y - 10 * sc), { rx: r1(30 * sc), color: SAM.white, w: 1.8 })
+  // The camera pushes in on the finisher (1.5-1.85 s) and holds: one transform on the stage's group.
+  body += kf(act, `<g>${set}</g>`, [[0, 'transform:scale(1)'], [1.5, 'transform:scale(1)'], [1.85, `transform:scale(${FIN_PUSH})`]], { ease: 'cubic-bezier(.2,.8,.3,1)', origin: `${x2}px ${py}px` })
+  // 0-0.45: his close-up on a letterbox, red rules (over the stage until the chord).
+  const ci = cutStrip(act, 'cut', o.w, o.h, 0.7)
+  body += act.win(0, 0.45, `<rect width="${o.w}" height="${o.h}" fill="#000"/>${ci.lb}<path d="M0 ${r1(ci.y - 1)}H${o.w}M0 ${r1(ci.y + ci.hh + 1)}H${o.w}" stroke="${SAM.red}" stroke-width="1.2"/>`)
+  const still = `<rect width="${o.w}" height="${o.h}" fill="${SAM.ink}" opacity=".9"/><path d="M${r1(x2 - 4)} 0h8l${r1(26 * sc)} ${gy}h-${r1(52 * sc + 8)}z" fill="${SAM.amber}" opacity=".18"/>${act.still('fin', x2, r1(py + (y - py) * FIN_PUSH), 1, r3(sc * FIN_PUSH))}`
+  return { layer: act.done(body, still), act }
+}
+/** The finale on the classic SAMURAI band (OW wide), in the fights' lane: '' outside its 2.7 s. `gig`: the gig's start. */
+export const gigFinale = (OW: number, at: number, gig: number | undefined, stage?: BandStage): string => {
+  if (gig === undefined) return ''
+  const t0 = gig + FIN_AT * 1000
+  if (at < t0 - 60_000 || at >= t0 + FIN_MS) return ''
+  // In the fights' lane, never over the task title (actRegion): none on a band with no room clear of it (the gig plays on).
+  const r = actRegion(OW, stage)
+  if (!r) return ''
+  const a = finaleAct({ at: t0, w: r.w, h: r.h, id: `sm-fin-${OW}-${r.w}x${r.h}y${r.y}` })
+  return placed(a.layer, r, `${a.act.p}rg`, stage ? allHoles(stage) : [])
 }
 
 // ---------------------------------------------------------------- the pane's light echo (in BREACH PROTOCOL's matrix)

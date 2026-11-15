@@ -200,7 +200,8 @@ const replay = dir.play('reunion', at)                                     // a 
 ```
 - **Lanes in priority order** (first added wins). A lower lane's slot near a higher lane's slot is DROPPED (never moved).
 - **Breath**: 10 s between two acts (fights: 20 s). **held** windows (a typed act, a mode swap) beat every lane.
-- **Rarity words** (`RARITY`, minutes between two hits): often 2-4, sometimes 6-10, uncommon 12-20, rare 30-45, fight 30-45, epic 60-120.
+- **Rarity words** (`RARITY`, minutes between two hits): often 2-4, sometimes 6-10, uncommon 12-20, rare 30-45, epic 60-120. A fight
+  lane's gap is the fight level's (`FIGHT_GAPS`), not a rarity word.
 - Pure: `plan(t0, t1, ctx)` lists every act; `next(t, ctx, lane)` finds the next one; tests can count a simulated day.
 - `dayOffsetMs` is east positive (`localOffsetMs(at)`). Never pass `getTimezoneOffset()` raw: it is minutes, west positive.
 - Higher lanes beat lower ones by their RAW slots (whatever the context): a roamer near a working-only fight slot is dropped
@@ -247,8 +248,9 @@ const layer = act.done(f.body(), f.still())        // still = the last clash; pa
 - **Hit-stop** (`freeze`), **smear** and **impact frames** are first-class beats. A turning move lands upright on its own.
 - Proof: `choreo-inv.test.ts` writes Invincible's "The Catch" as 20 beats: same poses in the same order, the same hits at
   2.0 and 3.0 s, 35.1 k (budget 36 k). Previews: `scratchpad/motion/prev/engine2/demo-catch-*.png` (beats left, original right).
-- **Fights are rare**: put them in the director with `fightLane` (one per 30-45 min, working only); it names each fight
-  (its `replay`, else its id). Offer them with `playsFrom` (see replay).
+- **Fights follow the fight setting**: put them in the director with `fightLane`; every fight lane follows `fightLevel()`
+  (`/missioncontrol fights often | normal | rare | off`: by default one per 7-10 min working, 15-20 at rest; never in a job's
+  first 90 s), the fights in turns. It names each fight (its `replay`, else its id). Offer them with `playsFrom` (see replay).
   PG-13: stars, flashes, dust; never blood.
 
 ## Budgets (chars, from `budget.ts`)

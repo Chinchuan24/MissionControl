@@ -17,7 +17,7 @@ import type { CyberEgg } from './eggs'
 import { CJK_FONT } from './eggs'
 import { Director } from './stage/director'
 import type { Slot } from './stage/director'
-import { FrameBank, rectPaths } from './stage/frames'
+import { FrameBank, rectPaths, silhouette } from './stage/frames'
 import * as fx from './stage/fx'
 import { parallax } from './stage/parallax'
 import { playsFrom, registerPlay } from './stage/replay'
@@ -34,7 +34,8 @@ let PLAY: CyberPlay | undefined
 export const cyberPlay = (): CyberPlay | undefined => PLAY
 export const setCyberPlay = (p: CyberPlay | undefined): void => { PLAY = p }
 /** Act lengths (ms): what a replay or a trigger keeps drawn. */
-export const ACT_MS = { sandevistan: 1400, dive: 1300, preem: 3600, hanko: 2800, moon: 3600, shockwave: 3200, gig: 5000 } as const
+// The gig's 7.6 s: its 5 s set, then the rocker's finale (cyber-fights.ts `finaleAct`, from 4.9 s, 2.7 s).
+export const ACT_MS = { sandevistan: 1400, dive: 1300, preem: 3600, hanko: 2800, moon: 3600, shockwave: 3200, gig: 7600 } as const
 /** A replayed act of `kind` live at `at`: its start. */
 export const playing = (kind: string, at: number): number | undefined => {
   const p = PLAY
@@ -342,14 +343,13 @@ export const cheerOf = (egg: CyberEgg, o: CheerO): string => (egg === 'runners' 
 export const gigAct = (o: { at: number; W: number; H: number; font: string; john: { x: number; y: number }; strip: { y: number; h: number }; fig?: { x: number; y: number } }): { bg: string; fg: string } => {
   const act = new Act({ id: 'sm-gig', ms: ACT_MS.gig, at: o.at, W: o.W, H: o.H })
   const top = new Act({ id: 'sm-gig-fg', ms: ACT_MS.gig, at: o.at, W: o.W, H: o.H })
-  act.cast('tw', ART.ARA_TOWER_0, 0.5).cast('sm', ART.ARA_SMASHER_STEP, 0.5)
-  ART.SAM_RELIC_FRAMES.slice(0, 5).forEach((sp, i) => act.cast(`r${i}`, sp, 0.5))
+  act.cast('tw', ART.ARA_TOWER_0, 0.5)
   const { x: jx, y: jy } = o.john
   const tx = o.W * 0.62
   const base = o.strip.y + o.strip.h
   const tsc = (o.strip.h + 18) / 48
   const ty = base - (48 * tsc) / 2
-  let body = act.on(`<rect width="${o.W}" height="${o.H}" fill="#030202"/>`, 0, 4.85, { fade: 0.4, op: 0.85 })
+  let body = act.on(`<rect width="${o.W}" height="${o.H}" fill="#030202"/>`, 0, 7.45, { fade: 0.4, op: 0.85 })
   body += `<defs><linearGradient id="smgs" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFF4C0" stop-opacity=".05"/><stop offset="1" stop-color="#FFF4C0" stop-opacity=".45"/></linearGradient></defs>`
   body += act.on(`<path d="M${r1(jx - 3)} 0L${r1(jx + 3)} 0L${r1(jx + 18)} ${r1(jy + 22)}L${r1(jx - 18)} ${r1(jy + 22)}Z" fill="url(#smgs)"/>`, 0.5, 4.0, { fade: 0.25 })
   body += act.on(act.still('tw', tx, ty, 1, tsc), 0.8, 4.6, { fade: 0.35, op: 0.9 })
@@ -359,18 +359,19 @@ export const gigAct = (o: { at: number; W: number; H: number; font: string; john
     body += act.on(`<rect x="${r1(tx - 3.5 * tsc)}" y="${r1(wy)}" width="${r1(7 * tsc)}" height="1.6" fill="#FF2A40"/>`, 1.0 + f * 0.12, 1.9 + f * 0.2)
   }
   ;[1.9, 2.3, 2.7].forEach((t, i) => { body += fx.ring(act, t, jx, jy, { rx: 30 + i * 22, color: i === 1 ? '#FFD400' : '#E10600', w: 2.6 }) })
-  body += act.on(`<use href="#${act.bank.sil('sm')}" fill="#3A0C10" transform="translate(${r1(o.W * 0.8)} ${r1(base - (54 * 0.6) / 2)}) ${act.bank.anchor('sm', -1, 0.6)}"/>`, 3.0, 4.4, { fade: 0.3, op: 0.8 })
+  // The heavy silhouette: his outline only (one path), not his full-colour pose cut beside it (wave 4: 5.8 k back for the finale).
+  const sm = ART.ARA_SMASHER_STEP
+  const smW = Math.max(...sm.rows.map(r => r.length))
+  body += act.on(`<path d="${silhouette(sm)}" fill="#3A0C10" transform="translate(${r1(o.W * 0.8)} ${r1(base - (54 * 0.6) / 2)}) scale(-0.6 0.6) translate(${r3(-0.5 * smW)} ${r3(-sm.rows.length / 2)})"/>`, 3.0, 4.4, { fade: 0.3, op: 0.8 })
   // The engram: scanlines over Johnny, then gone (PG-13: a dissolve, never a death).
   const f = o.fig ?? o.john
   let lines = ''
   for (let k = 0; k < 9; k++) lines += `<rect x="${r1(f.x - 11)}" y="${r1(f.y - 14 + k * 3.2)}" width="22" height="1.4" fill="${k % 2 ? '#00F0FF' : '#E10600'}"/>`
   const scan = top.on(lines, 3.2, 3.9, { fade: 0.15, op: 0.85 })
-  const views = turnViews(['r0', 'r1', 'r2', 'r3', 'r4'], true)
-  const segs: [number, number, string, (1 | -1)?][] = []
-  for (let t = 3.9, i = 0; t < 4.95; t += 0.1, i++) { const v = views[i % views.length]; if (v) segs.push([r3(t), r3(Math.min(4.95, t + 0.1)), v.key, v.dir]) }
+  // Wave 4: the gig ends on the rocker himself (cyber-fights.ts `finaleAct`, 4.9-7.6 s, in the fights' lane); the turning chip
+  // gave way to him (its five views paid for his three poses), and NEVER FADE AWAY lands on the strip under his finisher.
   const ty2 = o.strip.y + o.strip.h / 2 + 4
-  body += act.actor('chip', segs, [[3.9, o.W / 2 - 130, ty2], [4.95, o.W / 2 - 130, ty2]], { sc: 0.55 })
-  body += act.on(`<text x="${o.W / 2}" y="${r1(ty2 + 4)}" text-anchor="middle" font-family="${o.font}" font-size="13" font-weight="900" letter-spacing="3" fill="#F4F4F4">NEVER FADE AWAY · 2023</text>`, 3.95, 4.95, { fade: 0.15 })
+  body += act.on(`<text x="${o.W / 2}" y="${r1(ty2 + 4)}" text-anchor="middle" font-family="${o.font}" font-size="13" font-weight="900" letter-spacing="3" fill="#F4F4F4">NEVER FADE AWAY · 2023</text>`, 3.95, 7.5, { fade: 0.15 })
   return { fg: top.done(scan, ''), bg: act.done(body, `<text x="${o.W / 2}" y="${r1(ty2 + 4)}" text-anchor="middle" font-family="${o.font}" font-size="13" font-weight="900" letter-spacing="3" fill="#F4F4F4">NEVER FADE AWAY · 2023</text>`) }
 }
 

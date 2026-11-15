@@ -1,6 +1,6 @@
 import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
-import { CYBER_SWITCH, ECHO_BOX, FIGHT_MS, MAXTAC_GAP_MS, boardroomAct, cyberFightBand, cyberFightEcho, fightAt, fightDirector, fightOn, fightRegion, iceAct, maxtacAct, maxtacClimb, resetMaxtac, setFightPlay } from './cyber-fights'
+import { CYBER_SWITCH, ECHO_BOX, FIGHT_MS, LOW_Y, MAXTAC_GAP_MS, actRegion, boardroomAct, cyberFightBand, cyberFightEcho, fightAt, fightDirector, fightOn, fightRegion, iceAct, maxtacAct, maxtacClimb, resetMaxtac, setFightPlay } from './cyber-fights'
 import { audit, BUDGET } from './stage/budget'
 import { playsOf, runPlay } from './stage/replay'
 import { skinSwitch } from './stage/wipe'
@@ -131,6 +131,24 @@ test('cyber fights: the band region keeps under the header line, left of the gau
   // the cut fits its budget in the region
   const r = fightRegion(OW)
   for (const [name, f] of ACTS) expect(audit(`<svg xmlns="http://www.w3.org/2000/svg">${f({ at: BASE, w: r.w, h: r.h, id: `t-r-${name}` }).layer}</svg>`).chars).toBeLessThan(BUDGET.fightBand.band)
+})
+
+test('cyber fights: a band act never covers the task title: a lane right of it, else a low lane under its row, else none', () => {
+  const title: [number, number, number, number] = [61, 40, 164, 21]
+  const pill: [number, number, number, number] = [227, 40, 78, 21]
+  // 1250: the wide stage's lane right of the title and its chip (as wave 4 drew it)
+  expect(actRegion(1324, { x1: 1000, keep: [pill], wide: { x2: 724, keep: [] }, title })).toEqual({ x: 309, y: 34, w: 415, h: 78 })
+  // 750: the lane right of the chip is too narrow: a low lane under the title's row, the whole wide span
+  expect(actRegion(788, { x1: 476, keep: [pill], wide: { x2: 455, keep: [] }, title })).toEqual({ x: 84, y: LOW_Y, w: 371, h: 49 })
+  // 450: no room clear of the title: none
+  expect(actRegion(480, { x1: 223, keep: [pill], wide: { x2: 184, keep: [] }, title })).toBeUndefined()
+  // and the band draws nothing then (the pane's echo plays)
+  setFightPlay({ kind: 'maxtac', at: BASE })
+  expect(cyberFightBand('runners', 480, BASE + 100, true, { x1: 223, keep: [pill], wide: { x2: 184, keep: [] }, title })).toBe('')
+  const low = cyberFightBand('runners', 788, BASE + 100, true, { x1: 476, keep: [pill], wide: { x2: 455, keep: [] }, title })
+  expect(low).toContain(`clip-rule="evenodd" d="M84 ${LOW_Y}h371v49h-371z"`)
+  setFightPlay(undefined)
+  expect(LOW_Y).toBeGreaterThanOrEqual(title[1] + title[3] + 2)
 })
 
 test('cyber fights: the pane echo is light, sits in the breach matrix only, and ends with its fight', () => {

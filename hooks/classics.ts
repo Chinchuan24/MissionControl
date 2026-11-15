@@ -42,6 +42,15 @@ const since = (at: number | undefined, now: number): at is number => at !== unde
 export const scuttle = (svg: string, a: { startedAt?: number; endedAt?: number; running: boolean }, now: number): string =>
   !a.running && since(a.endedAt, now) ? `<g class="cl-out" style="${dl(a.endedAt)}">${svg}</g>` : a.running && since(a.startedAt, now) ? `<g class="cl-in" style="${dl(a.startedAt)}">${svg}</g>` : svg
 
+/**
+ * A new crab scuttling in on its agent's pane card: the same entrance as the band's, but kept in the card for as long as the
+ * agent runs (a finished, non-repeating animation costs nothing at rest), so the card is not sent again just to drop it (the
+ * add-then-drop re-send is what once cost the 60-agent load test 6 k/s). The legs keep their own pace. Never ahead of its moment.
+ */
+export const SCUTTLE_CARD_CSS = '.cl-in{animation:cl-in .38s cubic-bezier(.23,1,.32,1) both}@keyframes cl-in{from{opacity:0;transform:translateX(-14px)}}@media (prefers-reduced-motion: reduce){.cl-in{animation:none!important}}'
+export const scuttleCard = (svg: string, startedAt: number | undefined, now: number): string =>
+  startedAt !== undefined && now >= startedAt ? `<style>${SCUTTLE_CARD_CSS}</style><g class="cl-in" style="${dl(startedAt)}">${svg}</g>` : svg
+
 const RISE_CSS = '.cl-rise{animation:cl-rise .22s cubic-bezier(.23,1,.32,1) both}@keyframes cl-rise{from{opacity:0;transform:translateY(4px)}}@media (prefers-reduced-motion: reduce){.cl-rise{animation:none}}'
 /** The pane cards that rise in on open: the top of the pane, where the eye is. */
 export const RISE_CARDS = 6

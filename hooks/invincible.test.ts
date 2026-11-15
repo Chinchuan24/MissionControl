@@ -48,6 +48,9 @@ const base = (on: On, context = 100_000, now = NOW, cost = 0) => {
 }
 const start = async ($: Engine, skin: string) => {
   await $.session.start({ source: 'startup', cwd: '/repo', surface: 'desktop', isInteractive: true } as never)
+  // These tests pin the fight schedule the test computes (stage/director.ts's own default, the crew's old 30-45 min rule): the
+  // plugin's setting defaults to `often` (fight-level.test.ts tests that).
+  await $.command.run({ command: 'missioncontrol', args: 'fights rare' } as never)
   if (skin) await $.command.run({ command: 'skin', args: skin } as never)
 }
 const svgs = async ($: Engine, component: 'Pane' | 'AbovePrompt', W = 1250, working = true): Promise<string[]> => {

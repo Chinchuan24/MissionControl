@@ -46,7 +46,7 @@ test('triggers: 40 ordinary coding prompts fire nothing', () => {
 
 // --- the acts: size, budget, still frame, visible size -------------------------------------------------------------------
 test('eggs: every act is drawn big enough to see, under the band act budget, with a still frame, clean markup (both skins)', () => {
-  const MIN_SIZE: Record<string, [string, number][]> = { saul3d: [['head', 40]], namaste: [['ball', 12], ['car', 36], ['howard', 40]], ding: [['bell', 20], ['hector', 40], ['word', 14]], chicanery: [['chuck', 40], ['jimmy', 40], ['words', 11], ['stamp', 14]], '1216': [['number', 20], ['tag', 60]] }
+  const MIN_SIZE: Record<string, [string, number][]> = { saul3d: [['head', 40]], namaste: [['ball', 18], ['car', 48], ['howard', 60]], ding: [['bell', 27], ['hector', 49], ['word', 16]], chicanery: [['chuck', 40], ['jimmy', 40], ['words', 11], ['stamp', 14]], '1216': [['number', 24], ['tag', 60]] }
   for (const gene of [false, true]) {
     for (const [k, out] of ALL(gene)) {
       for (const [part, min] of MIN_SIZE[k] ?? []) expect(out.size[part] ?? 0, `${k} ${part}`).toBeGreaterThanOrEqual(min)
@@ -59,16 +59,18 @@ test('eggs: every act is drawn big enough to see, under the band act budget, wit
       expect(out.svg).toContain('prefers-reduced-motion: reduce')
       expect(/<g class="s\w+-s">[\s\S]*?<(use|rect|path|text)/.test(out.svg), k).toBe(true)
       // Kept clear of the readouts: the act clips to the span minus the holes.
-      expect(out.svg, k).toContain('clip-rule="evenodd" d="M0 34h794v100h-794zM259 39h84v22h-84zM12 88h114v21h-114z"')
+      // (ding and 1216 take the band's whole clear span, stage/keep.ts spanOf: to y 131, its last row's foot; namaste stands on the
+      // step row and stops above the tip line, at y 110.)
+      expect(new RegExp(`clip-rule="evenodd" d="M0 34h794v${k === 'namaste' ? '76' : '(100|97)'}h-794zM259 39h84v22h-84zM12 88h114v21h-114z"`).test(out.svg), k).toBe(true)
     }
   }
   // GENE stays grey: no Saul blue, no ad red or yellow in GENE's acts.
   // (saul3d's front view shows the bust's own exception once he is round: the two one-pixel lens ads, red and yellow.)
-  for (const [k, out] of ALL(true)) expect(/#(5589D8|D7262C|FFD23F|1B2A5E)/i.test(out.svg.replace(/<rect [^>]*width="1" height="1" fill="#(D7262C|FFD23F)"\/>/g, '')), k).toBe(false)
+  for (const [k, out] of ALL(true)) expect(/#(5589D8|D7262C|FFD23F|1B2A5E)/i.test(out.svg.replace(/<rect [^>]*width="\d" height="\d" fill="#(D7262C|FFD23F)"\/>/g, '')), k).toBe(false)
   // saul3d is a real turn: five head poses (8 views with the mirrored three), not a size pop.
   const s3 = (ALL(false)[0] as [string, EggOut])[1].svg
   expect((s3.match(/<g id="s\w+fv[0-4]">/g) ?? []).length).toBe(5)
-  expect(s3).toContain('scale(-1 1)')
+  expect(s3).toMatch(/scale\(-[\d.]+ [\d.]+\)/)
   expect(HEAD.sc * 45).toBeGreaterThan(40)
   expect(EGG_MS.saul3d).toBe(4000)
 })
@@ -78,7 +80,7 @@ test('eggs: a narrow band still plays them inside its span', () => {
     for (const k of ['namaste', 'ding'] as const) {
       const out = k === 'namaste' ? namaste({ W, H: 134, at: NOW, gene: false, stage: st }) : ding({ W, H: 134, at: NOW, gene: false, stage: st })
       expect(chars(out.svg)).toBeLessThan(BUDGET.fightBand.band)
-      expect(out.svg).toContain(`M0 34h${Math.max(140, st.x1)}v100`)
+      expect(out.svg).toContain(`M0 34h${Math.max(120, st.x1)}v${k === 'namaste' ? 76 : 97}`)
     }
   }
 })

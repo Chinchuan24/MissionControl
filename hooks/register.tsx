@@ -12,7 +12,7 @@ import { bbPlay, setBbPlay } from './breakingbad-motion'
 import { THEMES, themeKeyOf } from './themes'
 import { SWITCH_CARDS, SWITCH_MS, into as switchInto, sizeOf as svgSizeOf, skinSwitch } from './stage/wipe'
 import { playsFrom, playsOf, registerPlay, runPlay } from './stage/replay'
-import { CLACK_CSS, CLACK_MS, CLAWOFF_MIN_W, CL_CSS, CRAB_SWITCH, DEFAULT_SWITCH, RISE_CARDS, bubbles, checkMark, clackVar, clawOff, crabDirector, fresh, riseInto, scuttle, shake } from './classics'
+import { CLACK_CSS, CLACK_MS, CLAWOFF_MIN_W, CL_CSS, CRAB_SWITCH, DEFAULT_SWITCH, RISE_CARDS, bubbles, checkMark, clackVar, clawOff, crabDirector, fresh, riseInto, scuttle, scuttleCard, shake } from './classics'
 import type { SwitchFlavour, SwitchLook } from './stage/wipe'
 import { ramStatus, settingsTagline, settingsTones } from './settingslook'
 import type { SettingsSection } from './settingslook'
@@ -40,7 +40,7 @@ import { extrasInto, glitchPanel, hackInto, overlayInto, roamOnBand, roamOverlay
 import type { ThemeCtx, ThemeEggs } from './themes'
 import { canNudge, nudge, pickQuiet, prBadge, quietOf, rememberTask, repoAndBranch, rescueText, retryOnHaiku, whatIf, whatIfText, whatIfTip } from './coach'
 import { flatSmiley, serifClip, serifW } from './mentalist-cards'
-import { CYBER_SWITCH, cyberFightBand, cyberFightEcho, maxtacClimb } from './cyber-fights'
+import { CYBER_SWITCH, cyberFightBand, cyberFightEcho, gigFinale, maxtacClimb } from './cyber-fights'
 import { IDLE_CSS, ACT_MS, WAKE_SAMURAI_RE, bossIdle, cheerAt, cheerOf, city, cyberPlay, diveAct, gigAct, gigAt, idScan, moon, netGrid, playing, relic, sandevistanAct, stage, tower } from './cyber-motion'
 import { BADGES, BEATS_KEPT, BLANK_CRED, BOOT_H, SECRET_BADGE, award, credFor, foundOf, secretFoundFor, withFound, rockerRankOf, bdHeight, bootStrip, braindanceCard, cleanCred, credCard, credHeight, levelOf, rankOf, shiftPick, stepPick } from './extras'
 import type { Beat, Cred } from './extras'
@@ -52,6 +52,8 @@ import { LIVE_N, glide, isNewReading, isSame, liveText, liveWidth, pin, sentLeng
 import { COLOR_RE, FONT_BAD_RE, ID_RE, TOOL_KEY_RE, contrast, skinCheck, skinNew } from './skinkit'
 import { WARM_PROMPT, WARM_TAG, isWarmDue, isWarmed, warmCall, warmLimitHit } from './warm'
 import type { BandStage } from './stage/keep'
+import { FIGHT_LEVELS, cleanFightLevel, fightLevel, setFightLevel, setJobStart } from './stage/director'
+import type { FightLevel } from './stage/director'
 import { switchFlavour } from './switch-flavours'
 import { BLANK_PICK, BLANK_SPEND, SPEND_KINDS, TODAY_PERIOD, exportSpend, isRescanDue, loadSpend, logSpendDay, monthLabel, monthOf, cleanDays, combineDays, monthsWithData, parseSpendArgs, pickSpendKind, pickSpendMonth, readSpend, setSpendPeriod, shiftMonth, spendCard, typeSpendDay } from './spend'
 import type { SpendDirs, SpendIo, SpendKind, SpendRecord } from './spend'
@@ -2110,6 +2112,8 @@ const boysUnpack = (v: string): { mode: 'brand' | 'book'; since: number } => {
 let BOYS_MODE: { mode: 'brand' | 'book'; since: number } = { mode: 'brand', since: 0 }
 // When SOLID GOLD was put on or taken off (its own transition), 0 after a restart.
 let BOYS_GOLD_SINCE = 0
+/** What each fight level means, in the command's answer. */
+const FIGHT_SAID: Record<FightLevel, string> = { often: 'a fight every 7-10 min while a job runs, every 15-20 min at rest', normal: 'a fight every 15-20 min while a job runs', rare: 'a fight every 30-45 min while a job runs', off: 'none by themselves; /missioncontrol play <name> still replays one' }
 // The Boys' spoiler setting (`boysSpoilers`, OFF by default): the finale and death eggs act only while it is on.
 let BOYS_SPOILERS = false
 const isBoys = (): boolean => SKIN.id === 'the-boys' || SKIN.id === 'solidgold' || SKIN.id === 'noir'
@@ -2750,6 +2754,9 @@ const drawnChars = (n: unknown, sourceLength: (source: string) => number = src =
 // layouts, cards to slim rows to the short view and back, redraw after redraw.
 const DRAW_SLACK = 10_000
 let paneLevel = 0
+// How many running agents the last drawing gave a card by the pane's own rule (the fallback's `cards`). While the person's
+// change holds the layout (paneHold), a card they open never takes another agent's card away, and none is handed out.
+let paneCards: number | undefined
 // The crew as it was when the person last opened, collapsed or folded something. While it is the
 // same, the pane never steps up to a richer fallback: a card less made room for one, and the
 // step redrew every other card and picture (others' cards snapping open, sections coming back)
@@ -4207,7 +4214,8 @@ const agentSvg = (W: number, a: AgentRun, at: number, hasRule = true): string =>
   return svg(
     W,
     H,
-    `${rowCrab(W, 0, 10, costumeFor(a), false, a.status === 'running' && !isQuiet(a))}
+    // Crab Classic: a new crab scuttles in on its card too (kept for the card's life: no second send to drop it).
+    `${((crab: string) => (isCrabSkin() && a.status === 'running' ? scuttleCard(crab, a.startedAt, at) : crab))(rowCrab(W, 0, 10, costumeFor(a), false, a.status === 'running' && !isQuiet(a)))}
 <text class="t" x="42" y="18" font-family="${FONT}" font-size="13" font-weight="600">${xml(fitText(a.description || a.type, 13, textW))}</text>
 <text x="42" y="35" font-family="${FONT}" font-size="11"><tspan fill="${color}">${xml(sub[0] ?? '')}</tspan><tspan class="s">${xml(fitText(sub.slice(1).map(x => `  ·  ${x}`).join(''), 11, textW - 60))}</tspan></text>
 ${statGrid(42, 46, W - 42 - 6, agentStats(a, at))}
@@ -6551,7 +6559,15 @@ const slimBandSvg = (OW: number, d: HudData): string => {
   s.push(`${sl?.pill ? sl.pill(px, 41, pillW, 18, pillFill, statusOn ? 1 : 0.25) : `<rect x="${px}" y="41" width="${pillW}" height="18" rx="9" fill="${pillFill}" fill-opacity="${statusOn ? 1 : 0.25}"/>`}<text x="${px + pillW / 2}" y="54" text-anchor="middle" font-family="${FONT}" font-size="11.5" font-weight="700" fill="${statusOn ? inkOn(pillFill) : c.text}">${xml(d.status)}</text>`)
   const ax = px + pillW + 12
   const actRoom = Math.max(0, (hasReadouts ? r0 - 18 : W - 14) - ax - 12)
-  if (d.activity && actRoom >= 60) s.push(Bd(ax, 54, `› ${fitW(d.activity, 11.5, Math.max(0, actRoom - 14))}`))
+  // The band's own words inside the act span (the activity, the step's words, the tip line), as boxes: an act that routes its
+  // figures around the words (stage/keep.ts `BandStage.text`) never walks over them.
+  const words: [number, number, number, number][] = []
+  const said = (x: number, yy: number, text: string, anchor = 'start'): string => {
+    const w = sw(text, 11.5)
+    words.push([Math.round(anchor === 'end' ? x - w - 2 : x - 2), yy - 11, Math.round(w + 4), 14])
+    return text
+  }
+  if (d.activity && actRoom >= 60) s.push(Bd(ax, 54, said(ax, 54, `› ${fitW(d.activity, 11.5, Math.max(0, actRoom - 14))}`)))
   if (hasReadouts) {
     s.push(sl?.rule ? sl.rule(r0 - 18, 40, r0 - 18, 76) : `<line x1="${r0 - 18}" y1="40" x2="${r0 - 18}" y2="76" stroke="${c.line}"/>`)
     const ctxTone = d.ctxPct >= 95 ? c.alert : d.ctxPct >= 85 ? c.warn : c.text
@@ -6625,9 +6641,9 @@ const slimBandSvg = (OW: number, d: HudData): string => {
       s.push(Bd(crewLeft - 26, ya, `+${d.crew.length - shown.length}`, c.muted))
       crewLeft -= 26
     }
-  } else s.push(Bd(xr, ya, 'No crew on this job yet', c.muted, 'text-anchor="end"'))
+  } else s.push(Bd(xr, ya, said(xr, ya, 'No crew on this job yet', 'end'), c.muted, 'text-anchor="end"'))
   // steps
-  if (!nSteps) s.push(Bd(x0, ya, 'No steps yet', c.muted))
+  if (!nSteps) s.push(Bd(x0, ya, said(x0, ya, 'No steps yet'), c.muted))
   else {
     d.steps.slice(0, pipsN).forEach((st, i) => {
       const px2 = x0 + 5 + i * 13
@@ -6640,7 +6656,7 @@ const slimBandSvg = (OW: number, d: HudData): string => {
     })
     const sx = x0 + pipsN * 13 + 10
     s.push(Vl(sx, ya, cnt))
-    s.push(Bd(sx + cntW + 10, ya, fitW(d.stepText, 11.5, Math.max(0, crewLeft - 12 - (sx + cntW + 10)))))
+    s.push(Bd(sx + cntW + 10, ya, said(sx + cntW + 10, ya, fitW(d.stepText, 11.5, Math.max(0, crewLeft - 12 - (sx + cntW + 10))))))
   }
   // ---- row B: tip left, totals right; the corner is the smiley's
   const yb = 123
@@ -6686,7 +6702,9 @@ const slimBandSvg = (OW: number, d: HudData): string => {
   s.push(...rights)
   const tipLive = d.tip.level === 2
   s.push(`<circle${tipLive ? ' class="live"' : ''} cx="${x0 + 4}" cy="${yb - 4}" r="3.5" fill="${MOOD_COLOR[d.tip.level]}"/>`)
-  s.push(Bd(tipX, yb, fitW(d.tip.text, 11.5, Math.max(0, rx - tipX - 12)), tipLive ? c.text : c.subtext))
+  s.push(Bd(tipX, yb, said(tipX, yb, fitW(d.tip.text, 11.5, Math.max(0, rx - tipX - 12))), tipLive ? c.text : c.subtext))
+  // The tip's mood dot belongs to its line.
+  if (words.length) { const t = words[words.length - 1] as [number, number, number, number]; words[words.length - 1] = [x0 - 2, t[1], t[0] + t[2] - (x0 - 2), t[3]] }
   if (!sl && (d.ctxPct >= 95 || overBudget)) s.push(th.corner ? th.corner(W, H, tctx) : flatSmiley(W - 21, H - 19, 9, RJ, 0.3, 'rjs'))
   // A roaming character (a walk, a peek at the episode, a sit on the gauge, now and then a takeover) goes last, over the celebration.
   const roam = th.roamer
@@ -6708,6 +6726,10 @@ const slimBandSvg = (OW: number, d: HudData): string => {
     // Further right, each row only up to its own first readout: the task row to the percent, the step row to the crew, the tip
     // line to the totals (each row's right part is a hole), and never into the readout column.
     wide: { x2: Math.round(Math.min(Math.max(crewLeft - 6, pctX - 6, rx - 2), hasReadouts ? r0 - 24 : W - 14)), keep: [[pctX - 6, 34, W, 50], [crewLeft - 6, 79, W, 31], [rx - 2, 110, W, 24]] },
+    // The task title's box: a fight that can stand clear of it (a lane right of it) never crosses it (wave 4).
+    title: [tx - 3, 39, titleW + 6, 22],
+    // The band's words in the span (the activity, the step's words, the tip): an act that can route around them does.
+    text: words,
   }
   const extras = th.extras ? th.extras({ W, H, surface: 'band', stage, at: d.at, ctxPct: d.ctxPct, ...(d.isWorking && d.taskFrom ? { job: { at: d.taskFrom, n: d.today.tasks } } : {}), ...(d.isParty ? { party: true, ...(d.partyAt !== undefined ? { partyAt: d.partyAt } : {}) } : {}), ...(BCS_UNPLUG_AT !== undefined ? { unplugAt: BCS_UNPLUG_AT } : {}), ...(activeFx() ? { fx: activeFx() as { kind: string; at: number } } : {}), working: d.isWorking, ...(swapAtNow() !== undefined ? { swapAt: swapAtNow() } : {}), task: d.title, titleW }) : ''
   const body = `${s.join('\n')}${extras}${d.isParty ? th.cheer(W, H, FONT, c, d.partyAt, stage) : ''}${d.isParty && th.roamer?.hushParty ? '' : roam}${trLayer}`
@@ -6858,9 +6880,16 @@ ${egg ? EGG_CSS : th ? th.css : ''}
   // Where a Cyberpunk fight may play (stage/keep.ts), in the band's own coordinates: the clear span left of the gauge's percent
   // and the readout column, and the status pill inside it as a keep-out hole. The fight keeps under the header's line.
   const rowY = HUD_PAD + HUD_HEAD - 2
+  const x1 = Math.round(Math.min(HUD_PAD + left + barW + 8 - 6, hasReadouts ? HUD_PAD + W - right - 6 : OW - 14))
+  // Wide (wave 4): the title row AND the crew row under it, right of the row labels, up to the crew's role chips (and never past
+  // the gauge's percent): a fight drawn there is about 1.7x as tall. The crew's "+N" count, when the row has one, is a hole.
+  const chips = crewChipsLeft(W, d)
   const stage: BandStage = {
-    x1: Math.round(Math.min(HUD_PAD + left + barW + 8 - 6, hasReadouts ? HUD_PAD + W - right - 6 : OW - 14)),
+    x1,
     keep: [[HUD_PAD + left + titleW + 8 - 3, rowY + 9 - 3, fullPill.w + 6, 21]],
+    wide: { x2: Math.round(Math.min(x1, HUD_PAD + chips.left - 6)), keep: chips.more ? [[HUD_PAD + chips.more - 3, rowY + HUD_TOP + 8 + 2, 34, 16]] : [] },
+    // The task title's box (wave 4 final): no act ever crosses it, at every width.
+    title: [HUD_PAD + left - 3, rowY + 9 - 3, Math.round(titleW + 6), 21],
   }
   return svg(
     OW,
@@ -6902,7 +6931,8 @@ ${hudLines(W, d)}
 ${hudSpare(W)}
 </g>
 ${egg && !d.lite ? cyberCheer(egg, OW, OH, d) : egg && d.isParty ? celebration(OW, OH, egg, FONT, d.partyAt) : ''}
-${egg && !d.lite && !d.isParty ? cyberFightBand(egg, OW, d.at, d.isWorking, stage) : ''}
+${egg && !d.isParty ? cyberFightBand(egg, OW, d.at, d.isWorking, stage) : ''}
+${egg === 'samurai' && !d.isParty ? gigFinale(OW, d.at, gigAt(d.at, d.isWorking)?.startAt, stage) : ''}
 ${th && d.isParty ? th.cheer(OW, OH, FONT, c, d.partyAt, stage) : ''}
 ${th?.corner ? th.corner(OW, OH, { ctxPct: d.ctxPct, overBudget: Boolean(d.budget && d.budget.usedMs > d.budget.min * 60_000) }) : ''}`,
   )
@@ -6989,6 +7019,25 @@ const hudSpare = (W: number): string =>
   }).join('\n')
 
 // Lines three to five: the crew, the steps, the tip and today.
+/**
+ * Where the classic band's crew row hands its right part to the role chips (inner x, as hudLines lays them out: the row's end
+ * when there are none), and the x of its "+N" count when the crabs overflow. A fight on the wide stage stops left of the chips.
+ */
+const crewChipsLeft = (W: number, d: HudData): { left: number; more?: number } => {
+  const crabX = 14 + 64
+  if (!d.crew.length) return { left: W - 14 }
+  let rx = W - 14
+  let left = W - 14
+  for (const r of [...d.roles].reverse().slice(0, 4)) {
+    const w = Math.round(textWidth(`${r.role} ${r.count}`, 10.5) + 16)
+    if (rx - w < crabX + 24 + 28) break
+    rx -= w
+    left = rx
+    rx -= 6
+  }
+  const room = Math.max(1, Math.floor((rx - 8 - 24 - crabX) / 24))
+  return d.crew.length > room ? { left, more: crabX + room * 24 + 2 } : { left }
+}
 const hudLines = (W: number, d: HudData): string => {
   const c = SKIN.colors
   const x0 = 14
@@ -7391,6 +7440,8 @@ async function startJob($: EngineInterface, asked: string): Promise<void> {
         ids: [...new Set([...(prev.carried?.ids ?? []), ...before.map(a => a.id)])].slice(-50),
       }
     : undefined
+  // The engine keeps the frequent fights out of a job's first moments (its job-start act plays then).
+  setJobStart(at)
   await update($, manager, () => ({
     task: clip(asked.replace(/\s+/g, ' '), 300),
     isWorking: true,
@@ -7826,6 +7877,7 @@ export const register: Register = (on, options) => {
     BOYS_MODE = { mode: (await $.store.get('boysMode').catch(() => undefined)) === 'book' ? 'book' : 'brand', since: 0 }
     BOYS_GOLD_SINCE = 0
     BOYS_SPOILERS = (await $.store.get('boysSpoilers').catch(() => undefined)) === true
+    setFightLevel(cleanFightLevel(await $.store.get('fightLevel').catch(() => undefined)))
     await update($, boysModeAtom, () => `${BOYS_MODE.mode}|0`)
     const savedCal = await $.store.get('calMode').catch(() => undefined)
     CAL_MODE = { mode: savedCal === 'dark' || savedCal === 'light' ? savedCal : 'auto', since: 0 }
@@ -7925,6 +7977,20 @@ export const register: Register = (on, options) => {
       if (!spoil[1]) return { text: `The Boys' spoilers are ${BOYS_SPOILERS ? 'on' : 'off'}. Use /missioncontrol spoilers on or off.` }
       await setFlag($, 'boysSpoilers', spoil[1].toLowerCase() === 'on')
       return { text: BOYS_SPOILERS ? 'Spoilers on: The Boys’ finale eggs can play (S5).' : 'Spoilers off: no finale or death eggs.' }
+    }
+    // `/missioncontrol fights often|normal|rare|off`: how often the fights (and stand-offs) play by themselves, in every skin
+    // (stage/director.ts: every fight lane follows it). Saved in the store; `often` by default. Replays play at every level.
+    const fights = /^fights?(?:\s+(\S+))?\s*$/i.exec((e.args ?? '').trim())
+    if (fights) {
+      if (!fights[1]) return { text: `Fights: ${fightLevel()} (${FIGHT_SAID[fightLevel()]}). Use /missioncontrol fights often, normal, rare or off.` }
+      const level = fights[1].toLowerCase() as FightLevel
+      if (!FIGHT_LEVELS.includes(level)) return { text: `"${fights[1].slice(0, 20)}" is not a level. Pick one: often, normal, rare or off.` }
+      setFightLevel(level)
+      await $.store.set('fightLevel', level).catch(() => undefined)
+      const at = await $.clock.now().catch(() => Date.now())
+      await update($, bandTick, () => at)
+      await update($, paneTick, () => at)
+      return { text: `Fights: ${level} (${FIGHT_SAID[level]}).` }
     }
     // Unlisted on purpose: `/missioncontrol play <name>` replays one of the worn skin's acts now (no help text names it). The shared
     // registry first (stage/replay.ts: every skin's fights), then The Boys' and Invincible's own lists.
@@ -8996,17 +9062,29 @@ export const register: Register = (on, options) => {
       // Level `level` of the fallbacks fits: with room to spare when richer than the last drawn.
       // Never richer while the person's last change holds it (paneHold): the click redraws its own card only.
       const fits = (level: number, size: number): boolean => (level >= paneLevel || paneHold !== crewKey) && size + reserve <= DRAW_MAX - (level < paneLevel ? DRAW_SLACK : 0)
-      const take = <T,>(level: number, v: T): T => {
+      const take = <T,>(level: number, v: T, cards?: number): T => {
         paneLevel = level
+        paneCards = cards
         return keep(v)
       }
       const stepView = (st: PaneStep) => full(st.org === 'rich' ? rich : st.org === 'light' ? light() : '', treeWith(st.cards, st.keep), st.lite, new Set(st.drop))
       // A crew with more slim rows than crabs can fit skips drawing them all to measure.
       const isCrowd = tree.filter(isSlim).length > MAX_CRAB_ROWS
+      // Held by the person's own change (an Open on a full pane): the room for the card they opened comes out of the parts
+      // (crabs, the hierarchy's drawing, finished rows, sections), never out of other agents' cards, and no step hands a card
+      // out either: every step keeps exactly the cards drawn before the click. Only when nothing fits that way, the plain ladder.
+      const held = paneHold === crewKey ? paneCards : undefined
+      if (held !== undefined) {
+        for (const [level, st] of PANE_STEPS.entries()) {
+          if (st.cards < held || (level === 0 && isCrowd)) continue
+          const view = stepView({ ...st, cards: held })
+          if (fits(level, sizeOf(view))) return take(level, view, held)
+        }
+      }
       for (const [level, st] of PANE_STEPS.entries()) {
         if (level === 0 && isCrowd) continue
         const view = stepView(st)
-        if (fits(level, sizeOf(view))) return take(level, view)
+        if (fits(level, sizeOf(view))) return take(level, view, st.cards)
       }
       const base = PANE_STEPS.length
       const short = compactView(rich)

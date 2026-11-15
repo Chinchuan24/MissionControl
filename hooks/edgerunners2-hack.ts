@@ -222,6 +222,8 @@ export type HackArgs = {
   roamFor?: (windowStart: number) => RoamPlan | null
   /** A window another of her events owns (a duet): her lines alone never share it (one Capri event per window). */
   taken?: (windowStart: number) => boolean
+  /** A fight's time (final review): an event that would meet it is left out (the lines are drawn up to HACK_AHEAD_MS ahead). */
+  busy?: (startAt: number, endAt: number) => boolean
 }
 
 /**
@@ -245,6 +247,7 @@ export const er2Hack = (seed: string, a: HackArgs, sec: boolean): string => {
     if (!roam?.on && a.taken?.(w0)) continue
     const plan = hackPlan(`${seed}|hack`, w0, a.ctxPct, sec, roam)
     if (!plan.on || plan.endAt <= a.at || plan.startAt > a.at + HACK_AHEAD_MS) continue
+    if (a.busy?.(plan.startAt, plan.endAt)) continue
     if (a.surface === 'pane' && (a.card ?? 'cred') !== plan.paneCard) continue
     if (plan.startAt > a.at && ++ahead > MAX_AHEAD) break
     let branches = 0
