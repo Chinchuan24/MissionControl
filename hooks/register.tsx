@@ -6559,7 +6559,15 @@ const slimBandSvg = (OW: number, d: HudData): string => {
   s.push(`${sl?.pill ? sl.pill(px, 41, pillW, 18, pillFill, statusOn ? 1 : 0.25) : `<rect x="${px}" y="41" width="${pillW}" height="18" rx="9" fill="${pillFill}" fill-opacity="${statusOn ? 1 : 0.25}"/>`}<text x="${px + pillW / 2}" y="54" text-anchor="middle" font-family="${FONT}" font-size="11.5" font-weight="700" fill="${statusOn ? inkOn(pillFill) : c.text}">${xml(d.status)}</text>`)
   const ax = px + pillW + 12
   const actRoom = Math.max(0, (hasReadouts ? r0 - 18 : W - 14) - ax - 12)
-  if (d.activity && actRoom >= 60) s.push(Bd(ax, 54, `› ${fitW(d.activity, 11.5, Math.max(0, actRoom - 14))}`))
+  // The band's own words inside the act span (the activity, the step's words, the tip line), as boxes: an act that routes its
+  // figures around the words (stage/keep.ts `BandStage.text`) never walks over them.
+  const words: [number, number, number, number][] = []
+  const said = (x: number, yy: number, text: string, anchor = 'start'): string => {
+    const w = sw(text, 11.5)
+    words.push([Math.round(anchor === 'end' ? x - w - 2 : x - 2), yy - 11, Math.round(w + 4), 14])
+    return text
+  }
+  if (d.activity && actRoom >= 60) s.push(Bd(ax, 54, said(ax, 54, `› ${fitW(d.activity, 11.5, Math.max(0, actRoom - 14))}`)))
   if (hasReadouts) {
     s.push(sl?.rule ? sl.rule(r0 - 18, 40, r0 - 18, 76) : `<line x1="${r0 - 18}" y1="40" x2="${r0 - 18}" y2="76" stroke="${c.line}"/>`)
     const ctxTone = d.ctxPct >= 95 ? c.alert : d.ctxPct >= 85 ? c.warn : c.text
@@ -6633,9 +6641,9 @@ const slimBandSvg = (OW: number, d: HudData): string => {
       s.push(Bd(crewLeft - 26, ya, `+${d.crew.length - shown.length}`, c.muted))
       crewLeft -= 26
     }
-  } else s.push(Bd(xr, ya, 'No crew on this job yet', c.muted, 'text-anchor="end"'))
+  } else s.push(Bd(xr, ya, said(xr, ya, 'No crew on this job yet', 'end'), c.muted, 'text-anchor="end"'))
   // steps
-  if (!nSteps) s.push(Bd(x0, ya, 'No steps yet', c.muted))
+  if (!nSteps) s.push(Bd(x0, ya, said(x0, ya, 'No steps yet'), c.muted))
   else {
     d.steps.slice(0, pipsN).forEach((st, i) => {
       const px2 = x0 + 5 + i * 13
@@ -6648,7 +6656,7 @@ const slimBandSvg = (OW: number, d: HudData): string => {
     })
     const sx = x0 + pipsN * 13 + 10
     s.push(Vl(sx, ya, cnt))
-    s.push(Bd(sx + cntW + 10, ya, fitW(d.stepText, 11.5, Math.max(0, crewLeft - 12 - (sx + cntW + 10)))))
+    s.push(Bd(sx + cntW + 10, ya, said(sx + cntW + 10, ya, fitW(d.stepText, 11.5, Math.max(0, crewLeft - 12 - (sx + cntW + 10))))))
   }
   // ---- row B: tip left, totals right; the corner is the smiley's
   const yb = 123
@@ -6694,7 +6702,9 @@ const slimBandSvg = (OW: number, d: HudData): string => {
   s.push(...rights)
   const tipLive = d.tip.level === 2
   s.push(`<circle${tipLive ? ' class="live"' : ''} cx="${x0 + 4}" cy="${yb - 4}" r="3.5" fill="${MOOD_COLOR[d.tip.level]}"/>`)
-  s.push(Bd(tipX, yb, fitW(d.tip.text, 11.5, Math.max(0, rx - tipX - 12)), tipLive ? c.text : c.subtext))
+  s.push(Bd(tipX, yb, said(tipX, yb, fitW(d.tip.text, 11.5, Math.max(0, rx - tipX - 12))), tipLive ? c.text : c.subtext))
+  // The tip's mood dot belongs to its line.
+  if (words.length) { const t = words[words.length - 1] as [number, number, number, number]; words[words.length - 1] = [x0 - 2, t[1], t[0] + t[2] - (x0 - 2), t[3]] }
   if (!sl && (d.ctxPct >= 95 || overBudget)) s.push(th.corner ? th.corner(W, H, tctx) : flatSmiley(W - 21, H - 19, 9, RJ, 0.3, 'rjs'))
   // A roaming character (a walk, a peek at the episode, a sit on the gauge, now and then a takeover) goes last, over the celebration.
   const roam = th.roamer
@@ -6718,6 +6728,8 @@ const slimBandSvg = (OW: number, d: HudData): string => {
     wide: { x2: Math.round(Math.min(Math.max(crewLeft - 6, pctX - 6, rx - 2), hasReadouts ? r0 - 24 : W - 14)), keep: [[pctX - 6, 34, W, 50], [crewLeft - 6, 79, W, 31], [rx - 2, 110, W, 24]] },
     // The task title's box: a fight that can stand clear of it (a lane right of it) never crosses it (wave 4).
     title: [tx - 3, 39, titleW + 6, 22],
+    // The band's words in the span (the activity, the step's words, the tip): an act that can route around them does.
+    text: words,
   }
   const extras = th.extras ? th.extras({ W, H, surface: 'band', stage, at: d.at, ctxPct: d.ctxPct, ...(d.isWorking && d.taskFrom ? { job: { at: d.taskFrom, n: d.today.tasks } } : {}), ...(d.isParty ? { party: true, ...(d.partyAt !== undefined ? { partyAt: d.partyAt } : {}) } : {}), ...(BCS_UNPLUG_AT !== undefined ? { unplugAt: BCS_UNPLUG_AT } : {}), ...(activeFx() ? { fx: activeFx() as { kind: string; at: number } } : {}), working: d.isWorking, ...(swapAtNow() !== undefined ? { swapAt: swapAtNow() } : {}), task: d.title, titleW }) : ''
   const body = `${s.join('\n')}${extras}${d.isParty ? th.cheer(W, H, FONT, c, d.partyAt, stage) : ''}${d.isParty && th.roamer?.hushParty ? '' : roam}${trLayer}`
