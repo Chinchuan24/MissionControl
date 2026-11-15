@@ -12,7 +12,7 @@ import { bbPlay, setBbPlay } from './breakingbad-motion'
 import { THEMES, themeKeyOf } from './themes'
 import { SWITCH_CARDS, SWITCH_MS, into as switchInto, sizeOf as svgSizeOf, skinSwitch } from './stage/wipe'
 import { playsFrom, playsOf, registerPlay, runPlay } from './stage/replay'
-import { CLACK_CSS, CLACK_MS, CLAWOFF_MIN_W, CL_CSS, CRAB_SWITCH, DEFAULT_SWITCH, RISE_CARDS, bubbles, checkMark, clackVar, clawOff, crabDirector, fresh, riseInto, scuttle, shake } from './classics'
+import { CLACK_CSS, CLACK_MS, CLAWOFF_MIN_W, CL_CSS, CRAB_SWITCH, DEFAULT_SWITCH, RISE_CARDS, bubbles, checkMark, clackVar, clawOff, crabDirector, fresh, riseInto, scuttle, scuttleCard, shake } from './classics'
 import type { SwitchFlavour, SwitchLook } from './stage/wipe'
 import { ramStatus, settingsTagline, settingsTones } from './settingslook'
 import type { SettingsSection } from './settingslook'
@@ -4210,7 +4210,8 @@ const agentSvg = (W: number, a: AgentRun, at: number, hasRule = true): string =>
   return svg(
     W,
     H,
-    `${rowCrab(W, 0, 10, costumeFor(a), false, a.status === 'running' && !isQuiet(a))}
+    // Crab Classic: a new crab scuttles in on its card too (kept for the card's life: no second send to drop it).
+    `${((crab: string) => (isCrabSkin() && a.status === 'running' ? scuttleCard(crab, a.startedAt, at) : crab))(rowCrab(W, 0, 10, costumeFor(a), false, a.status === 'running' && !isQuiet(a)))}
 <text class="t" x="42" y="18" font-family="${FONT}" font-size="13" font-weight="600">${xml(fitText(a.description || a.type, 13, textW))}</text>
 <text x="42" y="35" font-family="${FONT}" font-size="11"><tspan fill="${color}">${xml(sub[0] ?? '')}</tspan><tspan class="s">${xml(fitText(sub.slice(1).map(x => `  ·  ${x}`).join(''), 11, textW - 60))}</tspan></text>
 ${statGrid(42, 46, W - 42 - 6, agentStats(a, at))}
