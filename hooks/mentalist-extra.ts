@@ -1,5 +1,5 @@
 // Extra easter eggs for The Mentalist skin and its hidden Red John skin: a Sacramento
-// skyline, Jane's hypnosis swirl, red smileys for heat, drifting card suits, a title
+// skyline, Jane's hypnosis swirl, red smileys for heat, drifting card suits, an episode
 // that flickers to the smiley and a cup of tea. A fan homage: pure SVG strings, no
 // state and no I/O. Each drawer fills one of the slots the cyber eggs use in eggs.ts
 // (skyline, sandevistan, heatStars, the glyph rain, relicText); the hooks module decides
@@ -13,7 +13,6 @@ export type MxTheme = { accent: string; accent2: string; done: string; warn: str
 const GOLD = '#C9A227'
 const r1 = (v: number): number => +v.toFixed(1)
 const fin = (v: number, d: number): number => (Number.isFinite(v) ? v : d)
-const esc = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 // A small repeatable random: the same picture every time for the same width.
 const lcg = (seed: number) => () => ((seed = (seed * 9301 + 49297) % 233280) / 233280)
 
@@ -169,23 +168,15 @@ export const cardGlyphs = (W: number, H: number, at: number, t: MxTheme): string
   return out.join('')
 }
 
-// --- 5. The title that blinks: the title-glitch slot (like relicText) ---
-// The title is always drawn. Every 30 s a red smiley and a red ghost of the text flick past for
-// 0.3 s, beside the title (never hiding it); reduced motion shows none. `attrs` are the
-// title's own text attributes (font-size, fill, text-anchor). Needs MENT_EXTRA_CSS.
-export const smileGlitch = (x: number, y: number, text: string, attrs: string, _t: MxTheme, titleW = 0): string => {
-  const fs = +(/font-size="([\d.]+)"/.exec(attrs)?.[1] ?? 12) || 12
-  const size = Math.min(16, Math.max(9, Math.round(fs * 1.1)))
-  const anchor = /text-anchor="(middle|end)"/.exec(attrs)?.[1]
-  // The title is always there; every 30 s a red ghost and a small smiley flick past for 0.3 s, beside the text, not over it.
-  const est = [...text].length * fs * 0.52
-  const sx = anchor === 'middle' ? x - size / 2 : anchor === 'end' ? x - size : Math.min(x + est + 6, x + (titleW || est + 6 + size) - size)
-  const body = esc(text)
-  return (
-    `<text x="${r1(x)}" y="${r1(y)}" ${attrs}>${body}</text>` +
-    `<text class="mx-ghost" opacity="0" x="${r1(x)}" y="${r1(y)}" ${attrs.replace(/fill="[^"]*"/, '')} fill="${RED}" style="mix-blend-mode:screen">${body}</text>` +
-    smiley(r1(sx), r1(y - size * 0.9), size, 0, 'mx-smile')
-  )
+// --- 5. The episode that blinks: the slim band's episode slot (never the title) ---
+// Every 30 s, for 0.3 s, a red ghost of the hour's episode jolts 2 px and a small red smiley flicks past just left of it, in the
+// gap the band keeps before the episode. The episode is always drawn (the band draws it); this is only the overlay. `ep` is the
+// episode's own <text> markup, `x` its left edge, `y` its baseline. Reduced motion shows none. Needs MENT_EXTRA_CSS.
+// (It once sat on the task title, where a stuck frame hid the title: the band now never hands it the title.)
+export const smileGlitch = (ep: string, x: number, y: number): string => {
+  if (!/^<text\b[\s\S]*<\/text>$/.test(ep.trim())) return ''
+  const ghost = ep.trim().replace(/\sfill="[^"]*"/g, '').replace(/^<text\b/, `<text fill="${RED}"`)
+  return `<g class="mx-ghost" opacity="0">${ghost}</g>${smiley(r1(x - 15), r1(y - 9.5), 10, 0, 'mx-smile')}`
 }
 
 // --- 6. Tea: the idle state of the band ---

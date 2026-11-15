@@ -1227,7 +1227,8 @@ const allSvg = async ($: Engine) => (await bandAt($, 1250, false)) + (await svgs
 
 test('replay: refused unless Invincible is worn', async ($, on) => {
   base(on, 100_000, quietAt())
-  await start($, 'mentalist')
+  // A skin with no plays of its own (The Mentalist answers with its own list now).
+  await start($, 'crab-classic')
   expect(await play($, 'fight')).toBe('Wear the Invincible skin first.')
 })
 

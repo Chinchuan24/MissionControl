@@ -1,7 +1,7 @@
 import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
-import { AFTER_RED, COLD_H, EPISODES, RED, TEA_WARNING, TYGER_RE, cbiRankOf, coldReadCard, coldReads, episodeAt, smiley, teaChip } from './mentalist'
+import { AFTER_RED, COLD_H, EPISODES, RED, TEA_WARNING, TYGER_RE, cbiRankOf, coldReadCard, coldReads, episodeAt, smiley } from './mentalist'
 import { BOARD_H, caseBoard, caseBoardAlt, ctxChip, fileHeight, personnelFile } from './mentalist-cards'
 import { BLANK_CRED } from './extras'
 import type { Beat } from './extras'
@@ -95,19 +95,19 @@ test('mentalist: costs stay in dollars, and the hidden smiley and the tea chip c
   await $.prompt.submit({ text: 'Fix it', cursor: 0 } as never)
   let bandSvg = (await svgs($, 'AbovePrompt')).join('')
   expect(bandSvg).toContain('NEEDS TEA')
-  expect(bandSvg).not.toContain('class="rjs"') // not yet: the smiley waits for 95%
+  expect(bandSvg).not.toContain('class="mpk"') // not yet: the painted smiley waits for 95%
   expect(bandSvg).toContain('$0.00')
   expect(bandSvg).not.toContain('€$')
 })
 
-test('mentalist: past 95% context Red John is watching, in red, with a faint smiley', async ($, on) => {
+test('mentalist: past 95% context Red John is watching, in red, with a smiley that paints itself on', async ($, on) => {
   base(on, 960_000)
   await start($, 'mentalist')
   await $.prompt.submit({ text: 'Fix it', cursor: 0 } as never)
   const bandSvg = (await svgs($, 'AbovePrompt')).join('')
   expect(bandSvg).toContain('RED JOHN IS WATCHING')
   expect(bandSvg).toContain(`fill="${RED}"`)
-  expect(bandSvg).toContain('class="rjs"')
+  expect(bandSvg).toContain('class="mpk"')
   expect(bandSvg).not.toContain('MAXTAC')
   expect(sounds.join('')).not.toContain('maxtac')
 })
@@ -186,8 +186,6 @@ test('mentalist tables: 39 verified titles, the smiley, the cold reads and the l
   expect(cbiRankOf(4)).toBe('Consultant')
   expect(cbiRankOf(5)).toBe('Senior Consultant')
   expect(cbiRankOf(99)).toBe('The Mentalist')
-  expect(teaChip(0, 10, 80, { accent: '#fff', warn: '#ee0' } as never, 'serif').w).toBe(0)
-  expect(teaChip(0, 10, 90, { accent: '#fff', warn: '#ee0' } as never, 'serif').svg).toContain('NEEDS TEA')
   expect(TEA_WARNING(90)).toContain('/compact')
   expect(TYGER_RE.test('Tyger Tyger')).toBe(true)
   expect(TYGER_RE.test('tiger tiger')).toBe(false)
@@ -280,7 +278,7 @@ test('context chip: teacup at 85%, red smiley at 95%, nothing below', () => {
   expect(red.svg).toContain(RED)
 })
 
-test('slim band: the task title is plain text on The Mentalist and Red John (no smile glitch hides it)', async ($, on) => {
+test('slim band: the task title is plain text on The Mentalist and Red John (the smile glitch rides the episode, never the title)', async ($, on) => {
   base(on)
   for (const skin of ['mentalist', 'red-john']) {
     await start($, skin)
@@ -289,7 +287,9 @@ test('slim band: the task title is plain text on The Mentalist and Red John (no 
     const bandSvg = (await svgs($, 'AbovePrompt')).join('')
     expect(bandSvg).toMatch(/viewBox="0 0 \d+ 132"/)
     expect(bandSvg).toMatch(/<text x="64" y="54"[^>]*>Ship the login fix<\/text>/)
-    for (const cls of ['mx-ttl', 'mx-ghost', 'mx-smile']) expect(bandSvg).not.toContain(`class="${cls}"`)
+    expect(bandSvg).not.toContain('class="mx-ttl"')
+    // The ghost is the episode's, not the title's.
+    expect(/<g class="mx-ghost"[^>]*>([\s\S]*?)<\/g>/.exec(bandSvg)?.[1] ?? '').not.toContain('Ship the login fix')
   }
 })
 

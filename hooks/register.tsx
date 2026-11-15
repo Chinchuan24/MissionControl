@@ -5,7 +5,8 @@ import { BLANK_BILLING, KEY_IN_COMMAND, draft, maskKey, unmaskKey, guideText, is
 import { CASTS, CAST_CSS, hashOf, spriteMarkup } from './cast'
 import { BREACH_H, BREACH_W, CJK_FONT, EGG_CSS, EGG_TOOLS, EGG_WORDS, GREETING, KATAKANA, breachCard, breachTicker, celebration, heatStars, legendsCard, legendsHeight, psychoChip, radio, relicText, sandevistan, skyline, sysTag } from './eggs'
 import type { CyberEgg, Egg, Legend } from './eggs'
-import { TYGER_RE } from './mentalist'
+import { PATRICK_JANE_RE, TYGER_RE } from './mentalist'
+import { setMentPlay } from './mentalist-motion'
 import { BB_REVEAL_MS, BB_RIGHT, BB_SKIN_WORDS, BB_TOOLS, SAY_MY_NAME_RE } from './breakingbad'
 import { bbRightLine } from './breakingbad-cards'
 import { THEMES, themeKeyOf } from './themes'
@@ -6408,9 +6409,12 @@ const slimBandSvg = (OW: number, d: HudData): string => {
   if (showEp) {
     const ex = xr - clockW - 14
     if (clockW) s.push(`<line x1="${r2(ex + 7)}" y1="${y - 10}" x2="${r2(ex + 7)}" y2="${y + 2}" stroke="${c.line}"/>`)
+    const epText = `<text x="${r2(clockW ? ex - 4 : xr)}" y="${y}" text-anchor="end" font-family="${FONT}" font-size="11.5" fill="${c.muted}"><tspan font-size="9.5" font-weight="700" letter-spacing=".8">${xml(ep[0])}</tspan>${epMode === 0 ? `  <tspan font-style="italic" fill="${c.subtext}">${xml(ep[1])}</tspan>` : ''}</text>`
     if (sl?.ep) s.push(sl.ep.draw(clockW ? ex - 4 : xr, y, ep[0], ep[1], epMode === 0, c))
-    else s.push(`<text x="${r2(clockW ? ex - 4 : xr)}" y="${y}" text-anchor="end" font-family="${FONT}" font-size="11.5" fill="${c.muted}"><tspan font-size="9.5" font-weight="700" letter-spacing=".8">${xml(ep[0])}</tspan>${epMode === 0 ? `  <tspan font-style="italic" fill="${c.subtext}">${xml(ep[1])}</tspan>` : ''}</text>`)
+    else s.push(epText)
     epLeft = (clockW ? ex - 4 : xr) - epWof()
+    // A theme's flicker on the episode (the Mentalist's red smiley): an overlay in the gap before it, never on the title.
+    if (!sl?.ep && th.epGlitch) s.push(th.epGlitch(epText, epLeft, y))
   }
   if (showGauge && sl) s.push(sl.gauge(epLeft - 26, y, d.isWorking, d.steps.filter(st => st === 'done').length, d.steps.length, c, FONT, tctx).svg)
   const cold = th.coldLine?.(d.title) ?? ''
@@ -6418,7 +6422,8 @@ const slimBandSvg = (OW: number, d: HudData): string => {
   if (cold && crRight - baseEnd > 220) s.push(`<text x="${r2(crRight)}" y="${y}" text-anchor="end" font-family="${FONT}" font-size="11.5" font-style="italic" fill="${c.muted}">${xml(serifClip(`“${cold}”`, 11.5, crRight - baseEnd))}</text>`)
   s.push(sl?.rule ? sl.rule(14, 32.5, W - 14, 32.5) : `<line x1="14" y1="32.5" x2="${W - 14}" y2="32.5" stroke="${c.line}"/>`)
   // ---- task row
-  const fig = sl ? sl.figure({ at: d.at, ctxPct: d.ctxPct, party: d.isParty, working: d.isWorking, ...(d.progress === null ? {} : { progress: Math.round(d.progress * 100) }), ...(activeFx() && th.extras ? { fx: activeFx() as { kind: string; at: number } } : {}) }) : `${crab(14, 38, 'boss', false, d.isWorking, 1.05)}${crown(14, 38, 1.05)}`
+  const fig = sl ? sl.figure({ at: d.at, ctxPct: d.ctxPct, party: d.isParty, working: d.isWorking, ...(d.progress === null ? {} : { progress: Math.round(d.progress * 100) }), ...(activeFx() && th.extras ? { fx: activeFx() as { kind: string; at: number } } : {}) })
+    : th.figure ? th.figure({ at: d.at, ctxPct: d.ctxPct, party: d.isParty, working: d.isWorking, failed: !d.isWorking && !d.isParty && d.steps.includes('failed') }) : `${crab(14, 38, 'boss', false, d.isWorking, 1.05)}${crown(14, 38, 1.05)}`
   s.push(dancing(fig, d.isParty))
   const tx = 64
   // Below 1100 px the three readouts shrink to short labels and values (no bars), so they stay on screen.
@@ -6577,7 +6582,7 @@ const slimBandSvg = (OW: number, d: HudData): string => {
   const tipLive = d.tip.level === 2
   s.push(`<circle${tipLive ? ' class="live"' : ''} cx="${x0 + 4}" cy="${yb - 4}" r="3.5" fill="${MOOD_COLOR[d.tip.level]}"/>`)
   s.push(Bd(tipX, yb, fitW(d.tip.text, 11.5, Math.max(0, rx - tipX - 12)), tipLive ? c.text : c.subtext))
-  if (!sl && (d.ctxPct >= 95 || overBudget)) s.push(flatSmiley(W - 21, H - 19, 9, RJ, 0.3, 'rjs'))
+  if (!sl && (d.ctxPct >= 95 || overBudget)) s.push(th.corner ? th.corner(W, H, tctx) : flatSmiley(W - 21, H - 19, 9, RJ, 0.3, 'rjs'))
   // A roaming character (a walk, a peek at the episode, a sit on the gauge, now and then a takeover) goes last, over the celebration.
   const roam = th.roamer
     ? roamOverlay(th, { W, H, surface: 'band', at: d.at, ctxPct: d.ctxPct, party: d.isParty, spots: { ...(showEp && sl?.ep ? { peek: { x: epLeft, y: 22 } } : {}), ...(th.roamer.bandSpots?.(W, H) ?? {}), ...((sl?.tear || th.roamer.sitBar) && !th.roamer.sit && segs > 0 ? { sit: { x: tx + ((segs * 6 - 2) * (pct ?? 0)) / 100, y: sl?.tear ? 64 : gy } } : {}) } })
@@ -6596,7 +6601,7 @@ const slimBandSvg = (OW: number, d: HudData): string => {
     x1: Math.round(Math.min(crewLeft - 6, pctX - 6, rx - 2, hasReadouts ? r0 - 24 : W)),
     keep: [[px - 3, 39, pillW + 6, 22], [x0 - 8, 88, stepEnd - x0 + 8, 21]],
   }
-  const extras = th.extras ? th.extras({ W, H, surface: 'band', stage, at: d.at, ctxPct: d.ctxPct, ...(d.isWorking && d.taskFrom ? { job: { at: d.taskFrom, n: d.today.tasks } } : {}), ...(d.isParty ? { party: true } : {}), ...(BCS_UNPLUG_AT !== undefined ? { unplugAt: BCS_UNPLUG_AT } : {}), ...(activeFx() ? { fx: activeFx() as { kind: string; at: number } } : {}), working: d.isWorking, ...(swapAtNow() !== undefined ? { swapAt: swapAtNow() } : {}), task: d.title, titleW }) : ''
+  const extras = th.extras ? th.extras({ W, H, surface: 'band', stage, at: d.at, ctxPct: d.ctxPct, ...(d.isWorking && d.taskFrom ? { job: { at: d.taskFrom, n: d.today.tasks } } : {}), ...(d.isParty ? { party: true, ...(d.partyAt !== undefined ? { partyAt: d.partyAt } : {}) } : {}), ...(BCS_UNPLUG_AT !== undefined ? { unplugAt: BCS_UNPLUG_AT } : {}), ...(activeFx() ? { fx: activeFx() as { kind: string; at: number } } : {}), working: d.isWorking, ...(swapAtNow() !== undefined ? { swapAt: swapAtNow() } : {}), task: d.title, titleW }) : ''
   const body = `${s.join('\n')}${extras}${d.isParty ? th.cheer(W, H, FONT, c, d.partyAt) : ''}${d.isParty && th.roamer?.hushParty ? '' : roam}${trLayer}`
   return shakeInto(glitchPanel(svg(W, H, body), th, { at: d.at, ctxPct: d.ctxPct, party: d.isParty }), th, { W, H, surface: 'band', at: d.at, working: d.isWorking, party: d.isParty, fx: activeFx(), ...(swapAtNow() !== undefined ? { swapAt: swapAtNow() } : {}) })
 }
@@ -7406,6 +7411,8 @@ const bandReading = (v: ReturnType<typeof bandView>, at: number): string => {
   return JSON.stringify([
     hasStrip || eggOf() ? wallMinute(at) : 0,
     dayOf(at),
+    // A theme's act coming due (its id and pinned start): the band draws it ahead, so it begins on time even at rest.
+    themeOf()?.tick?.(at, hud.isWorking) ?? '',
     {
       ...hud,
       at: 0,
@@ -7432,6 +7439,8 @@ const paneReading = (all: AgentRun[], rawBoss: Manager, info: Env, w: Watch, bg:
   return JSON.stringify([
     isLive ? wallMinute(at) : 0,
     dayOf(at),
+    // A theme's act coming due (the pane's echo of it, pinned): drawn ahead, so it begins on time.
+    themeOf()?.tick?.(at, Boolean(boss.isWorking)) ?? '',
     isCleared(rawBoss, at),
     (rawBoss.celebrateUntil ?? 0) > at,
     (info.limits ?? []).map(l => [resetLabel(l.resetsAt, at), resetsIn(l.resetsAt, at)]),
@@ -9101,10 +9110,26 @@ export const register: Register = (on, options) => {
     // The person's latest typed prompt: the Staffing brain reads a named model or effort from it, and lets Fable through only if it names Fable.
     if (asked) lastAsked = asked
     if (!e.isMeta) pendingCommand = isPersons && e.command ? `/${e.command.name}${e.command.args && !looksLikeKey(e.command.args) ? ` ${e.command.args}` : ''}` : '' // a pasted key never becomes a job's name
-    // The hidden skin: "tyger tyger" typed while wearing The Mentalist. The prompt goes on unchanged.
-    if (asked && SKIN.id === 'mentalist' && TYGER_RE.test(asked)) {
+    // The way back: "patrick jane" typed while wearing Red John puts The Mentalist back on (its own switch plays). Red John's
+    // secret flag stays found. The prompt goes on unchanged.
+    if (asked && SKIN.id === 'red-john' && PATRICK_JANE_RE.test(asked)) {
+      const found = SKINS.get('mentalist')
+      if (found) {
+        const from = SKIN
+        applySkin(found)
+        await $.store.set('skin', found.id).catch(() => undefined)
+        await update($, skin, () => found.id)
+        await retitle($).catch(() => undefined)
+        $.ui.toast(THEMES.mentalist.greeting)
+        await noteSwitch($, from).catch(() => undefined)
+      }
+    }
+    // The hidden skin: "tyger tyger" typed while wearing The Mentalist. The prompt goes on unchanged. The band plays the
+    // "Tyger Tyger" title card, pinned to now (`/missioncontrol play tyger-tyger` replays it).
+    else if (asked && SKIN.id === 'mentalist' && TYGER_RE.test(asked)) {
       const found = SKINS.get('red-john')
       if (found) {
+        setMentPlay({ kind: 'tyger', at: await $.clock.now().catch(() => Date.now()) })
         applySkin(found)
         await $.store.set('skin', found.id).catch(() => undefined)
         await update($, skin, () => found.id)

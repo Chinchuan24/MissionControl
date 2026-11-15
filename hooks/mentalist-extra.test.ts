@@ -17,8 +17,7 @@ const frags = (): [string, string][] => {
   }
   for (const at of [0, 1234, 9_999_999]) out.push([`hypnosis ${at}`, hypnosis(40, 12, T, at)])
   for (const lv of [-2, 0, 1, 3, 5, 9, Number.NaN]) out.push([`heat ${lv}`, redJohnHeat(10, 20, lv, TR)])
-  out.push(['glitch', smileGlitch(10, 20, 'Fix the flaky <login> test & "retry"', 'font-size="12" font-weight="700" fill="#F2F5FA"', T)])
-  out.push(['glitch mid', smileGlitch(100, 20, 'Short', 'font-size="14" text-anchor="middle" fill="#fff"', T)])
+  out.push(['glitch', smileGlitch('<text x="400" y="22" text-anchor="end" font-size="11.5" fill="#93A0B5"><tspan font-size="9.5">S1E3</tspan>  <tspan fill="#B4C0D3">Red &amp; &lt;Tide&gt;</tspan></text>', 330, 22)])
   out.push(['tea', teaSteam(6, 4, T)])
   return out
 }
@@ -67,17 +66,22 @@ test('mentalist-extra: heat lights one smiley per level, clamped to five, and fl
   expect(redJohnHeat(0, 10, 4, T)).not.toContain('mx-heat')
 })
 
-test('mentalist-extra: the glitch keeps the title, escapes it, and swaps in a red smiley', async () => {
-  const g = smileGlitch(10, 20, 'a <b> & c', 'font-size="12" fill="#fff"', T)
-  expect(g).toContain('a &lt;b&gt; &amp; c')
-  expect(g).not.toContain('<b>')
-  expect(g).not.toContain('mx-ttl') // the title is never animated away
-  expect(g).toContain('>a &lt;b&gt; &amp; c</text>')
+test('mentalist-extra: the glitch is an overlay on the EPISODE (a red ghost and a smiley), never the title', async () => {
+  const ep = '<text x="400" y="22" text-anchor="end" font-family="serif" font-size="11.5" fill="#93A0B5"><tspan font-size="9.5" font-weight="700">S2E15</tspan>  <tspan font-style="italic" fill="#B4C0D3">Red Herring</tspan></text>'
+  const g = smileGlitch(ep, 330, 22)
+  expect(g).toContain('class="mx-ghost"')
   expect(g).toContain('mx-smile')
-  expect(g).toContain(RED)
-  // the red ghost copy carries no second fill
-  const ghost = /<text class="mx-ghost"[^>]*>/.exec(g)?.[0] ?? ''
+  expect(g).toContain('Red Herring')
+  // The ghost is the episode in red, one fill only (its tspans lose theirs); no blend mode.
+  const ghost = /<g class="mx-ghost"[^>]*>(<text[^>]*>)/.exec(g)?.[1] ?? ''
   expect((ghost.match(/fill="/g) ?? []).length).toBe(1)
+  expect(ghost).toContain(`fill="${RED}"`)
+  expect(g).not.toContain('#B4C0D3')
+  expect(g).not.toContain('mix-blend-mode')
+  // The smiley sits left of the episode's left edge, in the gap the band keeps.
+  expect(Number(/translate\(([\d.]+) /.exec(g)?.[1])).toBeLessThan(330)
+  // Anything but one <text> element draws nothing.
+  expect(smileGlitch('Fix the login bug', 10, 20)).toBe('')
 })
 
 test('mentalist-extra: the CSS switches off every mx- animation under prefers-reduced-motion', async () => {

@@ -64,7 +64,8 @@ const cmd = async ($: Engine, command: string, args: string) => String(((await $
 test('replay: /missioncontrol play still answers for skins with no shared plays (Boys and Invincible lists unchanged)', async ($, on) => {
   base(on)
   await $.session.start({ source: 'startup', cwd: '/repo', surface: 'desktop', isInteractive: true } as never)
-  expect(await cmd($, 'skin', 'mentalist')).toContain('Mentalist')
+  // A skin with no plays of its own (The Mentalist has its own now: the-read, parlour-reveal, case-closed).
+  expect(await cmd($, 'skin', 'crab-classic')).toContain('Skin:')
   expect(await cmd($, 'missioncontrol', 'play duel')).toBe('Wear the Invincible skin first.')
   expect(await cmd($, 'skin', 'the-boys')).toContain('Skin:')
   const list = await cmd($, 'missioncontrol', 'play nope')
