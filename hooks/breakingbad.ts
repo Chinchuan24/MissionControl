@@ -10,8 +10,8 @@ import type { Badge, CredWords } from './extras'
 export const BLUE = '#5EC8F0'
 export const GREEN = '#4FB37A'
 export const YELLOW = '#F2C318'
-let uid = 0
-const id = (p: string) => `${p}${(uid = (uid + 1) % 100000)}`
+/** A def id from what it is drawn for: the same on every redraw (a counter renamed it at each drawing, so the image was new). */
+const id = (p: string, key = '') => `${p}${[...`${p}|${key}`].reduce((n, ch) => (n * 31 + ch.charCodeAt(0)) >>> 0, 7) % 100000}`
 
 // --- Motion ---
 // (The old cheer stamp, the title glitch and the unlock tag are gone: breakingbad-motion.ts draws those moments now.)
@@ -42,7 +42,7 @@ export const BB_WARNING = (_ctx: number): string => 'Context nearly full: tread 
 
 // --- Crystal sparkle: blue afterimages and glints trailing a working figure ---
 export const crystalGlints = (figure: string, box: { x: number; y: number; w: number; h: number }): { defs: string; svg: string } => {
-  const f = id('bg')
+  const f = id('bg', `${box.x}|${box.y}|${box.w}|${box.h}`)
   const glints = [
     [0.05, 0.2, 0],
     [0.95, 0.5, 0.6],

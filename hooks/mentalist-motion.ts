@@ -260,13 +260,13 @@ export const readAct = (o: { at: number; w: number; h: number; id: string; sc?: 
  *   5.6  wide again: he stands and points. "It was the butler." (the camera creeps in)
  * Reduced motion: the point and the line.
  */
-export const parlourAct = (o: { at: number; w: number; h: number; id: string; sc?: number; lite?: boolean }): { layer: string; act: Act } => {
+export const parlourAct = (o: { at: number; w: number; h: number; id: string; sc?: number; lite?: boolean; x0?: number; big?: boolean; holes?: Rect[] }): { layer: string; act: Act } => {
   const act = new Act({ id: o.id, ms: MENT_MS.parlour, at: o.at, W: o.w, H: o.h, K: o.lite ? 4 : 6 })
   const sc = o.sc ?? r3(Math.min(1.15, (o.h - 8) / 47, o.w / 190))
   const gy = o.h - 3
   act.cast('couch', SP.MENT_COUCH, 0.5, 4).cast('lie', SP.MENT_COUCH_LIE, 0.5, 6).cast('sit', padTo(SP.MENT_COUCH_SIT, 40), 13 / 20, 6).cast('rise', SP.MENT_COUCH_RISE, 8 / 20, 6).cast('point', SP.MENT_POINT, 8 / 28, 6)
   if (!o.lite) act.cast('h90', SP.MENT_HEAD_090, 12 / 23, 5).cast('h45', SP.MENT_HEAD_045, 14 / 28, 5).cast('h0', SP.MENT_HEAD_000, 16 / 32, 5)
-  const cx = r1(Math.min(o.w * 0.3, 32 * sc + 20))
+  const cx = r1((o.x0 ?? 0) + Math.min(o.w * 0.3, 32 * sc + 20))
   const cyC = r1(gy - (17 * sc) / 2)
   const cam = new Camera(act)
   let room = o.lite ? '' : roomLayer(act, 'mid', SP.MENT_ARENA_MID, gy + 1, Math.min(1.6, (o.h * 0.66) / 25), 0.26, 8)
@@ -282,17 +282,34 @@ export const parlourAct = (o: { at: number; w: number; h: number; id: string; sc
   for (const [a, b, k] of segs) jane += act.on(act.still(k, pos[k][0], pos[k][1], 1, sc), a, b)
   const zs = act.cue('rise', 1.0, line(0, 0, 'z', r1(9 * sc), C.sub), { x: cx - 18 * sc, y: seatY - 10 * sc, d: 1.2 }) + act.cue('rise', 1.8, line(0, 0, 'z', r1(7 * sc), C.sub), { x: cx - 14 * sc, y: seatY - 14 * sc, d: 1.2 })
   cam.push(5.6, 6.2, 1.03, pos.point[0], gy - 24 * sc, 'settle')
-  const fs = r1(Math.max(11, Math.min(15, 12 * sc)))
-  const said = act.on(line(pos.point[0] + 30 * sc, r1(gy - 34 * sc), 'It was the butler.', fs, C.lamp), 6.0, 8.6, { fade: 0.3 })
+  const fs0 = r1(Math.max(11, Math.min(o.big ? 18 : 15, 12 * sc)))
+  // The line stands whole: beside his pointing hand first, then further right, then lower, then left of him, at the first size
+  // (down to 11 px) where some place has no readout's hole in it and is inside the span.
+  const holes = o.holes ?? []
+  const px0 = pos.point[0] + 30 * sc
+  let place: [number, number, number] = [px0, r1(gy - 34 * sc), fs0]
+  find: for (let f = fs0; f >= 11; f -= 1) {
+    const lw = 'It was the butler.'.length * f * 0.5
+    const hit = (x: number, y: number): boolean => x < 4 || x + lw > o.w - 6 || holes.some(([hx, hy, hw, hh]) => x < hx + hw + 4 && hx - 4 < x + lw && y - f < hy + hh + 2 && hy - 2 < y + 3)
+    for (const y of [r1(gy - 34 * sc), r1(gy - 22 * sc), r1(gy - 6)]) {
+      for (let x = px0; x + lw <= o.w - 6; x += 8) if (!hit(x, y)) { place = [x, y, f]; break find }
+      for (let x = pos.point[0] - 14 * sc - lw; x >= 4; x -= 8) if (!hit(x, y)) { place = [x, y, f]; break find }
+    }
+  }
+  const [lx, ly, fs] = place
+  const said = act.on(line(lx, ly, 'It was the butler.', fs, C.lamp), 6.0, 8.6, { fade: 0.3 })
   // The close-up: a dark plate, the bust turning profile -> three-quarter -> face to the room, pushed in 3%.
-  const bsc = r3(Math.min(1.6, (o.h - 6) / 40))
-  const bx = r1(Math.min(o.w * 0.5, cx + 60 * sc))
-  const by = r1(o.h / 2 + 1)
+  const bsc = r3(Math.min(o.big ? 2.2 : 1.6, (o.h - 6) / 40))
+  // The close-up's place: where the head stands whole, clear of every hole (the biggest free rectangle tall enough for it).
+  const headH = 40 * bsc
+  const spot = holes.length ? freeRects(o.w, o.h, holes).filter(([x, , w, h]) => h >= Math.min(headH, o.h - 6) && w >= 32 * bsc && x + w > cx).sort((p, q) => q[2] - p[2])[0] : undefined
+  const bx = r1(spot ? Math.max(spot[0] + 20 * bsc, Math.min(spot[0] + spot[2] - 20 * bsc, cx + 60 * sc)) : Math.min(o.w * 0.5, cx + 60 * sc))
+  const by = r1(spot ? spot[1] + spot[3] / 2 + 1 : o.h / 2 + 1)
   const plate = o.lite ? "" : `<rect width="${o.w}" height="${o.h}" fill="#05080F" opacity=".96"/>${lampGlow(act, bx, by, 60 * bsc, 26 * bsc, C.lamp, 0.18)}`
   const turn = o.lite ? '' : act.on(act.still('h90', bx, by, 1, bsc), 4.3, 4.72) + act.on(act.still('h45', bx, by, 1, bsc), 4.72, 5.05) + act.on(act.still('h0', bx, by, 1, bsc), 5.05, 5.6)
   const close = o.lite ? '' : act.win(4.3, 5.6, `${plate}${act.kf(turn, [[0, 'transform:scale(1)'], [4.3, 'transform:scale(1)'], [5.6, 'transform:scale(1.03)']], { origin: `${bx}px ${by}px` })}`)
   const body = life(act, `${scrim(act, 0.96, C.ink)}${room}${cam.wrap(`${couch}${jane}`)}${zs}${said}${close}`)
-  const still = `${scrimFlat(act, 0.96, C.ink)}${couch}${act.still('point', pos.point[0], pos.point[1], 1, sc)}${line(pos.point[0] + 30 * sc, r1(gy - 34 * sc), 'It was the butler.', fs, C.lamp)}`
+  const still = `${scrimFlat(act, 0.96, C.ink)}${couch}${act.still('point', pos.point[0], pos.point[1], 1, sc)}${line(lx, ly, 'It was the butler.', fs, C.lamp)}`
   return { layer: act.done(body, still), act }
 }
 
@@ -318,18 +335,22 @@ export const tygerAct = (o: { at: number; w: number; h: number; id: string }): {
  * The man in the dark coat walks the band, 6 s: in from the left (two-frame walk), stops, turns toward you (a faceless
  * silhouette in a faint red pool of light), one close-up of the shadow's smile, and he is gone on the next blink.
  */
-export const walkAct = (o: { at: number; w: number; h: number; id: string; sc?: number }): { layer: string; act: Act } => {
+export const walkAct = (o: { at: number; w: number; h: number; id: string; sc?: number; stop?: number; rim?: boolean }): { layer: string; act: Act } => {
   const act = new Act({ id: o.id, ms: MENT_MS['walk-by'], at: o.at, W: o.w, H: o.h, K: 4 })
   const sc = o.sc ?? r3(Math.min(1.15, (o.h - 6) / 47))
   const gy = o.h - 2
   const cy = r1(gy - (47 * sc) / 2)
   act.cast('wA', RJ_WALK_A, 10 / 23).cast('wB', RJ_WALK_B, 0.5).cast('st', RJ_STAND, 0.5).cast('tn', RJ_TURN, 0.5)
-  const x1 = r1(Math.min(o.w * 0.55, 240))
+  // The rim light: the same poses as flat red silhouettes, drawn a pixel up and back behind him, so his edge catches the red
+  // (still faceless: only the outline lights; menace by implication).
+  if (o.rim) for (const [k, sp, ax] of [['wA', RJ_WALK_A, 10 / 23], ['wB', RJ_WALK_B, 0.5], ['st', RJ_STAND, 0.5], ['tn', RJ_TURN, 0.5]] as const) act.cast(`${k}r`, { rows: sp.rows, pal: Object.fromEntries(Object.keys(sp.pal).map(c => [c, '#C42A22'])) }, ax, 1)
+  const x1 = r1(o.stop ?? Math.min(o.w * 0.55, 240))
   const segs: [number, number, string][] = []
   for (let t = 0, i = 0; t < 3.3; t += 0.24, i++) segs.push([r3(t), r3(Math.min(3.3, t + 0.24)), i % 2 ? 'wB' : 'wA'])
   segs.push([3.3, 4.1, 'st'], [4.1, 5.65, 'tn'])
   const path: [number, number, number][] = [[0, -16, cy], [3.3, x1, cy], [5.65, x1, cy]]
-  const fig = act.actor('rj', segs, path, { sc })
+  const rim = o.rim ? act.actor('rjr', segs.map(([a, b, k]) => [a, b, `${k}r`] as [number, number, string]), path.map(([t, x, y]) => [t, x - 1.6 * sc, y - 1.2 * sc] as [number, number, number]), { sc }) : ''
+  const fig = `${rim}${act.actor('rj', segs, path, { sc })}`
   const pool = act.mv(`<defs><radialGradient id="${act.p}rg"><stop offset="0" stop-color="${C.red}" stop-opacity=".45"/><stop offset="1" stop-color="${C.red}" stop-opacity="0"/></radialGradient></defs><ellipse cx="0" cy="${r1(cy)}" rx="${r1(20 * sc)}" ry="${r1(30 * sc)}" fill="url(#${act.p}rg)"/>`, [[0, -16, 0], [3.3, x1, 0], [5.65, x1, 0]])
   // The one close-up: the shadow's smile in a letterbox (no eyes), 0.45 s, then back to him, then gone.
   act.cast('cut', SP.REDJ_CUTIN_SMILE, 0.5, 6)
@@ -340,7 +361,7 @@ export const walkAct = (o: { at: number; w: number; h: number; id: string; sc?: 
   const blink = act.win(5.65, 5.72, `<rect width="${o.w}" height="${o.h}" fill="#000" opacity=".6"/>`)
   const veil = `<rect width="${o.w}" height="${o.h}" fill="${C.rjInk}" opacity=".55"/>`
   const body = `${act.on(`${veil}${pool}${fig}`, 0.01, 5.65, { fade: 0.4 })}${cut}${blink}`
-  const still = `${veil}${act.still('tn', x1, cy, 1, sc)}`
+  const still = `${veil}${o.rim ? act.still('tnr', x1 - 1.6 * sc, cy - 1.2 * sc, 1, sc) : ''}${act.still('tn', x1, cy, 1, sc)}`
   return { layer: act.done(body, still), act }
 }
 
@@ -403,6 +424,24 @@ export const mentBand = (o: { W: number; H: number; at: number; working: boolean
   if (d.kind === 'the-read' && o.stage) {
     const sp = spanOf(o.H, o.stage)
     const a = readAct({ at: d.startAt, w: sp.r.w, h: sp.r.h, id: `${id}x${sp.r.h}`, holes: sp.keep.keep.map(([x, y, w, h]) => [x - sp.r.x, y - sp.r.y, w, h] as Rect) })
+    return placeBand(a.layer, a.act.p, sp.r, sp.keep)
+  }
+  // The Parlour Reveal and Red John's walk-by take the whole clear span too: the couch and the figures up to ~1.9x, clear of
+  // the holes on the floor (the step count), the walk-by's stop where he stands whole, with a red rim light.
+  if ((d.kind === 'parlour' || d.kind === 'walk-by') && o.stage) {
+    const sp = spanOf(o.H, o.stage)
+    const holes = sp.keep.keep.map(([x, y, w, h]) => [x - sp.r.x, y - sp.r.y, w, h] as Rect)
+    const sc = r3(Math.min(1.9, (sp.r.h - 8) / 47, sp.r.w / 190))
+    if (d.kind === 'parlour') {
+      // The couch starts right of any hole in the floor's bottom 40 px (the step count) in the first third of the span.
+      const x0 = Math.max(0, ...holes.filter(([x, y, , h]) => x < sp.r.w / 3 && y + h > sp.r.h - 44).map(([x, , w]) => x + w + 4))
+      const a = parlourAct({ at: d.startAt, w: sp.r.w, h: sp.r.h, id: `${id}x${sp.r.h}`, sc, x0, big: true, holes })
+      return placeBand(a.layer, a.act.p, sp.r, sp.keep)
+    }
+    const fh = 47 * sc
+    const spot = freeRects(sp.r.w, sp.r.h, holes).filter(([, , w, h]) => h >= fh - 4 && w >= 30 * sc).sort((p, q) => q[2] - p[2])[0]
+    const stop = spot ? spot[0] + Math.min(spot[2] * 0.45, 260) : Math.min(sp.r.w * 0.5, 420)
+    const a = walkAct({ at: d.startAt, w: sp.r.w, h: sp.r.h, id: `${id}x${sp.r.h}`, sc, stop, rim: true })
     return placeBand(a.layer, a.act.p, sp.r, sp.keep)
   }
   const a = d.kind === 'the-read' ? readAct({ at: d.startAt, w: r.w, h: r.h, id }) : d.kind === 'parlour' ? parlourAct({ at: d.startAt, w: r.w, h: r.h, id })

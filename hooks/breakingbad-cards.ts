@@ -37,8 +37,10 @@ const esc = (s: string): string => String(s).replace(/&/g, '&amp;').replace(/</g
 const r1 = (v: number): number => +(+v).toFixed(1)
 const clamp = (v: number, a = 0, b = 1): number => Math.max(a, Math.min(b, v))
 const hash = (s: string): number => [...String(s)].reduce((n, ch) => (n * 31 + ch.charCodeAt(0)) >>> 0, 7)
-let uid = 0
-const uniq = (p: string): string => `${p}${(uid = (uid + 1) % 100000)}`
+/** An id for a def inside one card's drawing, the same on every redraw of the same card (`key`: what the card is drawn for).
+ *  Each card is an image of its own, so ids only need to differ between kinds; a counter here renamed them at every drawing and
+ *  the app drew the card anew each time (On air, the Classroom and the band's foot, at every tick). */
+const uniq = (p: string, key: string): string => `${p}${hash(key) % 100000}`
 
 /** System sans (SF Pro Text, 9.5 to 13 px), measured in Chrome: caps .68/.72 em (400/700), lower .56/.60, digits .61/.66, narrow .30/.34, space .29/.27, M W @ % .93/.97, m w .86/.90. */
 export const sansW = (s: string, size: number, ls = 0, bold = false): number =>
@@ -319,7 +321,8 @@ export const onAirCard = (W: number, beats: Beat[], pick: number, theme: CardThe
   let start = Math.max(0, n - ONAIR_CAP)
   if (sel >= 0 && sel < start) start = sel
   const shown = beats.slice(start, start + ONAIR_CAP)
-  const ids = { scan: uniq('bbscan'), crt: uniq('bbcrt'), scr: uniq('bbscr') }
+  const k = `onair|${W}|${H}|${heis ? 1 : 0}`
+  const ids = { scan: uniq('bbscan', k), crt: uniq('bbcrt', k), scr: uniq('bbscr', k) }
   const s: string[] = [open(W, H), frame(0.5, 0.5, W - 1, H - 1, `fill="${t.tile}" stroke="${t.accent}" stroke-opacity=".3"`, 10)]
   const state = !n ? 'off air' : `${n} ${n === 1 ? 'spot' : 'spots'}${n > ONAIR_CAP ? ` · last ${ONAIR_CAP} listed` : ''} · ${live ? 'live' : `replaying no. ${sel + 1}`}`
   s.push(head(W, t, font, 'ON AIR', '', state, live && n ? t.accent : t.subtext))
@@ -427,7 +430,7 @@ export const classroomCard = (W: number, task: string, isWorking: boolean, done:
   const roll = legends.slice(0, 5)
   const H = classroomHeight(roll.length)
   const status = isWorking ? 'In the lab…' : total && done >= total ? 'Batch complete.' : 'Class is in session.'
-  const chalkId = uniq('bbchalk')
+  const chalkId = uniq('bbchalk', `class|${W}|${H}|${heis ? 1 : 0}`)
   const s: string[] = [open(W, H), `<defs><filter id="${chalkId}" x="-2%" y="-10%" width="104%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="1.6" numOctaves="1" seed="4"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -0.8 1.32"/><feComposite in="SourceGraphic" operator="in"/></filter></defs>`]
   s.push(frame(0.5, 0.5, W - 1, H - 1, `fill="${t.tile}" stroke="${t.accent}" stroke-opacity=".3"`, 10))
   s.push(head(W, t, font, 'CLASSROOM', W >= 440 ? 'Mr. White · Chemistry' : '', status, isWorking ? t.accent : t.subtext))
@@ -557,7 +560,7 @@ export const bbFoot = (W: number, H: number, theme: CardTheme, heis: boolean, ct
   }
   d.push(`M${W - 64} ${base}L${W - 60} ${base - 7}H${W - 10}L${W - 6} ${base}Z`)
   const rvx = Math.round(W * 0.46)
-  const cid = uniq('bbclip')
+  const cid = uniq('bbclip', `foot|${W}|${H}|${heis ? 1 : 0}`)
   const hidden = !heis && (ctx.ctxPct >= 95 || ctx.overBudget)
   const rvOn = W >= 700
   return `<defs><clipPath id="${cid}"><rect x="1" y="1" width="${W - 2}" height="${H - 2}" rx="9.5"/></clipPath></defs><g clip-path="url(#${cid})"><path d="${d.join('')}" fill="${t.sky}"/><rect x="0" y="${base}" width="${W}" height="1.5" fill="${t.sky}"/>${rvOn ? `${rvPx(rvx, base - 6.5, 1.1, 0.75)}<rect class="bbwin" x="${r1(rvx + 5.5)}" y="${r1(base - 5.4)}" width="2.2" height="2.2" fill="${YELLOW}" opacity=".8"/>` : ''}</g>${hidden ? hatPx(W - 38, r1(H - 8.5 - (18 * 6) / 13), 18, theme.subtext, 'bbhat', 0.5) : ''}`
