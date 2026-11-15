@@ -210,7 +210,8 @@ const build = (o: { at: number; gene: boolean; id: string; room: Room }): CourtO
   const stampY = sTop + size
   const red = gene ? '#F2F2F2' : PROPS.adYellow
   const stamp = `${Tc(act, sx + 1.4, stampY + 1.6, CHIC_LINES.brk, size, gene ? '#000000' : PROPS.adRed, 'letter-spacing=".8"')}${Tc(act, sx, stampY, CHIC_LINES.brk, size, red, 'letter-spacing=".8"')}`
-  lines += act.slam(stamp, CHIC.brk + 0.5, CHIC.slump + 0.1)
+  // The stamp stays off the camera: the push about Chuck would carry it past the window's left edge on a narrow band.
+  const stampSlam = act.slam(stamp, CHIC.brk + 0.5, CHIC.slump + 0.1)
   // The silence: Chuck slumps into the chair, Jimmy's head goes down, the colour drains a third (Saul only: GENE is grey).
   f.at(CHIC.slump).pose('c', 'cS')
   if (wide) f.backdown('j', 6, 0.5, { pose: 'jP' })
@@ -234,7 +235,7 @@ const build = (o: { at: number; gene: boolean; id: string; room: Room }): CourtO
   const cid = `${act.p}c`
   const clip = (s: string): string => `<g clip-path="url(#${cid})">${s}</g>`
   const still = `${scrimRect}${wide ? act.still('bench', bx, F - 18 * sc, 1, sc) : ''}${wide ? act.still('jT', jx + 8 * sc, cyJ, 1, sc) : ''}${act.still('cO', cx, cyF, -1, sc)}${stand}${stamp}`
-  const svg = `<defs>${keepClip(cid, win, keep)}${panel}</defs>${act.done(clip(`${scrim}${inner}${cutC}`), clip(still))}`
+  const svg = `<defs>${keepClip(cid, win, keep)}${panel}</defs>${act.done(clip(`${scrim}${inner}${cutC}${stampSlam}`), clip(still))}`
   return { svg, size: { chuck: 46 * sc, jimmy: wide ? 47 * sc : 0, words: pane ? 15 : 11, stamp: size }, beats: f.script }
 }
 
