@@ -11,6 +11,7 @@ import { bbRightLine } from './breakingbad-cards'
 import { THEMES, themeKeyOf } from './themes'
 import { SWITCH_CARDS, SWITCH_MS, into as switchInto, sizeOf as svgSizeOf, skinSwitch } from './stage/wipe'
 import { playsFrom, playsOf, registerPlay, runPlay } from './stage/replay'
+import { CLACK_CSS, CLACK_MS, CLAWOFF_MIN_W, CL_CSS, CRAB_SWITCH, DEFAULT_SWITCH, RISE_CARDS, bubbles, checkMark, clackVar, clawOff, crabDirector, fresh, riseInto, scuttle, shake } from './classics'
 import type { SwitchFlavour, SwitchLook } from './stage/wipe'
 import { ramStatus, settingsTagline, settingsTones } from './settingslook'
 import type { SettingsSection } from './settingslook'
@@ -2176,7 +2177,7 @@ const switchLive = (at: number): { at: number; from: SwitchLook; to: SwitchLook;
  *  SOLID GOLD, NOIR), else the worn theme's own (Edgerunners 2's D / CAPRI), else a classic Cyberpunk skin's (cyber-fights.ts),
  *  else the generic one. */
 const flavourOf = (id: string | undefined): { flavour?: SwitchFlavour } => {
-  const f = (id ? switchFlavour(id) : undefined) ?? themeOf()?.switchFlavour ?? (cyberOf() ? CYBER_SWITCH[cyberOf() as CyberEgg] : undefined)
+  const f = (id ? switchFlavour(id) ?? (id === DEFAULT_SKIN.id ? DEFAULT_SWITCH : id === CRAB_SKIN.id ? CRAB_SWITCH : undefined) : undefined) ?? themeOf()?.switchFlavour ?? (cyberOf() ? CYBER_SWITCH[cyberOf() as CyberEgg] : undefined)
   return f ? { flavour: f } : {}
 }
 /** The switch over a drawn band source (its viewBox gives the size). */
@@ -2705,6 +2706,8 @@ async function boysReplay($: EngineInterface, name: string): Promise<string> {
 async function showPane($: EngineInterface, id: string, title: string): ReturnType<EngineInterface['ui']['open']> {
   const all = await $.ui.panes().catch(() => [])
   const row = all.find(p => p.id === id)
+  // The plain skins' cards rise in when the pane comes into view, not when an open pane is asked again.
+  if (id === PANE && !row?.isShown) PANE_OPEN_AT = undefined
   if (row && !row.isShown) await $.ui.close({ id }).catch(() => undefined)
   return $.ui.open({ id, title })
 }
@@ -3302,7 +3305,7 @@ ${SKIN.dark ? `.t{fill:${SKIN.colors.text}}.m{fill:${SKIN.colors.subtext}}.k{fil
 <text x="${pillX + pillW / 2}" y="${BAR_H / 2 + 4}" text-anchor="middle"${rtl ? ' direction="rtl"' : ''} font-family="${FONT}" font-size="11" font-weight="600" fill="${inkOn(color)}">${xml(text)}</text>
 </g>
 <text class="m" ${percentAt} font-family="${FONT}" font-size="12.5" font-variant-numeric="tabular-nums">${percent}</text>
-${CRAB_CSS}${crab(rx(0, crabW), 0, 'boss', false, isWorking, 0.8, rtl)}
+${CRAB_CSS}${classicsCss(crab(rx(0, crabW), 0, 'boss', false, isWorking, 0.8, rtl))}${crab(rx(0, crabW), 0, 'boss', false, isWorking, 0.8, rtl)}
 <circle cx="${ringX}" cy="${H / 2}" r="${ringR}" fill="none" stroke="#8a8a86" stroke-opacity=".28" stroke-width="2.6"/>
 <circle cx="${ringX}" cy="${H / 2}" r="${ringR}" fill="none" stroke="${ringColor}" stroke-width="2.6" stroke-linecap="round" stroke-dasharray="${((arc * ctxPct) / 100).toFixed(1)} ${arc.toFixed(1)}" transform="rotate(-90 ${ringX} ${H / 2})"/>
 <text x="${ringX}" y="${H / 2 + 2.8}" text-anchor="middle" fill="${ringColor}" font-family="${FONT}" font-size="7.5" font-weight="700">${ctxPct}</text>
@@ -3658,8 +3661,8 @@ const crabBody = (f: Fill, armFront = 0, armCls?: string): void => {
   f(7, 10, 16, 12, CLAY)
   f(3, 14, 4, 4, CLAY)
   f(23, 14 + armFront, 4, 4, CLAY, armCls)
-  f(9, 12, 2, 2, INK)
-  f(19, 12, 2, 2, INK)
+  f(9, 12, 2, 2, INK, 'ey')
+  f(19, 12, 2, 2, INK, 'ey')
   f(7, 22, 2, 4, CLAY, 'la')
   f(17, 22, 2, 4, CLAY, 'la')
   f(11, 22, 2, 4, CLAY, 'lb')
@@ -3670,7 +3673,9 @@ const crabBody = (f: Fill, armFront = 0, armCls?: string): void => {
 // once-a-second redraw of a running row restarts them in phase. Every crab walks;
 // each costume adds its prop's own motion on top.
 const CRAB_CSS = `<style>
-${CAST_CSS}.run .la{animation:st .5s steps(1) infinite}.run .lb{animation:st .5s steps(1) infinite -.25s}
+${CAST_CSS}.cr .bd{animation:cbreathe 2.6s steps(1) infinite}.cr .ey{transform-box:fill-box;transform-origin:50% 100%;animation:cblink 7.3s steps(1) infinite}
+.c-heavy .ey,.c-writer .ey,.c-banker .ey{animation-duration:8.6s}.c-careful .ey,.c-light .ey,.c-explore .ey{animation-duration:6.1s}
+.run .la{animation:st .5s steps(1) infinite}.run .lb{animation:st .5s steps(1) infinite -.25s}
 .run .bd{animation:bob .5s steps(1) infinite -.125s}
 .run g{transform-box:fill-box}
 @keyframes st{50%{transform:translateY(-1px)}}@keyframes bob{50%{transform:translateY(1px)}}
@@ -3700,8 +3705,10 @@ ${CAST_CSS}.run .la{animation:st .5s steps(1) infinite}.run .lb{animation:st .5s
 .dance{transform-box:fill-box;transform-origin:50% 100%;animation:hop .45s ease-in-out infinite}
 @keyframes hop{25%{transform:translateY(-5px) rotate(-8deg)}75%{transform:translateY(-5px) rotate(8deg)}}
 @keyframes scribble{50%{transform:translate(-1px,1px)}}
-@media (prefers-reduced-motion: reduce){.run,.run g,.dance{animation:none!important}}
+@media (prefers-reduced-motion: reduce){.run,.run g,.dance,.cr .bd,.cr .ey{animation:none!important}}
 </style>`
+// The plain skins' reactions (classics.ts), only in a drawing that uses them: keyframes are never compacted away.
+const classicsCss = (body: string): string => `${body.includes('class="cr ') ? '<style>@keyframes cblink{97.7%{transform:scaleY(.5)}}</style>' : ''}${/class="cl-/.test(body) ? `<style>${CL_CSS}</style>` : ''}${body.includes('class="cka"') ? `<style>${CLACK_CSS}</style>` : ''}`
 
 const COSTUMES: Record<string, (f: Fill, t: string) => void> = {
   // Fable: astronaut in a glass dome; floats instead of walking, the antenna and the star blink.
@@ -3767,6 +3774,18 @@ const COSTUMES: Record<string, (f: Fill, t: string) => void> = {
     f(24, 2, 4, 4, '#F5C542', 'it'); f(25, 3, 2, 2, '#C99A1E', 'it')
   },
   other: f => crabBody(f),
+  // Crab Classic's done cheer: the boss with both claws free to rise and clack (CLACK_CSS, delayed by --ck).
+  clack: f => {
+    f(7, 10, 16, 12, CLAY)
+    f(3, 14, 4, 4, CLAY, 'cka')
+    f(23, 14, 4, 4, CLAY, 'ckb')
+    f(9, 12, 2, 2, INK, 'ey')
+    f(19, 12, 2, 2, INK, 'ey')
+    f(7, 22, 2, 4, CLAY, 'la')
+    f(17, 22, 2, 4, CLAY, 'la')
+    f(11, 22, 2, 4, CLAY, 'lb')
+    f(21, 22, 2, 4, CLAY, 'lb')
+  },
 }
 
 const costumeOf = (type: string): string => (type === 'Explore' ? 'explore' : tierOf(type))
@@ -3914,12 +3933,16 @@ const crab = (x: number, y: number, costume: string, dim = false, isWalking = fa
   const group = (cls: string) => `<g class="${cls}">${(groups.get(cls) ?? []).join('')}</g>`
   const props = [...groups.keys()].filter(k => k !== 'bd' && k !== 'la' && k !== 'lb')
   const body = `<g class="bd">${(groups.get('bd') ?? []).join('')}${props.map(group).join('')}</g>`
-  return `<g transform="${place}"${dim ? ' opacity="0.45"' : ''} shape-rendering="crispEdges">${placeFigure(`<g class="c-${costume}${isWalking ? ' run' : ''}">${body}${group('la')}${group('lb')}</g>`)}</g>`
+  return `<g transform="${place}"${dim ? ' opacity="0.45"' : ''} shape-rendering="crispEdges">${placeFigure(`<g class="${isWalking ? '' : 'cr '}c-${costume}${isWalking ? ' run' : ''}">${body}${group('la')}${group('lb')}</g>`)}</g>`
 }
 
-const statusMark = (x: number, y: number, status: string, color: string): string => {
+// The plain skins (Default, Crab Classic): their own quiet motion (classics.ts). `isCrabSkin`: the crab's own acts too.
+const isPlain = (): boolean => !SKIN.cast && (SKIN.id === DEFAULT_SKIN.id || SKIN.id === CRAB_SKIN.id)
+const isCrabSkin = (): boolean => !SKIN.cast && SKIN.id === CRAB_SKIN.id
+// `doneAt`/`now`: on a plain skin the done check draws itself, pinned to the moment the agent ended.
+const statusMark = (x: number, y: number, status: string, color: string, doneAt?: number, now = 0): string => {
   if (status === 'running') return `<circle class="live" cx="${x}" cy="${y}" r="3.5" fill="${color}"/>`
-  if (status === 'done') return `<path d="M${x - 5} ${y}l3.5 3.5 6.5-7" fill="none" stroke="#3B9C5F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>`
+  if (status === 'done') return checkMark(x - 5, y, '#3B9C5F', isPlain() ? doneAt : undefined, now)
   if (status === 'failed') return `<path d="M${x - 4} ${y - 4}l8 8M${x + 4} ${y - 4}l-8 8" stroke="#D0453F" stroke-width="1.8" stroke-linecap="round"/>`
   // Stopped on purpose (Esc, a release): a neutral square, never the error's cross.
   if (status === 'stopped') return `<rect x="${x - 3.5}" y="${y - 3.5}" width="7" height="7" rx="1.5" fill="#9a9a96"/>`
@@ -3961,7 +3984,7 @@ const scanlines = (W: number, H: number): string =>
   `<defs><pattern id="scan" width="4" height="3" patternUnits="userSpaceOnUse"><rect width="4" height="1" fill="#ffffff" fill-opacity=".045"/></pattern></defs><rect width="${W}" height="${H}" fill="url(#scan)" pointer-events="none"/>`
 
 const svg = (W: number, H: number, body: string): string =>
-  `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${PANE_CSS}${CRAB_CSS}${body}${SKIN.effects.scanlines ? scanlines(W, H) : ''}</svg>`
+  `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${PANE_CSS}${CRAB_CSS}${classicsCss(body)}${body}${SKIN.effects.scanlines ? scanlines(W, H) : ''}</svg>`
 // A drawing whose crabs stand still: the walking CSS (~3K) is left out. Rows that
 // repeat once per agent use it, so a big crew stays under the app's size limit.
 const stillSvg = (W: number, H: number, body: string): string =>
@@ -4170,7 +4193,7 @@ const agentSvg = (W: number, a: AgentRun, at: number, hasRule = true): string =>
 <text x="42" y="35" font-family="${FONT}" font-size="11"><tspan fill="${color}">${xml(sub[0] ?? '')}</tspan><tspan class="s">${xml(fitText(sub.slice(1).map(x => `  ·  ${x}`).join(''), 11, textW - 60))}</tspan></text>
 ${statGrid(42, 46, W - 42 - 6, agentStats(a, at))}
 ${progressBar(42, 46 + statGridHeight(6), W - 42 - 6, agentProgress(a, at), color, a.status === 'running' && !isQuiet(a), 'Progress', isEstimated(a), isEstimated(a) && !isQuiet(a) ? { at, read: t => estimateOf(a, t) } : undefined)}
-${statusMark(W - 8, 16, a.status, color)}
+${statusMark(W - 8, 16, a.status, color, a.endedAt, at)}
 ${hasRule ? `<line class="ln" x1="0" y1="${H - 0.5}" x2="${W}" y2="${H - 0.5}"/>` : ''}`,
   )
 }
@@ -4473,9 +4496,9 @@ const foldedSvg = (W: number, a: AgentRun, at: number, lite = false): string => 
   return stillSvg(
     W,
     H,
-    `${lite ? '' : crab(4, 2, costumeFor(a), true, false, 0.82)}
+    `${isPlain() && fresh(a.endedAt, at) ? `<style>${CL_CSS}</style>` : ''}${lite ? '' : isCrabSkin() ? scuttle(crab(4, 2, costumeFor(a), true, false, 0.82), { ...(a.endedAt !== undefined ? { endedAt: a.endedAt } : {}), running: false }, at) : crab(4, 2, costumeFor(a), true, false, 0.82)}
 <circle cx="40" cy="${H / 2}" r="7" fill="${isStopped ? '#9a9a96' : ok ? DONE : '#D0453F'}"/>
-${isStopped ? `<rect x="37.5" y="${H / 2 - 2.5}" width="5" height="5" rx="1" fill="#fff"/>` : ok ? `<path d="M36.5 ${H / 2}l2.5 2.5 4.5-5" fill="none" stroke="${inkOn(DONE)}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>` : `<path d="M37 ${H / 2 - 3}l6 6M43 ${H / 2 - 3}l-6 6" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>`}
+${isStopped ? `<rect x="37.5" y="${H / 2 - 2.5}" width="5" height="5" rx="1" fill="#fff"/>` : ok ? `<path d="M36.5 ${H / 2}l2.5 2.5 4.5-5" fill="none" stroke="${inkOn(DONE)}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"${isPlain() && fresh(a.endedAt, at) ? ` class="cl-chk" style="animation-delay:${pin(a.endedAt as number)}"` : ''}/>` : `<path d="M37 ${H / 2 - 3}l6 6M43 ${H / 2 - 3}l-6 6" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>`}
 <text class="s" x="54" y="${H / 2 + 4.5}" font-family="${FONT}" font-size="12.5" font-weight="600">${xml(fitText(a.description || a.type, 12.5, W - 54 - metaW - 8))}</text>
 <text class="m" x="${W - 4}" y="${H / 2 + 4}" text-anchor="end" font-family="${FONT}" font-size="11" font-variant-numeric="tabular-nums">${xml(meta)}</text>`,
   )
@@ -4891,8 +4914,8 @@ const managerSvg = (
 ${dancing(`${crab(14, 26, 'boss', false, m.isWorking, 1.45)}${crown(14, 26, 1.45)}`, isParty)}
 ${isParty ? confetti(W, H) : ''}
 <text x="68" y="24" font-family="${FONT}" font-size="11.5" font-weight="700" fill="${SKIN.boss[0]}" class="gl">Manager<tspan class="s" font-weight="400">${m.isWorking && m.activity ? `  ▸ ${xml(fitText(m.activity, 11.5, textW - pillW - 80))}` : waitingOn ? `  ⧗\uFE0E ${xml(fitText(tr().bgWaiting(waitingOn), 11.5, textW - pillW - 80))}` : flowTitle ? `  ·  ${xml(fitText(flowTitle, 11.5, textW - pillW - 80))}` : ''}</tspan></text>
-<rect x="${W - 18 - pillW}" y="13" width="${pillW}" height="18" rx="9" fill="${m.isWorking ? ACCENT : '#8a8a86'}" fill-opacity="${m.isWorking ? 1 : 0.25}"/>
-<text${m.isWorking ? '' : ' class="t"'} x="${W - 18 - pillW / 2}" y="25.5" text-anchor="middle" font-family="${FONT}" font-size="11" font-weight="600"${m.isWorking ? ` fill="${inkOn(ACCENT)}"` : ''}>${status}</text>
+${((pill: string) => (isPlain() && m.outcome === 'error' && !m.isWorking ? shake(pill, m.doneAt, at) : pill))(`<rect x="${W - 18 - pillW}" y="13" width="${pillW}" height="18" rx="9" fill="${m.isWorking ? ACCENT : '#8a8a86'}" fill-opacity="${m.isWorking ? 1 : 0.25}"/>
+<text${m.isWorking ? '' : ' class="t"'} x="${W - 18 - pillW / 2}" y="25.5" text-anchor="middle" font-family="${FONT}" font-size="11" font-weight="600"${m.isWorking ? ` fill="${inkOn(ACCENT)}"` : ''}>${status}</text>`)}
 <text class="${m.task ? 't' : 'm'}" x="68" y="50" font-family="${FONT}" font-size="14" font-weight="600">${xml(fitText(m.task || 'Waiting for your next request', 14, textW))}</text>
 ${statGrid(68, 66, W - 68 - 18, managerStats(info, t, crew, m, at))}
 ${progressBar(68, 66 + statGridHeight(6), W - 68 - 18, progress, '#F5C542', m.isWorking, 'Overall progress', false, estimate && !waitingOn ? { at, read: estimate } : undefined)}`,
@@ -6095,6 +6118,8 @@ type HudData = {
   isParty: boolean
   /** When the job finished: the cheer is pinned to it, so a redraw resumes it instead of replaying it. */
   partyAt?: number
+  /** When the job failed (its outcome an error): the plain skins' status pill shakes once, pinned to it. */
+  failAt?: number
   /** The plain skins' 3-row band: what is happening, the crew, the cost. */
   simple?: boolean
   taskUsd?: number
@@ -6104,7 +6129,7 @@ type HudData = {
   burnPerMin: number
   mood: 0 | 1 | 2
   /** Line 3: the crew at work, one small crab each, and a count per role. */
-  crew: { costume: string; color: string; status: AgentStatus; isQuiet?: boolean }[]
+  crew: { costume: string; color: string; status: AgentStatus; isQuiet?: boolean; startedAt?: number; endedAt?: number }[]
   roles: { role: string; color: string; count: number }[]
   /** Line 4: the manager's steps as pips, and the one in hand. */
   steps: StepState[]
@@ -6151,6 +6176,64 @@ const heartbeat = (x: number, y: number, w: number, color: string): string => {
 // 3. What it costs: this task, the session's total, and how full the context is.
 // The full readouts stay in the pane; Settings brings the full band back.
 const SIMPLE_H = 100
+// The plain skins' status pill: on a job done a check draws itself in it (Default and Crab Classic), on a failure it shakes once.
+const plainPill = (x: number, y: number, h: number, d: HudData, tone: string, ty: number): { svg: string; w: number } => {
+  const c = SKIN.colors
+  const check = isPlain() && d.isParty
+  const pillW = Math.round(20 + textWidth(d.status, 10.5)) + (check ? 12 : 0)
+  const on = d.isWorking || d.isParty
+  const ink = on ? inkOn(tone) : c.text
+  const pill = `<rect x="${x}" y="${y}" width="${pillW}" height="${h}" rx="${h / 2}" fill="${tone}" fill-opacity="${on ? 0.95 : 0.25}"/>${check ? checkMark(x + 8, ty - 4, ink, d.partyAt, d.at, 1.6) : ''}
+<text x="${x + pillW / 2 + (check ? 6 : 0)}" y="${ty}" text-anchor="middle" font-family="${FONT}" font-size="10.5" font-weight="800" fill="${ink}">${xml(d.status)}</text>`
+  return { svg: isPlain() ? shake(pill, d.failAt ?? PLAIN_SHAKE_AT, d.at) : pill, w: pillW }
+}
+// The plain skins' pane entrance: the top cards fade up once, pinned to when the pane was opened (the first draw, a draw after
+// 10 quiet minutes, or the pane opened by the plugin). `play cards` / `play shake` replay the entrance and the failed nudge.
+let PANE_OPEN_AT: number | undefined
+let PANE_LAST_DRAW = 0
+let PLAIN_SHAKE_AT: number | undefined
+const notePaneDraw = (at: number): void => {
+  if (PANE_OPEN_AT === undefined || at - PANE_LAST_DRAW > 10 * 60_000) PANE_OPEN_AT = at
+  PANE_LAST_DRAW = at
+}
+const riseTree = <T,>(tree: T, at: number): T => {
+  const open = PANE_OPEN_AT
+  if (!isPlain() || open === undefined || !fresh(open, at)) return tree
+  let i = 0
+  const walk = (x: unknown): unknown => {
+    if (Array.isArray(x)) return x.map(walk)
+    if (!x || typeof x !== 'object') return x
+    const n = x as { type?: unknown; props?: Record<string, unknown>; children?: unknown }
+    if (n.type === 'Svg' && typeof n.props?.source === 'string') {
+      if (n.props.width !== undefined || i >= RISE_CARDS) return n
+      return { ...n, props: { ...n.props, source: riseInto(n.props.source, open, i++, at) } }
+    }
+    return Array.isArray(n.children) ? { ...n, children: n.children.map(walk) } : n
+  }
+  return walk(tree) as T
+}
+for (const id of [DEFAULT_SKIN.id, CRAB_SKIN.id]) {
+  registerPlay(id, { name: 'cards', what: 'the pane cards rising in', run: at => { PANE_OPEN_AT = at } })
+  registerPlay(id, { name: 'shake', what: 'the failed pill\'s nudge', run: at => { PLAIN_SHAKE_AT = at } })
+}
+// Crab Classic's boss: on a job done it raises both claws and clacks twice, and bubbles rise (a replay too: `play clack`).
+let CRAB_CLACK_AT: number | undefined
+const clackAt = (d: HudData): number | undefined => (!isCrabSkin() ? undefined : CRAB_CLACK_AT !== undefined && fresh(CRAB_CLACK_AT, d.at) && d.at < CRAB_CLACK_AT + CLACK_MS ? CRAB_CLACK_AT : d.isParty && d.partyAt !== undefined && d.at < d.partyAt + CLACK_MS ? d.partyAt : undefined)
+const plainBoss = (x: number, y: number, d: HudData): string => {
+  const at = clackAt(d)
+  const boss = at === undefined ? crab(x, y, 'boss', false, d.isWorking, 1.05) : `<g style="${clackVar(at)}">${crab(x, y, 'clack', false, false, 1.05)}</g>`
+  return dancing(`${boss}${crown(x, y, 1.05)}`, d.isParty)
+}
+// The claw-off: Crab Classic's rare duel (classics.ts), one per 30-45 min while working, or `/missioncontrol play claw-off`.
+const CRAB_DIR = crabDirector()
+let CRAB_PLAY: { startAt: number; endAt: number } | undefined
+playsFrom(CRAB_SKIN.id, CRAB_DIR, sl => { CRAB_PLAY = sl }, () => 'the claw-off: two crabs, one coin')
+registerPlay(CRAB_SKIN.id, { name: 'clack', what: "the boss's claw clack and bubbles", run: at => { CRAB_CLACK_AT = at } })
+const clawOffAt = (d: HudData): number | undefined => {
+  if (!isCrabSkin() || d.isParty || d.lite) return undefined
+  if (CRAB_PLAY && d.at < CRAB_PLAY.endAt && d.at >= CRAB_PLAY.startAt - 60_000) return CRAB_PLAY.startAt
+  return CRAB_DIR.at(d.at, { working: d.isWorking }, 60_000)?.startAt
+}
 const SIMPLE_OUT_H = SIMPLE_H + HUD_PAD * 2
 const SIMPLE_CRABS = 6
 const hudSimpleSvg = (OW: number, d: HudData): string => {
@@ -6161,7 +6244,6 @@ const hudSimpleSvg = (OW: number, d: HudData): string => {
   const tone = d.isParty ? c.done : d.isWorking ? c.accent : c.muted
   const left = 52
   const titleW = Math.min(180, textWidth(d.title, 13) + 4)
-  const pillW = Math.round(20 + textWidth(d.status, 10.5))
   // The Timekeeper's clock (elapsed/budget) sits at the right of row 1 while a job has a budget; it takes room from the action text.
   const clockTxt = d.budget ? `⏱\uFE0E ${budgetLabel(d.budget.usedMs, d.budget.min)}` : ''
   const clockW = clockTxt ? textWidth(clockTxt, 11.5) + 12 : 0
@@ -6193,7 +6275,8 @@ const hudSimpleSvg = (OW: number, d: HudData): string => {
   const shown = d.crew.map((m, i) => ({ m, i })).sort((a, b) => rank(a.m) - rank(b.m) || a.i - b.i).slice(0, room).map(x => x.m)
   const crabs = shown.map((m, i) => {
     const x = left + i * 22
-    return `${crab(x, y2, m.costume, m.status !== 'running', m.status === 'running' && !m.isQuiet, 0.68)}${m.isQuiet ? `<circle cx="${x + 10}" cy="${y2 + 10}" r="11" fill="none" stroke="${c.alert}" stroke-width="1.5"/>` : ''}`
+    const drawn = crab(x, y2, m.costume, m.status !== 'running', m.status === 'running' && !m.isQuiet, 0.68)
+    return `${isCrabSkin() ? scuttle(drawn, { ...(m.startedAt !== undefined ? { startedAt: m.startedAt } : {}), ...(m.endedAt !== undefined ? { endedAt: m.endedAt } : {}), running: m.status === 'running' }, d.at) : drawn}${m.isQuiet ? `<circle cx="${x + 10}" cy="${y2 + 10}" r="11" fill="none" stroke="${c.alert}" stroke-width="1.5"/>` : ''}`
   }).join('')
   const more = d.crew.length > room && room > 0 ? `<text class="m" x="${left + room * 22 + 2}" y="${y2 + 14}" font-family="${FONT}" font-size="11">+${d.crew.length - room}</text>` : ''
   // Row 3: the money and the context, in words.
@@ -6212,6 +6295,12 @@ const hudSimpleSvg = (OW: number, d: HudData): string => {
   const costRoom = W - 14 - ctxW - left - 16
   const costText = textWidth(`This task ≈${fmtCost(d.taskUsd ?? 0)}   ·   Total ≈${fmtCost(d.session.total)} ●`, 12.5) <= costRoom ? `${taskPart}${totalPart}` : totalPart
   const label = (y: number, text: string) => `<text class="m" x="14" y="${y}" font-family="${FONT}" font-size="10" font-weight="700" letter-spacing=".6">${text}</text>`
+  const pill = plainPill(left + titleW + 8, 6, 15, d, tone, 17)
+  // The claw-off's ring: row 2 between the last crab (and its "+N") and the count, clear of every text and both rules.
+  const clawAt = clawOffAt(d)
+  const ring = { x0: HUD_PAD + left + shown.length * 22 + (more ? 26 : 0) + 8, x1: HUD_PAD + W - 14 - countW - 10, y0: HUD_PAD + y2 - 4, y1: HUD_PAD + y2 + 22 }
+  const duel = clawAt !== undefined && ring.x1 - ring.x0 >= CLAWOFF_MIN_W ? clawOff(OW, OH, ring, clawAt) : ''
+  const clack = clackAt(d)
   return svg(
     OW,
     OH,
@@ -6220,11 +6309,10 @@ ${cardShape(0.5, 0.5, OW - 1, OH - 1, `class="tile"`, 10)}
 ${cardShape(0.5, 0.5, OW - 1, OH - 1, `fill="none" stroke="${edge}" stroke-opacity=".6" stroke-width="1.2"`, 10)}
 <rect x="0.5" y="12" width="3" height="${OH - 24}" rx="1.5" fill="${edge}"/>
 <g transform="translate(${HUD_PAD} ${HUD_PAD})">
-${dancing(`${crab(10, 6, 'boss', false, d.isWorking, 1.05)}${crown(10, 6, 1.05)}`, d.isParty)}
+${plainBoss(10, 6, d)}
 <text x="${left}" y="17" font-family="${FONT}" font-size="13" font-weight="800" fill="${c.accent}">${xml(fitText(d.title, 13, titleW))}</text>
-<rect x="${left + titleW + 8}" y="6" width="${pillW}" height="15" rx="7.5" fill="${tone}" fill-opacity="${d.isWorking || d.isParty ? 0.95 : 0.25}"/>
-<text x="${left + titleW + 8 + pillW / 2}" y="17" text-anchor="middle" font-family="${FONT}" font-size="10.5" font-weight="800" fill="${d.isWorking || d.isParty ? inkOn(tone) : c.text}">${xml(d.status)}</text>
-<text class="s" x="${left + titleW + pillW + 18}" y="17" font-family="${FONT}" font-size="11.5">${xml(fitText(d.activity ? `▸ ${d.activity}` : '', 11.5, Math.max(0, W - (left + titleW + pillW + 18) - 14 - clockW)))}</text>
+${pill.svg}
+<text class="s" x="${left + titleW + pill.w + 18}" y="17" font-family="${FONT}" font-size="11.5">${xml(fitText(d.activity ? `▸ ${d.activity}` : '', 11.5, Math.max(0, W - (left + titleW + pill.w + 18) - 14 - clockW)))}</text>
 ${d.budget && clockTxt ? `<text class="m" x="${W - 14}" y="17" text-anchor="end" font-family="${FONT}" font-size="11.5" font-variant-numeric="tabular-nums">${budgetClock([clockTxt], clockTxt, d.budget)}</text>` : ''}
 ${gauge}
 ${pctText}
@@ -6235,7 +6323,7 @@ ${crabs}${more}
 ${label(y3, 'COST')}
 <text class="t" x="${left}" y="${y3}" font-family="${FONT}" font-size="12.5" font-variant-numeric="tabular-nums">${costText}</text>
 <text class="s" x="${W - 14}" y="${y3}" text-anchor="end" font-family="${FONT}" font-size="12">Context <tspan font-weight="800" fill="${ctxTone}">${d.ctxPct}%</tspan></text>
-</g>`,
+</g>${clack !== undefined ? bubbles(OW, OH, HUD_PAD + 10, HUD_PAD + 6, 1.05, clack) : ''}${duel}`,
   )
 }
 
@@ -6678,8 +6766,9 @@ const hudBandSvg = (OW: number, d: HudData): string => {
   const left = 52
   const pillW = Math.round(20 + textWidth(d.status, 10.5))
   const titleW = Math.min(220, textWidth(d.title, 13) + 4)
+  const fullPill = plainPill(left + titleW + 8, 9, 15, d, statusTone, 20)
   // The three readouts need 256px beside the title and its pill; a narrow band drops them.
-  const hasReadouts = W >= left + titleW + pillW + 80 + 256
+  const hasReadouts = W >= left + titleW + fullPill.w + 80 + 256
   const right = hasReadouts ? 256 : 14
   const barW = Math.max(40, W - left - right - 74)
   const pct = d.progress === null ? null : Math.round(d.progress * 100)
@@ -6746,7 +6835,7 @@ ${egg ? EGG_CSS : th ? th.css : ''}
   const rowY = HUD_PAD + HUD_HEAD - 2
   const stage: BandStage = {
     x1: Math.round(Math.min(HUD_PAD + left + barW + 8 - 6, hasReadouts ? HUD_PAD + W - right - 6 : OW - 14)),
-    keep: [[HUD_PAD + left + titleW + 8 - 3, rowY + 9 - 3, pillW + 6, 21]],
+    keep: [[HUD_PAD + left + titleW + 8 - 3, rowY + 9 - 3, fullPill.w + 6, 21]],
   }
   return svg(
     OW,
@@ -6763,7 +6852,7 @@ ${hudHead(W, d)}
 <g transform="translate(0 ${HUD_HEAD - 2})">
 <line x1="12" y1="${HUD_TOP + 0.5}" x2="${W - 12}" y2="${HUD_TOP + 0.5}" stroke="${c.line}"/>
 ${(() => {
-  if (!egg) return dancing(`${crab(10, 9, 'boss', false, d.isWorking, 1.05)}${crown(10, 9, 1.05)}`, d.isParty)
+  if (!egg) return isPlain() ? plainBoss(10, 9, d) : dancing(`${crab(10, 9, 'boss', false, d.isWorking, 1.05)}${crown(10, 9, 1.05)}`, d.isParty)
   // The four Cyberpunk skins: the boss drawn once (a def) with its idle frames, every trail and afterimage a <use> of it.
   // David's Sandevistan (trails while he works, the time-slow when a job starts); never on Saburo: Arasaka has no noise.
   const figure = `<defs><g id="cbfig">${crab(10, 9, 'boss', false, d.isWorking, 1.05, false, d.lite ? '' : bossIdle(egg, d.isWorking))}${crown(10, 9, 1.05)}</g></defs>`
@@ -6773,9 +6862,8 @@ ${(() => {
 })()}
 ${egg && SKIN.effects.glitch !== false ? relicText(left, 20, fitText(d.title, 13, titleW), `font-family="${FONT}" font-size="13" font-weight="800" fill="${c.accent}"`, egg) : th?.glitch ? th.glitch(left, 20, fitText(d.title, 13, titleW), `font-family="${FONT}" font-size="13" font-weight="800" fill="${c.accent}"`, titleW) : `<text x="${left}" y="20" font-family="${FONT}" font-size="13" font-weight="800" class="ac gl">${xml(fitText(d.title, 13, titleW))}</text>`}
 ${th?.mark ? th.mark(left - 15, 7) : ''}
-<rect x="${left + titleW + 8}" y="9" width="${pillW}" height="15" rx="7.5" fill="${statusTone}" fill-opacity="${d.isWorking || d.isParty ? 0.95 : 0.25}"/>
-<text x="${left + titleW + 8 + pillW / 2}" y="20" text-anchor="middle" font-family="${FONT}" font-size="10.5" font-weight="800" fill="${d.isWorking || d.isParty ? inkOn(statusTone) : c.text}">${xml(d.status)}</text>
-<text class="s" x="${left + titleW + pillW + 18}" y="20" font-family="${FONT}" font-size="11.5">${xml(fitText(d.activity ? `▸ ${d.activity}` : '', 11.5, Math.max(0, W - right - (left + titleW + pillW + 18) - 8)))}</text>
+${fullPill.svg}
+<text class="s" x="${left + titleW + fullPill.w + 18}" y="20" font-family="${FONT}" font-size="11.5">${xml(fitText(d.activity ? `▸ ${d.activity}` : '', 11.5, Math.max(0, W - right - (left + titleW + fullPill.w + 18) - 8)))}</text>
 ${gauge}
 ${shine}
 ${pct !== null && climb
@@ -7353,6 +7441,7 @@ const bandView = (i: BandInput, bandAt: number, isWorkingProp: boolean) => {
     isWorking,
     isParty,
     partyAt: isParty ? bandBoss.doneAt : undefined,
+    ...(bandBoss.outcome === 'error' && bandBoss.doneAt !== undefined && !isWorking ? { failAt: bandBoss.doneAt } : {}),
     taskUsd: report.taskCost,
     todayUsd: todayOn(i.day, bandAt).costUsd,
     ctxPct: info.contextPct,
@@ -7361,7 +7450,7 @@ const bandView = (i: BandInput, bandAt: number, isWorkingProp: boolean) => {
     mood: report.mood,
     crew: list
       .slice(-24)
-      .map(a => ({ costume: costumeFor(a), color: runRoleColor(a), status: a.status, isQuiet: isQuiet(a) })),
+      .map(a => ({ costume: costumeFor(a), color: runRoleColor(a), status: a.status, isQuiet: isQuiet(a), startedAt: a.startedAt, ...(a.endedAt !== undefined ? { endedAt: a.endedAt } : {}) })),
     roles: [...new Set(list.map(runRole))].map(role => {
       const members = list.filter(a => runRole(a) === role)
       return { role, color: members[0] ? runRoleColor(members[0]) : SKIN.colors.accent, count: members.length }
@@ -8595,7 +8684,8 @@ export const register: Register = (on, options) => {
     if (isPicture && 'Svg' in ui) {
       const { Svg } = ui
       // Each card keeps its source while it reads the same: no new image, no restart.
-      const keep = <T,>(tree: T): T => steadyTree(switchTree(modeTree(tree, themeOf(), clockNow, info.contextPct, (boss.celebrateUntil ?? 0) > clockNow), clockNow, !(themeOf()?.paneReserve && (isWorking || boss.isWorking))), `pane:${e.surface}`, clockNow)
+      notePaneDraw(clockNow)
+      const keep = <T,>(tree: T): T => steadyTree(riseTree(switchTree(modeTree(tree, themeOf(), clockNow, info.contextPct, (boss.celebrateUntil ?? 0) > clockNow), clockNow, !(themeOf()?.paneReserve && (isWorking || boss.isWorking))), clockNow), `pane:${e.surface}`, clockNow)
       // Drawn wider than the pane's columns suggest, then shrunk to the pane by the app:
       // the cards fill it edge to edge instead of leaving a dark strip at the right.
       const W = Math.max(240, Math.min(1100, Math.round((e.props.bodyColumns || 40) * 10) - 8))

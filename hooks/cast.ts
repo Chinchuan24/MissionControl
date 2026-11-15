@@ -4172,3 +4172,34 @@ export const CAST_CSS = `.ch g{transform-box:fill-box}
 @keyframes cfloat{50%{transform:translateY(-2px)}}
 @media (prefers-reduced-motion: reduce){.ch .bd,.ch .hd,.ch .hair,.ch .vis,.ch .led,.ch.fl{animation:none}}
 `
+
+// ---------------------------------------------------------------- the crab cast as code poses (Crab Classic's acts)
+// The pixel crab of the panels (register.tsx crabBody: a 30 by 28 grid) as Sprites, so the stage engine can cut and move it:
+// the done cheer's raised claws and the claw-off's duel. No new art: every pose is the same body with its claws or legs moved.
+export type CrabPose = 'idle' | 'stepA' | 'stepB' | 'up' | 'pinch' | 'nip' | 'salute' | 'boss' | 'bossSalute'
+const CRAB_P: Record<string, string> = { c: '#D97757', k: '#1F1E1D', g: '#F5C542', d: '#C99A1E', r: '#E5675E' }
+/** One crab pose, 30 by 28 (the boss poses wear the gold crown). */
+export const crabPose = (pose: CrabPose): Sprite => {
+  const g = Array.from({ length: 28 }, () => Array.from({ length: 30 }, () => '.'))
+  const f = (x: number, y: number, w: number, h: number, ch: string): void => {
+    for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) if (g[j] && i >= 0 && i < 30) (g[j] as string[])[i] = ch
+  }
+  f(7, 10, 16, 12, 'c')
+  f(9, 12, 2, 2, 'k')
+  f(19, 12, 2, 2, 'k')
+  // the claws: back (left) and front (right)
+  if (pose === 'up') { f(3, 6, 4, 4, 'c'); f(4, 10, 2, 4, 'c'); f(23, 6, 4, 4, 'c'); f(24, 10, 2, 4, 'c') }
+  else f(3, 14, 4, 4, 'c')
+  if (pose === 'pinch') { f(23, 14, 3, 4, 'c'); f(26, 13, 4, 2, 'c'); f(26, 17, 4, 2, 'c') }
+  else if (pose === 'nip') { f(23, 14, 7, 4, 'c') }
+  else if (pose === 'salute' || pose === 'bossSalute') { f(23, 5, 4, 4, 'c'); f(23, 9, 2, 5, 'c') }
+  else if (pose !== 'up') f(23, 14, 4, 4, 'c')
+  // legs: a pair lifts a pixel in a step
+  const la = pose === 'stepA' ? 21 : 22
+  const lb = pose === 'stepB' ? 21 : 22
+  f(7, la, 2, 4, 'c'); f(17, la, 2, 4, 'c'); f(11, lb, 2, 4, 'c'); f(21, lb, 2, 4, 'c')
+  if (pose === 'boss' || pose === 'bossSalute') { f(9, 7, 12, 3, 'g'); f(9, 4, 2, 3, 'g'); f(14, 2, 2, 5, 'g'); f(19, 4, 2, 3, 'g'); f(9, 9, 12, 1, 'd'); f(14, 7, 2, 2, 'r') }
+  return { rows: g.map(r => r.join('')), pal: { ...CRAB_P }, rim: false }
+}
+/** The token coin the claw-off is about: 4 by 4 gold. */
+export const CRAB_COIN: Sprite = { rows: ['.gg.', 'gddg', 'gddg', '.gg.'], pal: { g: '#F5C542', d: '#C99A1E' }, rim: false }
