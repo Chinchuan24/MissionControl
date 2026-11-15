@@ -67,12 +67,15 @@ const glides = (content: string): Map<string, string> => new Map([...content.mat
 const STYLE = /<style>([\s\S]*?)<\/style>/g
 const RULE = /[^{}]+\{[^{}]*\}/g
 const FAMILY = / font-family="([^"]*)"/g
+const KEYFRAMES = /@keyframes ([\w-]+)\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}/g
 
 /**
  * The same drawing in fewer bytes: each new source is sent to the desktop and decoded
  * there, so a big crew's every redraw paid for kilobytes nothing reads. Rules whose
  * every selector starts with a class the markup never uses are dropped (a card with no
- * crab carries no crab CSS), and a drawing set in one font names it once, on its root.
+ * crab carries no crab CSS), then every @keyframes whose name nothing left in the drawing
+ * names (a costume's loop on a card without that costume), and a drawing set in one font
+ * names it once, on its root.
  */
 export const compact = (content: string): string => {
   if (!content.startsWith('<svg')) return content
@@ -98,6 +101,12 @@ export const compact = (content: string): string => {
       .join('\n')
     return kept.trim() ? `<style>${kept}</style>` : ''
   })
+  // Keyframes nothing names any more (their rules went above, or never had a user): out. A name counts as used when it is a
+  // whole token anywhere else in the drawing (a rule, an inline style, a CSS variable), so a used one is never dropped.
+  if (out.includes('@keyframes ')) {
+    const names = new Set(out.replace(KEYFRAMES, ' ').match(/[\w-]+/g) ?? [])
+    out = out.replace(KEYFRAMES, (all, name: string) => (names.has(name) ? all : '')).replace(/<style>\s*<\/style>/g, '')
+  }
   // One font named once: only when it is the only one, attributes and styles alike.
   const families = new Set([...out.matchAll(FAMILY)].map(m => m[1]))
   const root = /^<svg\b[^>]*>/.exec(out)?.[0] ?? ''

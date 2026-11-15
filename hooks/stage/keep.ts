@@ -5,8 +5,10 @@
 // in a window (every window starts under its rule, y >= 33).
 
 export type Rect = [number, number, number, number]
-/** What the band hands a band act: the clear span's right edge and the readouts inside it (x, y, w, h). */
-export type BandStage = { x1: number; keep: Rect[] }
+/** What the band hands a band act: the clear span's right edge and the readouts inside it (x, y, w, h). `wide`, when the band
+ *  gives it: a wider window (to `x2`) for an act that keeps out of each row's own readouts (`keep` there holds those rows'
+ *  right parts, as holes, on top of the span's own). */
+export type BandStage = { x1: number; keep: Rect[]; wide?: { x2: number; keep: Rect[] } }
 
 /** The holes of `keep` that fall inside `win`, clipped to it (an even-odd hole outside the window would show, not hide). */
 export const holesIn = (win: Rect, keep: Rect[]): Rect[] => {
@@ -55,3 +57,32 @@ export const overlaps = (boxes: Rect[], clipD: string): Rect[] => {
   // A box is safe when outside the window, or when the window's part of it lies inside a hole.
   return boxes.filter(b => meet(b, win) && !holes.some(h => holesIn(win, [b]).every(p => inside(p, h))))
 }
+
+/** Do two boxes overlap? */
+export const meets = (a: Rect, b: Rect): boolean => a[0] < b[0] + b[2] && b[0] < a[0] + a[2] && a[1] < b[1] + b[3] && b[1] < a[1] + a[3]
+/**
+ * The largest empty rectangles of a region w by h around `holes` (each kept `pad` px clear, 2 px above and below): where a
+ * piece of an act can stand whole. Brute force over the holes' edges (a band has two holes), the maximal ones only.
+ */
+export const freeRects = (w: number, h: number, holes: Rect[], pad = 4): Rect[] => {
+  const hs = holes.map(([x, y, hw, hh]) => [x - pad, y - 2, hw + pad * 2, hh + 4] as Rect)
+  const edges = (v: number[], max: number): number[] => [...new Set([0, max, ...v].map(n => Math.max(0, Math.min(max, n))))].sort((a, b) => a - b)
+  const xs = edges(hs.flatMap(([x, , hw]) => [x, x + hw]), w)
+  const ys = edges(hs.flatMap(([, y, , hh]) => [y, y + hh]), h)
+  const all: Rect[] = []
+  xs.forEach((x0, i) => xs.slice(i + 1).forEach(x1 => ys.forEach((y0, k) => ys.slice(k + 1).forEach(y1 => {
+    const r: Rect = [x0, y0, x1 - x0, y1 - y0]
+    if (!hs.some(q => meets(r, q))) all.push(r)
+  }))))
+  const inside = (a: Rect, b: Rect): boolean => b[0] <= a[0] && b[1] <= a[1] && b[0] + b[2] >= a[0] + a[2] && b[1] + b[3] >= a[1] + a[3]
+  return all.filter((a, i) => !all.some((b, j) => j !== i && inside(a, b)))
+}
+/**
+ * A band act's whole clear span under the header (the task row, the step row, the tip line), from the figure box to the band's
+ * wide edge (each row up to its own first readout), and its keep-out: the span's own readouts plus, in the wide window, the
+ * rows' right parts. For an act that places every piece in a free rectangle (`freeRects`).
+ */
+export const spanOf = (H: number, stage: BandStage): { r: { x: number; y: number; w: number; h: number }; keep: BandStage } => ({
+  r: { x: 8, y: 34, w: Math.round(Math.max(120, (stage.wide?.x2 ?? stage.x1) - 8)), h: Math.max(56, H - 37) },
+  keep: { x1: stage.wide?.x2 ?? stage.x1, keep: [...stage.keep, ...(stage.wide?.keep ?? [])] },
+})

@@ -1,13 +1,16 @@
 // Each skin's own flavour of the shared skin switch (stage/wipe.ts skinSwitch), with its emblem (art set 015 / 029, 32 x 32 coins
 // in emblems-sprites.ts): Invincible's fist punches out of the panel, The Boys' cracked gold star slams in and spins like a coin
-// on the broadcast wipe, NOIR's film reel drops in with the curtain and turns like a projector reel. Band only for the emblem
+// on the broadcast wipe, NOIR's film reel drops in with the curtain and turns like a projector reel, Better Call Saul's gavel
+// slams in on the TV ad's wipe, GENE's emblem drops with the mall shutter and spins like a coin. Band only for the emblem
 // (about 3.5 k of the switch's 8 k); the cards get the wipe's direction and bar, no emblem (5 k a card).
 import type { Act } from './stage/timeline'
 import type { SwitchFlavour } from './stage/wipe'
-import { INV_EMBLEM, NOIR_EMBLEM, TB_EMBLEM } from './emblems-sprites'
+import { GENE_EMBLEM, INV_EMBLEM, NOIR_EMBLEM, TB_EMBLEM } from './emblems-sprites'
+import { BCS_GAVEL_DOWN } from './bettercallsaul-sprites'
+import { grey } from './bettercallsaul'
 
 /** The emblem on the band: slammed in from 1.5x, then its own turn, gone with the wipe. Hidden under reduced motion (the act's). */
-const emblem = (act: Act, key: string, sp: typeof TB_EMBLEM, turn: 'coin' | 'reel' | 'punch'): string => {
+const emblem = (act: Act, key: string, sp: typeof TB_EMBLEM, turn: 'coin' | 'reel' | 'punch', sc = 1.3): string => {
   act.cast(key, sp, 0.5, 6)
   // Over the task title (prose), clear of the step count, the Tasks chip and the header: 42 px, slammed from 63.
   const x = 160
@@ -19,12 +22,18 @@ const emblem = (act: Act, key: string, sp: typeof TB_EMBLEM, turn: 'coin' | 'ree
       ? [[0.2, 'transform:rotate(0deg)'], [0.36, 'transform:rotate(120deg)'], [0.52, 'transform:rotate(240deg)']]
       : [[0.16, 'transform:scale(1.25)'], [0.24, 'transform:scale(1)']]
   const rows: [number, string][] = [[0, 'opacity:0;transform:scale(1.5)'], [0.04, 'opacity:1;transform:scale(1.5)'], [0.16, 'opacity:1;transform:scale(1)'], ...spin, [T - 0.12, 'opacity:1'], [T - 0.04, 'opacity:0']]
-  return act.kf(act.bank.use(key, x, y, 1, 1.3), rows, { c: true })
+  return act.kf(act.bank.use(key, x, y, 1, sc), rows, { c: true })
 }
+/** GENE's emblem in true greys (its art has a cool tint a few points off grey). */
+const GENE_GREY = { ...GENE_EMBLEM, pal: Object.fromEntries(Object.entries(GENE_EMBLEM.pal).map(([k, v]) => [k, grey(v)])) }
 /** The flavour for the skin being put on (its id), or undefined for the default switch. */
 export const switchFlavour = (to: string): SwitchFlavour | undefined => {
   if (to === 'invincible') return { dir: 'r', shards: 8, extra: (act, s) => (s === 'band' ? emblem(act, 'emInv', INV_EMBLEM, 'punch') : '') }
   if (to === 'the-boys' || to === 'solidgold') return { dir: 'l', shards: 0, ms: 800, extra: (act, s) => (s === 'band' ? emblem(act, 'emTb', TB_EMBLEM, 'coin') : '') }
+  // Better Call Saul: the TV ad's wipe (left to right, the ad's red bar) and the judge's gavel slammed in, three times its size.
+  if (to === 'better-call-saul') return { dir: 'r', shards: 0, ms: 750, extra: (act, s) => (s === 'band' ? emblem(act, 'emBcs', BCS_GAVEL_DOWN, 'punch', 3) : '') }
+  // GENE: the mall shutter's way (top down, no bar), his emblem spinning like a coin; every colour grey (GENE's rule).
+  if (to === 'gene') return { dir: 'd', bar: false, shards: 0, veil: 0.6, ms: 800, extra: (act, s) => (s === 'band' ? emblem(act, 'emGene', GENE_GREY, 'coin') : '') }
   if (to === 'noir') return { dir: 'd', bar: false, shards: 0, veil: 0.6, ms: 850, extra: (act, s) => (s === 'band' ? emblem(act, 'emNoir', NOIR_EMBLEM, 'reel') : '') }
   return undefined
 }

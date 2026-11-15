@@ -1,7 +1,7 @@
 // Caliper: the pane's cards (CALIBRATION the level card, READOUT the task card with the LOG BOOK, TRACE the log, CREW the
 // hierarchy, and the ZEROING strip), the ladder and the marks, the words. Pure SVG strings, no state; a face is only a palette.
 import { CAL_CSS, CAL_FONT, Bd, Lb, Vl, calPal, calPip, clip, dial, frame, hairH, hairV, pin, r2, ruler, sansW, vernier, xml } from './caliper'
-import type { CalFace, CalPal } from './caliper'
+import type { CalFace, CalPal, Was } from './caliper'
 import { durOf, hhmm, money } from './invincible'
 import { nextOf, veil } from './extras'
 import type { Badge, Beat, Cred, CredWords } from './extras'
@@ -106,19 +106,23 @@ export const READOUT_STEPS = 6
 const BOOK_MAX = 5
 export const readoutHeight = (legendsN: number): number => 280 + Math.max(1, Math.min(BOOK_MAX, legendsN)) * 18 + 10
 const plain = (t: string): string => t.replace(/^\s*\d+[.)]\s+/, '')
-export const readoutCard = (W: number, task: string, isWorking: boolean, done: number, total: number, legends: Legend[], face: CalFace, steps: ReadoutStep[] = []): string => {
+/** `o`: what just changed (the dial's and the ruler's old percent) and a "reads zero" moment (the job's end, or `play zero`). */
+export const readoutCard = (W: number, task: string, isWorking: boolean, done: number, total: number, legends: Legend[], face: CalFace, steps: ReadoutStep[] = [], o: { dialWas?: Was<number>; rulerWas?: Was<number>; zeroAt?: number } = {}): string => {
   const P = calPal(face)
   const n = Math.min(BOOK_MAX, legends.length)
   const H = readoutHeight(legends.length)
   const pct = total > 0 ? Math.round((Math.min(done, total) / total) * 100) : 0
   const s = [open(W, H), head(P, W, H, 'READOUT', Bd(P, W - 18, 22, total ? `${done} of ${total} steps` : 'no steps', P.muted, 'end'))]
-  s.push(dial(P, 36, 62, pct, isWorking))
+  s.push(dial(P, 36, 62, pct, isWorking, { bezel: true, id: 'calbzp', ...(o.dialWas ? { was: o.dialWas } : {}) }))
   const title = task || 'No job running'
   s.push(`<text x="62" y="58" font-family="${CAL_FONT}" font-size="15" font-weight="700" fill="${task ? P.text : P.muted}">${xml(clip(title, 15, W - 62 - 100, true))}</text>`)
   const status = isWorking ? `Working · step ${Math.min(done + 1, Math.max(total, 1))} of ${Math.max(total, 1)}` : total > 0 && done >= total ? `Done · ${total} steps` : task ? `Paused · ${done} of ${total} steps` : 'Waiting for a job'
   s.push(Bd(P, 62, 76, status, P.subtext))
   s.push(Vl(P, W - 18, 62, total ? `${pct}%` : '', P.text, 'end', 22, 600))
-  s.push(ruler(P, 18, 100, rulerW(W), total ? pct : null, isWorking))
+  const rw = rulerW(W)
+  s.push(ruler(P, 18, 100, rw, total ? pct : null, { live: isWorking, fine: { id: 'calfp', ...(o.rulerWas ? { was: { from: Math.round((rw * o.rulerWas.from) / 100), at: o.rulerWas.at } } : {}) } }))
+  // the vernier "reads zero" under the cursor (the pane's done moment), once, pinned
+  if (o.zeroAt !== undefined && total) s.push(vernier(P, Math.max(18 + 25, Math.min(18 + Math.round((rw * pct) / 100), 18 + rw - 25)), 106, true, true, o.zeroAt))
   // a window of six steps, the running one in view
   if (!steps.length) s.push(Bd(P, 18, 130, 'No steps yet.', P.muted))
   else {

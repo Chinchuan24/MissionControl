@@ -9,6 +9,7 @@
 //   const bank = new FrameBank('shd', 5); SHIELD.forEach((sp, i) => bank.add(`v${i}`, sp))
 //   const t = turntable(bank, { id: 'shdT', views: ['v0','v1','v2','v3','v4'], mirror: true, x, y, period: 2.4, dir: 1, still: 0 })
 //   svg = `<style>${t.css}</style><defs>${bank.defs()}</defs>${t.svg}`
+import { pin } from '../smooth'
 import type { FrameBank } from './frames'
 import type { Seg } from './timeline'
 import { Act, r1, r3 } from './timeline'
@@ -30,7 +31,7 @@ export type Turntable = { svg: string; css: string; views: View[] }
  * `period` is 0). `shadow`: a ground ellipse under it, `rx` wide, that narrows as the object turns edge-on (needs `widths`,
  * the relative width of each view, else it holds). Cost: the views' defs once + ~110 chars per view.
  */
-export const turntable = (bank: FrameBank, o: { id: string; views: string[] | View[]; mirror?: boolean; x: number; y: number; sc?: number; period?: number; dir?: 1 | -1; still?: number; shadow?: { rx: number; dy: number; color?: string; op?: number; widths?: number[] } }): Turntable => {
+export const turntable = (bank: FrameBank, o: { id: string; views: string[] | View[]; mirror?: boolean; x: number; y: number; sc?: number; period?: number; dir?: 1 | -1; still?: number; shadow?: { rx: number; dy: number; color?: string; op?: number; widths?: number[] }; every?: number; from?: number }): Turntable => {
   const views = typeof o.views[0] === 'string' ? turnViews(o.views as string[], o.mirror) : (o.views as View[])
   const n = views.length
   const sc = o.sc ?? 1
@@ -51,6 +52,21 @@ export const turntable = (bank: FrameBank, o: { id: string; views: string[] | Vi
   const order = Array.from({ length: n }, (_, i) => (((still + dir * i) % n) + n) % n)
   const hold = period / n
   const cls = o.id
+  // A turn now and then (`every` s, e.g. 3600: once an hour), pinned to `from` (ms, e.g. the hour's start): one turn of
+  // `period` s at the start of each cycle, the still view between. Each view its own window; idle-safe (steps(1), no redraw).
+  if (o.every && o.every > period) {
+    const E = o.every
+    const q = (t: number): number => r3((t / E) * 100)
+    let kcss = ''
+    const svg = order.map((k, i) => {
+      const v = views[k] as View
+      const name = `${cls}${i}`
+      kcss += i ? `@keyframes ${name}{0%{opacity:0}${q(i * hold)}%{opacity:1}${q((i + 1) * hold)}%,100%{opacity:0}}` : `@keyframes ${name}{0%{opacity:1}${q(hold)}%{opacity:0}${q(period)}%,100%{opacity:1}}`
+      return `<g class="${cls}" style="animation-name:${name}"${i ? ' opacity="0"' : ''}>${shadowOf(k)}${bank.use(v.key, o.x, o.y, v.dir, sc)}</g>`
+    }).join('')
+    const css = `.${cls}{animation-duration:${r3(E)}s;animation-timing-function:steps(1);animation-iteration-count:infinite;animation-delay:${pin(o.from ?? 0)}}${kcss}@media (prefers-reduced-motion: reduce){.${cls}{animation:none!important}}`
+    return { svg, css, views }
+  }
   const css = `@keyframes ${cls}{0%{opacity:1}${r3(100 / n)}%,100%{opacity:0}}@media (prefers-reduced-motion: reduce){.${cls}{animation:none!important}}`
   const svg = order.map((k, i) => {
     const v = views[k] as View

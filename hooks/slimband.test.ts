@@ -77,7 +77,9 @@ for (const [skin, serif] of [['mentalist', true], ['red-john', true], ['breaking
       expect(svg).toMatch(/>(CTX|CONTEXT)</)
       expect(svg).toContain('>TOTAL<') // the session's total in dollars, at every width
       expect(svg).toContain('>$7.89<')
-      const bs = boxes(svg, (s, size, ls, bold) => (serif ? serifW(s, size, ls, bold) : sansW(s, size, ls, bold)))
+      // A flip that stands over the episode for a moment (Heisenberg's name; hidden at rest, a flat group) is no layout text.
+      const shown = svg.replace(/<g [^>]*data-egg="flip"[^>]*>[\s\S]*?<\/g>/g, '')
+      const bs = boxes(shown, (s, size, ls, bold) => (serif ? serifW(s, size, ls, bold) : sansW(s, size, ls, bold)))
       const hits: string[] = []
       for (let i = 0; i < bs.length; i++) for (let j = i + 1; j < bs.length; j++) {
         const a = bs[i] as Box

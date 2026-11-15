@@ -183,6 +183,8 @@ const sway = tilt({ id: 'qt', x, y, w, h, svg: box, deg: 4, glare: '#FFF' })
   The Boys' shield: 10.7 k for 8 views, **7.4 k** for 5 + mirror (K=5, sc 2).
 - Views are rect-path frames (`FrameBank`), toggled by one `steps(1)` loop: as cheap at rest as a blink.
 - `dir: -1` turns the other way; `period: 0` draws the still view only.
+- `every: 3600, from: <an hour's start, ms>`: one turn of `period` s at the top of each cycle, the still view between (an
+  endless loop pinned to `from`: Heisenberg's hat logo turns once an hour with no redraw).
 
 ### director (rare events)
 

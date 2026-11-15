@@ -2,26 +2,43 @@
 // research notes). Pure functions: the hooks module keeps the little state (when a word was typed, when a toast last
 // showed) and passes it in. Every drawing is pinned to the clock with `pin()`, brief, ≤ 3 Hz, still under reduced motion.
 //
-//   chicanery  Chuck pops up in the band, "I AM NOT CRAZY!" (S3E5), and 1216 <-> 1261 flips beside him
-//   1216       the number flip alone
-//   namaste    a tiny bowling ball rolls into Howard's small pixel car (S5E4), with a crack flash
-//   ding       Hector's bell rings three times
-//   saul3d     the band's Saul bust bobs and zooms to a beat for ~4 s (CSS transform only)
-import { BCS_CHUCK } from './cast'
-import type { Sprite } from './cast'
-import { C, FONT, T, bell, clamp, esc, fingerGuns, pal, prop, px, r1, sansW, sid, spW, star } from './bettercallsaul'
-import { pin } from './smooth'
+//   chicanery  the bar hearing (S3E5), Jimmy against Chuck: the trap, the battery, the break, the slump (bettercallsaul-court.ts).
+//              Also by itself (the director's fight lane) and, once a day, after three failed test runs in a row
+//   1216       the number flip alone, a big manila exhibit tag (the whole prompt "1216", or "it was 1216")
+//   namaste    a bowling ball rolls along the roof into Howard's car (S5E4): hit-stop, the crack, a dust puff, Howard looks
+//   ding       Hector rolls in and rings his bell three times (the whole prompt "ding", or "ding ding")
+//   saul3d     the bust turns all the way round: 8 views of the head under a swinging spotlight (bettercallsaul-motion.ts)
+// The drawings are band acts on the shared stage engine (bettercallsaul-motion.ts), inside the band's clear span.
+import { bcsFigure, fingerGuns } from './bettercallsaul'
 import { hashOf } from './cast'
+import { EGG_MS, eggAct } from './bettercallsaul-motion'
+import type { BandStage } from './stage/keep'
 
-export type FxKind = 'chicanery' | '1216' | 'namaste' | 'ding' | 'saul3d'
+/** The typed eggs, then the scheduled acts a `/missioncontrol play <name>` replays (drawn from the same slot). */
+export type FxKind = 'chicanery' | '1216' | 'namaste' | 'ding' | 'saul3d' | 'gus' | 'car' | 'lalo'
 export type Fx = { kind: FxKind; at: number }
-export const FX_MS: Record<FxKind, number> = { chicanery: 5_000, '1216': 4_000, namaste: 4_500, ding: 3_000, saul3d: 4_000 }
-export const fxLive = (fx: Fx | undefined, at: number): fx is Fx => Boolean(fx) && at >= (fx as Fx).at - 1000 && at < (fx as Fx).at + FX_MS[(fx as Fx).kind]
+export const FX_MS: Record<FxKind, number> = { ...EGG_MS, gus: 13_000, car: 14_000, lalo: 5_000 }
+export const fxLive = (fx: Fx | undefined, at: number): fx is Fx => Boolean(fx) && at >= (fx as Fx).at - 1000 && at < (fx as Fx).at + (FX_MS[(fx as Fx).kind] ?? 0)
 
 const word = (w: string): RegExp => new RegExp(`(?<![a-z0-9])${w}(?![a-z0-9])`, 'i')
-const FX_RES: [FxKind, RegExp][] = [['chicanery', word('chicanery')], ['1216', word('1216')], ['namaste', word('namaste')], ['ding', word('ding')], ['saul3d', word('saul3d')]]
-/** The trigger word in a prompt (the first of the list found), or undefined. The prompt itself always goes on unchanged. */
-export const fxOf = (text: string): FxKind | undefined => FX_RES.find(([, re]) => re.test(text))?.[0]
+/** The whole prompt is the word (a little punctuation and space allowed): "ding", "1216!" */
+const whole = (w: string): RegExp => new RegExp(`^[\\s"'“”]*${w}[\\s.!?"'“”]*$`, 'i')
+/**
+ * The triggers. Rare words fire anywhere as a whole word (chicanery, namaste, saul3d). The two that turn up in ordinary work
+ * ("see line 1216", "add a ding sound") fire only as the whole prompt or in a distinctive phrase: "ding ding" (Hector's bell
+ * rung twice or more), "it was 1216" (Chuck).
+ */
+const FX_RES: [FxKind, RegExp[]][] = [
+  ['chicanery', [word('chicanery')]],
+  ['1216', [whole('1216'), /(?<![a-z0-9])it\s+was\s+1216(?![0-9])/i]],
+  ['namaste', [word('namaste')]],
+  ['ding', [whole('ding'), /(?<![a-z0-9])ding(?:[\s,!.-]+ding)+(?![a-z0-9])/i]],
+  ['saul3d', [word('saul3d')]],
+]
+/** The trigger in a prompt (the first of the list found), or undefined. The prompt itself always goes on unchanged. */
+export const fxOf = (text: string): FxKind | undefined => FX_RES.find(([, res]) => res.some(re => re.test(text)))?.[0]
+/** The typed eggs a `/missioncontrol play <name>` replays on these two skins (the scheduled ones come from the director). */
+export const EGG_PLAYS: [FxKind, string][] = [['saul3d', 'the head turns all the way round'], ['namaste', 'the bowling ball and Howard\'s car'], ['ding', "Hector's bell, three times"], ['chicanery', 'the bar hearing: Jimmy against Chuck'], ['1216', '1216 or 1261']]
 
 // --- toasts: each at most once per a few minutes, only on the two skins
 export const TOASTS = {
@@ -71,69 +88,17 @@ export const bashToast = (kind: CmdKind, failed: boolean, state: BashState): { t
   return { state }
 }
 
-// --- drawings
-const FIX = (fx: Fx): string => `style="--d:${FX_MS[fx.kind] / 1000}s;animation-delay:calc(${pin(fx.at)} + 0s)"`
+/** Three failed test runs in a row play the bar hearing, at most once a local day (`lastDay`: the day it last played, or ''). */
+export const FAILS_FOR_HEARING = 3
+export const dayOf = (at: number): string => { const d = new Date(at); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}` }
+export const hearingAfterFails = (testFails: number, lastDay: string, at: number): boolean => testFails >= FAILS_FOR_HEARING && dayOf(at) !== lastDay
 
-/** 1216 <-> 1261 flipping beside a number tag (Chuck: "I knew it was 1216!"); two frames at ~0.8 Hz. */
-export const numberFlip = (x: number, y: number, gene: boolean): string => {
-  const P = pal(gene)
-  const one = (n: string, cls: string): string => `<g class="${cls}">${T(x + 24, y, n, 13, 700, P.warn, 'text-anchor="middle" font-variant-numeric="tabular-nums"')}</g>`
-  return `<rect x="${r1(x)}" y="${r1(y - 13)}" width="48" height="19" rx="2" fill="${prop('manila', gene)}"/><rect x="${r1(x)}" y="${r1(y - 13)}" width="48" height="19" rx="2" fill="${P.tile}" opacity=".78"/>${one('1216', 'bcs-gun1')}${one('1261', 'bcs-gun2')}`
-}
-
-/** Chuck pops up at the band's bottom edge with his bubble and the flipping number. */
-export const chuckRant = (W: number, H: number, fx: Fx, gene: boolean): string => {
-  const P = pal(gene)
-  const s = 1.7
-  const rows: [number, number] = [0, 26]
-  const w = spW(BCS_CHUCK) * s
-  const h = (rows[1] - rows[0]) * s
-  const x = Math.round(W * 0.55)
-  const id = sid('bcsrant', W, H, x)
-  const text = 'I AM NOT CRAZY!'
-  const bw = sansW(text, 11.5, 0, true) + 18
-  const bx = x + w * 0.6
-  const by = H - h - 2
-  const flip = numberFlip(bx + bw + 8, by + 16, gene)
-  const body = fx.kind === 'chicanery' ? `<defs><clipPath id="${id}"><rect x="${r1(x - w)}" y="${r1(H - h - 2)}" width="${r1(w * 2)}" height="${r1(h + 2)}"/></clipPath></defs><g clip-path="url(#${id})">${px(BCS_CHUCK, x - w / 2, H - h, s, { grey: gene, rows })}</g><rect x="${r1(bx)}" y="${r1(by)}" width="${r1(bw)}" height="24" rx="4" fill="${P.tile2}" stroke="${P.sub}" stroke-width="1.2"/><path d="M${r1(bx)} ${r1(by + 7)}l-7 5l7 5z" fill="${P.sub}"/><text x="${r1(bx + bw / 2)}" y="${r1(by + 16)}" text-anchor="middle" font-family="${FONT}" font-size="11.5" font-weight="700" fill="${P.text}">${esc(text)}</text>${flip}` : numberFlip(Math.round(W * 0.55), H - 30, gene)
-  return `<g class="bcs-fx" pointer-events="none" ${FIX(fx)}>${body}</g>`
-}
-
-/** Howard's small pixel car (silver, a plate-sized dent) and the bowling ball that finds it. */
-const HCAR: Sprite = {
-  rows: ['................', '....ssssss......', '...sswwwwss.....', '..ssswwwwsss....', '.ssssssssssssss.', 'sssssssssssssssd', 'dsssssssssssssss', '.kkk.dddddd.kkk.'],
-  pal: { s: '#AEB6BD', w: '#33414F', d: '#6E767C', k: '#15161A' },
-}
-export const bowling = (W: number, H: number, fx: Fx, gene: boolean): string => {
-  const hit = Math.round(W * 0.62)
-  const y = H - 9
-  const dly = `animation-delay:calc(${pin(fx.at)} + 0s)`
-  const dly2 = `animation-delay:calc(${pin(fx.at)} + 2.4s)`
-  const ball = `<circle cx="0" cy="-2.6" r="2.8" fill="${gene ? '#222' : '#1B2A5E'}"/><circle cx="-0.8" cy="-3.6" r="0.5" fill="#000"/><circle cx="0.4" cy="-3.7" r="0.5" fill="#000"/>`
-  const car = `<g transform="translate(${hit} ${y})" shape-rendering="crispEdges">${px(HCAR, 0, -8, 1.3, { grey: gene })}</g>`
-  const crack = `<g class="bcs-fx" style="--d:1.6s;${dly2.slice(0)}" transform="translate(${hit + 4} ${y - 6})">${star(0, 0, 9, prop('adYellow', gene))}${star(0, 0, 5, gene ? '#F4F4F4' : '#FFF4D6')}<path d="M-2 -3l3 3l-2 3" stroke="#222" stroke-width="1" fill="none"/></g>`
-  return `<g pointer-events="none"><g transform="translate(0 ${y})"><g class="bcs-go" style="--a:-10px;--b:${hit - 2}px;animation-duration:2.4s;animation-delay:calc(${pin(fx.at)} + 0s)">${ball}</g></g><g class="bcs-fx" style="--d:${FX_MS.namaste / 1000}s;${dly.slice(0)}">${car}</g>${crack}</g>`
-}
-
-/** Hector's bell rings three times (its own copy over the corner one). */
-export const dingBell = (W: number, H: number, fx: Fx, gene: boolean): string => {
-  const x = W - 21
-  const y = H - 17
-  const col = prop('bell', gene)
-  const arcs = `<g class="bcs-ding" fill="none" stroke="${col}" stroke-width="1.2" stroke-linecap="round" style="animation-delay:calc(${pin(fx.at)} + 0s)"><path d="M${r1(x - 2.6)} ${r1(y + 1.3)}q-2 1.5 0 3.5"/><path d="M${r1(x + 14.3)} ${r1(y + 1.3)}q2 1.5 0 3.5"/><path d="M${r1(x - 5.2)} ${y}q-3 2.5 0 5.5" opacity=".6"/><path d="M${r1(x + 16.9)} ${y}q3 2.5 0 5.5" opacity=".6"/></g>`
-  return `<g class="bcs-fx" pointer-events="none" ${FIX(fx)}>${arcs}<g class="bcs-dingt" style="animation-delay:calc(${pin(fx.at)} + 0s)">${bell(x, y, 1.3, 'still', gene)}</g></g>`
-}
-
-/** The band layer for a live trigger word. (saul3d is the figure's own zoom.) */
-export const fxLayer = (W: number, H: number, fx: Fx | undefined, at: number, gene: boolean): string => {
+/** The band layer for a live trigger word: its act, inside the band's clear span (`stage`). */
+export const fxLayer = (W: number, H: number, fx: Fx | undefined, at: number, gene: boolean, stage?: BandStage): string => {
   if (!fxLive(fx, at)) return ''
-  if (fx.kind === 'chicanery' || fx.kind === '1216') return chuckRant(W, H, fx, gene)
-  if (fx.kind === 'namaste') return bowling(W, H, fx, gene)
-  if (fx.kind === 'ding') return dingBell(W, H, fx, gene)
-  return ''
+  return eggAct(fx.kind, { W, H, at: fx.at, gene, ...(stage ? { stage } : {}) })
 }
-/** The Saul bust wrapped in the 3D Saul zoom while `saul3d` is live. */
-export const zoomWrap = (inner: string, fx: Fx | undefined, at: number): string => (fxLive(fx, at) && fx.kind === 'saul3d' ? `<g class="bcs-z3" style="animation-delay:calc(${pin(fx.at)} + 0s)">${inner}</g>` : inner)
-void clamp
-void C
+/** The band's bust: hidden while `saul3d` turns the head (its act draws it), glancing aside after a job's cheer. */
+export const figureFor = (gene: boolean, fx: Fx | undefined, at: number, partyAt?: number): string =>
+  bcsFigure(gene, { at, ...(partyAt !== undefined ? { glanceAt: partyAt } : {}), ...(fxLive(fx, at) && fx.kind === 'saul3d' ? { hideAt: fx.at, hideMs: FX_MS.saul3d } : {}) })
 export { fingerGuns }

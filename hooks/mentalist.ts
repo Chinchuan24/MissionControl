@@ -3,10 +3,9 @@
 // Blake's public-domain "The Tyger". Pure SVG strings and tables, no state: the
 // hooks module decides when each shows.
 
-import { BADGES, inkOn, textW, clipW } from './extras'
+import { BADGES, textW, clipW } from './extras'
 import type { Badge, CredWords, Frame } from './extras'
 import { hashOf } from './cast'
-import { pin } from './smooth'
 
 type Th = { accent: string; accent2: string; done: string; warn: string; text: string; subtext: string; muted: string; tile: string; track: string; line: string }
 
@@ -39,11 +38,8 @@ export const smiley = (x: number, y: number, size = 11, opacity = 1, cls = ''): 
 
 // --- Motion ---
 export const MENT_CSS = `.rjs{animation:rjs 3.6s ease-in-out infinite}@keyframes rjs{50%{opacity:.55}}
-.rjb{opacity:0;animation:rjb 2.6s steps(1) both}@keyframes rjb{0%,50%{opacity:0}55%,82%{opacity:.8}86%,100%{opacity:0}}
-.mflash{animation:mflash .9s steps(1) 3}@keyframes mflash{33%{opacity:.15}66%{opacity:.9}}
-.tea{animation:tea 1.6s ease-in-out infinite}@keyframes tea{50%{opacity:.55}}
 .cold{animation:cold 1.4s steps(1) infinite}@keyframes cold{50%{opacity:.25}}
-@media (prefers-reduced-motion: reduce){.rjs,.mflash,.tea,.cold{animation:none}.rjb{animation:none;opacity:.5}}`
+@media (prefers-reduced-motion: reduce){.rjs,.cold{animation:none}}`
 
 // --- Episode ticker: one real title an hour (the show's red episodes) ---
 export const EPISODES: string[] = [
@@ -124,33 +120,10 @@ ${body}
 </svg>`
 }
 
-// --- Needs tea / Red John is watching: the context chip ---
-export const teaChip = (x: number, y: number, ctxPct: number, t: Th, font: string): { svg: string; w: number } => {
-  if (ctxPct < 85) return { svg: '', w: 0 }
-  const isWatching = ctxPct >= 95
-  const label = isWatching ? 'RED JOHN IS WATCHING ☺' : 'NEEDS TEA ☕︎'
-  const fill = isWatching ? RED : t.warn
-  const w = textW(label, 9.5, 0.5) + 14
-  return {
-    w,
-    svg: `<g class="tea"><rect x="${x}" y="${y - 10}" width="${w}" height="13" rx="2" fill="${fill}"/><text x="${x + w / 2}" y="${y - 0.5}" text-anchor="middle" font-family="${font}" font-size="9.5" font-weight="800" letter-spacing=".5" fill="${inkOn(fill)}">${label}</text></g>`,
-  }
-}
+// --- The context chip is mentalist-cards.ts ctxChip (NEEDS TEA at 85%, RED JOHN IS WATCHING at 95%) ---
 export const TEA_WARNING = (ctx: number): string => `☕ Context nearly full (${ctx}%): time for a cup of tea. /compact`
 
-// --- Case Closed: the cheer when a job is done, with the smiley in a corner, briefly ---
-export const caseClosed = (W: number, H: number, font: string, t: Th, startAt?: number): string => {
-  const at = startAt ? pin(startAt) : '0s'
-  const label = "CASE CLOSED · TEA'S ON"
-  const w = textW(label, 15, 1.5) + 30
-  return `<g class="mflash" style="animation-delay:${at}"><rect x="${(W - w) / 2}" y="${H / 2 - 13}" width="${w}" height="24" fill="${t.accent}" transform="rotate(-1.5 ${W / 2} ${H / 2})"/>
-<text x="${W / 2}" y="${H / 2 + 5}" text-anchor="middle" font-family="${font}" font-size="15" font-weight="800" letter-spacing="1.5" fill="${inkOn(t.accent)}" transform="rotate(-1.5 ${W / 2} ${H / 2})">${esc(label)}</text></g>
-${smiley(W - 26, H - 22, 10, 1, 'rjb').replace('<g class="rjb"', `<g class="rjb" style="animation-delay:${at}"`)}`
-}
-
-// The hidden egg on The Mentalist: faint, in the band's corner, only when a job runs past
-// its time budget or the context is past 95%.
-export const hiddenSmiley = (W: number, H: number): string => smiley(W - 26, H - 21, 9, 0.2, 'rjs')
+// The job-done cheer (a card flips to the ace of hearts) and the painted corner smiley are acts: mentalist-motion.ts.
 
 // --- CBI Cred: the ladder, the badges and the words ---
 const RANKS: [number, string][] = [
@@ -191,3 +164,5 @@ export const REDJOHN_GREETING = 'Tyger Tyger, burning bright…'
 export const CLOSED_FILES_TOAST = '🗂 Case filed with the CBI'
 // Typing this (with the Mentalist skin on) wakes the hidden skin.
 export const TYGER_RE = /tyger\s+tyger/i
+// And this, typed while wearing Red John, is the way back to The Mentalist (his name, whole: never a lone "jane" or "patrick").
+export const PATRICK_JANE_RE = /\bpatrick\s+jane\b/i

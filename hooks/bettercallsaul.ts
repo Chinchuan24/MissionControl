@@ -12,6 +12,7 @@ import type { Sprite } from './cast'
 import { sansClip, sansW } from './breakingbad-cards'
 import { pin } from './smooth'
 import { inkOn } from './extras'
+import { BCS_SAUL_HEAD_045, BCS_STATUE_INFLATE_0, BCS_STATUE_INFLATE_1, BCS_STATUE_INFLATE_2, BCS_STATUE_SAG, GENE_DUST_SCRATCH, GENE_GRAIN_1, GENE_GRAIN_2, GENE_GRAIN_3 } from './bettercallsaul-sprites'
 
 export { sansClip, sansW }
 
@@ -212,8 +213,16 @@ ${ringKf('0', 24)}${ringKf('1', 6)}${ringKf('2', 2)}
 @keyframes bcs-cam{0%{opacity:0;transform:translate(var(--sx),0)}15%,82%{opacity:1;transform:none}100%{opacity:0;transform:translate(var(--sx),0)}}
 .bcs-bub{animation:bcs-bub 3s steps(1) both}
 @keyframes bcs-bub{0%,22%{opacity:0}23%,100%{opacity:1}}
-.bcs-grain{animation:bcs-grain .4s steps(1) infinite}
-@keyframes bcs-grain{50%{transform:translate(-1px,1px)}}
+.bcs-gr1,.bcs-gr2,.bcs-gr3{animation:bcs-gr .375s steps(1) infinite}.bcs-gr2{animation-delay:-.25s}.bcs-gr3{animation-delay:-.125s}
+@keyframes bcs-gr{0%,33.3%{opacity:.07}33.4%,100%{opacity:0}}
+.bcs-flk{animation:bcs-flk 2.3s steps(1) infinite}
+@keyframes bcs-flk{0%{opacity:0}13%{opacity:.03}27%{opacity:0}52%{opacity:.02}66%{opacity:0}84%{opacity:.035}90%{opacity:0}}
+.bcs-dust1{animation:bcs-dust 19s steps(1) infinite}.bcs-dust2{animation:bcs-dust 23s steps(1) infinite -11s}
+@keyframes bcs-dust{0%,98.9%{opacity:0}99%,99.6%{opacity:.35}99.7%,100%{opacity:0}}
+.bcs-gblk{animation:bcs-gblk 6.7s steps(1) infinite}
+@keyframes bcs-gblk{0%,95.9%{opacity:0}96%,98.2%{opacity:1}98.3%,100%{opacity:0}}
+.bcs-glint{animation:bcs-glint 5.3s steps(1) infinite}
+@keyframes bcs-glint{0%,90%{opacity:0}90.1%,93%{opacity:1}93.1%,94.5%{opacity:.5}94.6%,100%{opacity:0}}
 .bcs-walk{animation:bcs-walk .7s steps(2) infinite}
 @keyframes bcs-walk{50%{transform:translateY(-1px)}}
 .bcs-go{animation:bcs-go linear both}
@@ -230,16 +239,21 @@ ${ringKf('0', 24)}${ringKf('1', 6)}${ringKf('2', 2)}
 @keyframes bcs-fx{0%{opacity:0}8%,86%{opacity:1}100%{opacity:0}}
 .bcs-ding{animation:bcs-ding .6s steps(1) 3 both}
 @keyframes bcs-ding{0%{opacity:1}50%,100%{opacity:0}}
-.bcs-dingt{transform-box:fill-box;transform-origin:50% 100%;animation:bcs-dingt .6s steps(1) 3 both}
-@keyframes bcs-dingt{0%{transform:rotate(-9deg)}25%{transform:rotate(9deg)}50%,100%{transform:none}}
-.bcs-z3{transform-box:fill-box;transform-origin:50% 100%;animation:bcs-z3 .5s steps(1) 8 both}
-@keyframes bcs-z3{0%{transform:scale(1)}50%{transform:scale(1.3) translateY(-1px)}}
 .bcs-gun1{animation:bcs-tie1 .8s steps(1) infinite}.bcs-gun2{animation:bcs-tie2 .8s steps(1) infinite}
 .bcs-lamp{animation:bcs-lamp 1.6s steps(1) infinite}
 @keyframes bcs-lamp{50%{opacity:.8}}
+.bcs-breath{animation:bcs-breath 4.2s steps(1) infinite}
+@keyframes bcs-breath{50%{transform:translateY(-.5px)}}
+.bcs-blk{animation:bcs-blk 7.3s steps(1) infinite}
+@keyframes bcs-blk{0%,96%{opacity:0}96.1%,98%{opacity:1}98.1%,100%{opacity:0}}
+.bcs-wob{transform-box:fill-box;transform-origin:50% 100%;animation-name:bcs-wob;animation-duration:.5s;animation-timing-function:ease-out;animation-fill-mode:both}
+@keyframes bcs-wob{0%{transform:scaleY(1.08)}40%{transform:scaleY(.95)}100%{transform:none}}
+.bcs-droop{animation-name:bcs-droop;animation-duration:2.5s;animation-timing-function:cubic-bezier(.45,0,.55,1);animation-fill-mode:both}
+@keyframes bcs-droop{0%{transform:none}60%{transform:rotate(3deg) scaleY(.94)}100%{transform:rotate(6deg) scaleY(.86)}}
 @media (prefers-reduced-motion: reduce){
- .bcs-flame,.bcs-pen,.bcs-run,.bcs-chip,.bcs-sway,.bcs-tube,.bcs-arms,.bcs-ring0,.bcs-tilt0,.bcs-ring1,.bcs-tilt1,.bcs-ring2,.bcs-tilt2,.bcs-mad,.bcs-madtilt,.bcs-star,.bcs-wipe,.bcs-shout,.bcs-cheer,.bcs-ad,.bcs-blink,.bcs-stamp,.bcs-fresh,.bcs-flip,.bcs-cam,.bcs-bub,.bcs-grain,.bcs-walk,.bcs-go,.bcs-putt,.bcs-tie1,.bcs-tie2,.bcs-up,.bcs-dim,.bcs-lamp,.bcs-fx,.bcs-ding,.bcs-dingt,.bcs-z3,.bcs-gun1,.bcs-gun2{animation:none}
+ .bcs-flame,.bcs-pen,.bcs-run,.bcs-chip,.bcs-sway,.bcs-tube,.bcs-arms,.bcs-ring0,.bcs-tilt0,.bcs-ring1,.bcs-tilt1,.bcs-ring2,.bcs-tilt2,.bcs-mad,.bcs-madtilt,.bcs-star,.bcs-wipe,.bcs-shout,.bcs-cheer,.bcs-ad,.bcs-blink,.bcs-stamp,.bcs-fresh,.bcs-flip,.bcs-cam,.bcs-bub,.bcs-gr1,.bcs-gr2,.bcs-gr3,.bcs-flk,.bcs-dust1,.bcs-dust2,.bcs-gblk,.bcs-glint,.bcs-walk,.bcs-go,.bcs-putt,.bcs-tie1,.bcs-tie2,.bcs-up,.bcs-dim,.bcs-lamp,.bcs-fx,.bcs-ding,.bcs-gun1,.bcs-gun2,.bcs-breath,.bcs-blk,.bcs-wob,.bcs-droop,.bcs-win{animation:none}
  .bcs-ring0,.bcs-ring1,.bcs-ring2{opacity:0}.bcs-mad{opacity:1}.bcs-star,.bcs-wipe,.bcs-shout,.bcs-cheer,.bcs-ad,.bcs-cam,.bcs-bub{opacity:1;transform:none}.bcs-run{opacity:.6}
+ .bcs-gr1{opacity:.07}.bcs-gr2,.bcs-gr3,.bcs-flk,.bcs-dust1,.bcs-dust2,.bcs-gblk,.bcs-glint{opacity:0}
  .bcs-tie2,.bcs-gun2{opacity:0}.bcs-ding{opacity:0}.bcs-fx{opacity:1}.bcs-up{transform:none}.bcs-dim{opacity:.85}.bcs-go{transform:translateX(var(--b))}
 }`
 
@@ -277,12 +291,50 @@ export const pickCss = (css: string, names: string[]): string => {
   return parse(css).map(keep).filter(Boolean).join('\n')
 }
 /** What the pane's cards need (their own motion, Mike and Lalo on them, Chuck's dim, Hector's bell). */
-export const CARD_CSS = pickCss(BCS_CSS, ['pen', 'run', 'flip', 'fresh', 'stamp', 'sway', 'grain', 'walk', 'cam', 'bub', 'up', 'dim', 'lamp', 'mad', 'madtilt'])
+export const CARD_CSS = pickCss(BCS_CSS, ['pen', 'run', 'flip', 'fresh', 'stamp', 'sway', 'gr', 'gr1', 'gr2', 'gr3', 'flk', 'dust', 'dust1', 'dust2', 'walk', 'cam', 'bub', 'up', 'dim', 'lamp', 'mad', 'madtilt'])
 
 // ---------------------------------------------------------------- primitives
-/** Film grain for GENE: fractal noise, desaturated, 7% alpha, jittering 1 px in steps so it reads as projected film. */
-export const grain = (W: number, H: number): string =>
-  `<defs><filter id="bcsgr" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".85" numOctaves="2" seed="7" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/><feComponentTransfer><feFuncA type="table" tableValues="0 .07"/></feComponentTransfer></filter></defs><rect class="bcs-grain" x="-2" y="-2" width="${W + 4}" height="${H + 4}" filter="url(#bcsgr)" pointer-events="none"/>`
+/** A pixel tile as stroked 1 px dots in at most two inks (light, dark): `M x y.5h n` per run, relative moves after the first, about
+ *  half the chars of filled squares (a grain tile is a few hundred lone specks). */
+const dots = (sp: Sprite, light: string, dark: string): string => {
+  const lightK = new Set(Object.entries(sp.pal).filter(([, c]) => parseInt(c.slice(1, 3), 16) >= 128).map(([k]) => k))
+  const ink = (want: boolean): string => {
+    let d = ''
+    let px = 0
+    let py = 0
+    let first = true
+    sp.rows.forEach((row, y) => {
+      let x = 0
+      while (x < row.length) {
+        const ch = row[x] as string
+        if (ch === '.' || !sp.pal[ch] || lightK.has(ch) !== want) { x++; continue }
+        let n = 1
+        while (x + n < row.length && row[x + n] !== '.' && sp.pal[row[x + n] as string] && lightK.has(row[x + n] as string) === want) n++
+        d += first ? `M${x} ${y}.5h${n}` : `m${x - px} ${y - py}h${n}`
+        first = false
+        px = x + n
+        py = y
+        x += n
+      }
+    })
+    return d
+  }
+  return `<path d="${ink(true)}" stroke="${light}"/><path d="${ink(false)}" stroke="${dark}"/>`
+}
+/**
+ * GENE's projected film: three baked grain tiles (GENE_GRAIN_1..3, 32 px, white and black specks) stepped one after the other at
+ * 8 fps at 7%, a ±3% flicker, and a dust speck or a broken vertical scratch (GENE_DUST_SCRATCH) for two frames now and then (19 s
+ * and 23 s loops, at two seeded places). No filter anywhere: every piece is a pattern or a shape whose opacity steps. Reduced
+ * motion: tile 1 at 7%, nothing moves. Ids keep the old `bcsgr` prefix.
+ */
+export const grain = (W: number, H: number): string => {
+  const tile = (i: number, sp: Sprite): string => `<pattern id="bcsgr${i}" patternUnits="userSpaceOnUse" width="32" height="32"><g stroke-width="1" fill="none">${dots(sp, '#FFFFFF', '#000000')}</g></pattern>`
+  const r = rng(`dust${W}x${H}`)
+  const x1 = Math.round(W * (0.12 + 0.3 * r()))
+  const x2 = Math.round(W * (0.55 + 0.35 * r()))
+  const dust = `<g id="bcsgrd" fill="none" stroke-width="1">${dots(GENE_DUST_SCRATCH, '#F4F4F4', '#101010')}</g>`
+  return `<defs>${tile(1, GENE_GRAIN_1)}${tile(2, GENE_GRAIN_2)}${tile(3, GENE_GRAIN_3)}${dust}</defs><g pointer-events="none">${[1, 2, 3].map(i => `<rect class="bcs-gr${i}" width="${W}" height="${H}" fill="url(#bcsgr${i})" opacity="${i === 1 ? 0.07 : 0}"/>`).join('')}<rect class="bcs-flk" width="${W}" height="${H}" fill="#000" opacity="0"/><use class="bcs-dust1" href="#bcsgrd" x="${x1}" y="${Math.max(0, Math.round(H / 2 - 24))}" opacity="0"/><use class="bcs-dust2" href="#bcsgrd" transform="translate(${x2} ${Math.max(0, Math.round(H / 2 - 24))}) scale(-1 1)" opacity="0"/></g>`
+}
 /** A soft vignette for GENE (the Omaha scenes are shot dark at the edges). */
 export const vignette = (W: number, H: number): string =>
   `<defs><radialGradient id="bcsvg" cx="50%" cy="50%" r="72%"><stop offset="55%" stop-color="#000" stop-opacity="0"/><stop offset="100%" stop-color="#000" stop-opacity=".45"/></radialGradient></defs><rect x="0" y="0" width="${W}" height="${H}" fill="url(#bcsvg)" pointer-events="none"/>`
@@ -320,9 +372,71 @@ export const burst = (cx: number, cy: number, r: number, fill: string, extra = '
   return `<path d="${d}Z" fill="${fill}" ${extra}/>`
 }
 
-/** The inflatable Statue of Liberty on the strip-mall roof (a prop, 10 by 16 px): pixel art, torch up. */
-export const STATUE: Sprite = { rows: ['......t...', '......t...', '.....tt...', '.....ss...', '..sssss...', '.ssasss...', '..sasas...', '.ssssss...', '..ssss....', '..ssss....', '..dssd....', '..ssss....', '.ssssss...', '.ssssss...', 'ssssssss..', 'dddddddd..'], pal: { t: PROPS.torch, s: PROPS.statue, a: '#2A3F3A', d: PROPS.statueDark } }
+/** The inflatable Statue of Liberty on the strip-mall roof (a prop, 10 by 17 px, the top row empty so it shares the inflate
+ *  frames' canvas and foot): pixel art, torch up. The torch is `y` (yellow): `px()` paints the letter `t` as the crew's tint, so
+ *  the torch once drew dark teal. */
+export const STATUE: Sprite = { rows: ['..........', '......y...', '......y...', '.....yy...', '.....ss...', '..sssss...', '.ssasss...', '..sasas...', '.ssssss...', '..ssss....', '..ssss....', '..dssd....', '..ssss....', '.ssssss...', '.ssssss...', 'ssssssss..', 'dddddddd..'], pal: { y: PROPS.torch, s: PROPS.statue, a: '#2A3F3A', d: PROPS.statueDark } }
 export const statue = (x: number, y: number, s: number, gene: boolean, cls = 'bcs-sway'): string => px(STATUE, x, y, s, { grey: gene, cls })
+
+/**
+ * Something shown (`show`) or hidden only inside [t0, t1) s of a timeline `T` s long that starts at the wall-clock `at`: pinned,
+ * so a redraw lands on the right moment, and it ends on its own (outside the window the markup is as drawn). Reduced motion:
+ * no animation, so a `show` piece stays hidden (opacity 0) and a hidden one stays shown.
+ */
+export const windowed = (inner: string, at: number, T: number, t0: number, t1: number, show: boolean): string => {
+  const a = r2((t0 / T) * 100)
+  const b = r2((t1 / T) * 100)
+  const k = `bcs-w${show ? 's' : 'h'}${Math.round(T * 100)}-${Math.round(t0 * 100)}-${Math.round(t1 * 100)}`
+  const on = show ? 1 : 0
+  const off = show ? 0 : 1
+  const css = `@keyframes ${k}{${a > 0 ? `0%,${a}%{opacity:${off}}${r2(a + 0.01)}%,` : '0%,'}${b}%{opacity:${on}}${r2(b + 0.01)}%,100%{opacity:${off}}}`
+  return `<style>${css}</style><g class="bcs-win"${show ? ' opacity="0"' : ''} style="animation-name:${k};animation-duration:${T}s;animation-timing-function:steps(1,end);animation-fill-mode:both;animation-delay:calc(${pin(at)} + 0s)">${inner}</g>`
+}
+
+// ---------------------------------------------------------------- the statue's state (inflate on a job start, sag at rest)
+/** The inflate: flat, half, overshoot (120 ms each), then the statue with a wobble; the deflate after a job: a slow 2.5 s droop. */
+export const INFLATE_MS = 900
+export const DEFLATE_FROM = 2.4
+export const DEFLATE_MS = 2_500
+const STATUE_S = 1.3
+/**
+ * The inflatable at (x, foot): upright and swaying while a job runs (inflating for the first 0.9 s, pinned to the job's start),
+ * sagging with a 6° lean at rest (drooping into it over 2.5 s once the cheer is through, pinned to the job's end). GENE: grey,
+ * no sway. Reduced motion: the state's still pose (upright or sagging), never the in-between.
+ */
+export const statueAt = (x: number, foot: number, gene: boolean, ctx: { working?: boolean; jobAt?: number; partyAt?: number; at?: number }): string => {
+  const s = STATUE_S
+  const y = foot - 17 * s
+  const at = ctx.at ?? 0
+  const sway = gene ? '' : 'bcs-sway'
+  const one = (sp: Sprite, cls = ''): string => px(sp, x, y, s, { grey: gene, ...(cls ? { cls } : {}) })
+  const lean = (inner: string): string => `<g transform="rotate(6 ${r1(x + 4 * s)} ${r1(foot)})">${inner}</g>`
+  if (ctx.working) {
+    const j = ctx.jobAt
+    if (j === undefined || at - j > 5_000 || at < j - 1_000) return one(STATUE, sway)
+    const T = INFLATE_MS / 1000
+    const frames = [[BCS_STATUE_INFLATE_0, 0, 0.12], [BCS_STATUE_INFLATE_1, 0.12, 0.24], [BCS_STATUE_INFLATE_2, 0.24, 0.4]] as const
+    const up = `<g class="bcs-wob" style="animation-delay:calc(${pin(j)} + .4s)">${one(STATUE, sway)}</g>`
+    // The statue itself is hidden until the overshoot frame is through; the three frames show in their windows only.
+    return `${frames.map(([sp, a, b]) => windowed(one(sp), j, T, a, b, true)).join('')}${windowed(up, j, T, 0, 0.4, false)}`
+  }
+  const p = ctx.partyAt
+  if (p !== undefined && at >= p - 1_000 && at - p < (DEFLATE_FROM * 1000 + DEFLATE_MS) + 2_000) {
+    // Still upright through the cheer, then the droop (an eased lean + squash), then the sagging frame.
+    const T = DEFLATE_FROM + DEFLATE_MS / 1000
+    const droop = `<g class="bcs-droop" style="transform-origin:${r1(x + 4 * s)}px ${r1(foot)}px;animation-delay:calc(${pin(p)} + ${DEFLATE_FROM}s)">${one(STATUE)}</g>`
+    return `${windowed(droop, p, T, 0, T - 0.3, true)}${windowed(lean(one(BCS_STATUE_SAG)), p, T, 0, T - 0.3, false)}`
+  }
+  return lean(one(BCS_STATUE_SAG))
+}
+
+// ---------------------------------------------------------------- the bust's idle life (a breath, a blink) and the glance
+/** Gene's eyes behind the glasses on BCS_GENE_BUST (the lenses' inner pixels, row 13): his blink paints two pixels each. */
+export const GENE_LENS: [number, number][] = [[13, 13], [19, 13]]
+/** Saul's eyes on BCS_SAUL_BUST (sprite pixels): the blink paints them as lids. */
+const SAUL_EYES: [number, number][] = [[17, 13], [23, 13]]
+/** The job-done glance: after the cheer's wipe, Saul looks aside (the ¾ head) for about a second, then back. */
+export const GLANCE = { t0: 2.5, t1: 3.7, T: 4.2 } as const
 
 /** The wacky waving inflatable tube man (a prop built from rects, 9 wide and 20 tall at s 1): a head, a tube body, flailing arms. */
 export const tubeMan = (x: number, y: number, s: number, gene: boolean, still = false): string => {
@@ -430,7 +544,7 @@ export const bcsEpisodeAt = (at: number): string => {
 export const s1Ending = (code: string, title: string): boolean => /^S1E\d+$/.test(code) && title !== 'Alpine Shepherd Boy' && /o$/i.test(title)
 
 // ---------------------------------------------------------------- the slim band's hooks
-export type BandCtx = { ctxPct: number; overBudget: boolean; isWorking?: boolean; capri?: boolean; at?: number }
+export type BandCtx = { ctxPct: number; overBudget: boolean; isWorking?: boolean; capri?: boolean; at?: number; /** The running job's start (the statue inflates). */ jobAt?: number; /** The last job's end (the cheer; the statue droops after it). */ partyAt?: number }
 
 /** The ground layer: wood grain, the strip-mall roofline with faux-Roman column ticks, the Statue, the tube man, Hector's bell. GENE: vignette, grain. */
 export const bcsFoot = (W: number, H: number, ctx: BandCtx, gene: boolean): string => {
@@ -444,8 +558,9 @@ export const bcsFoot = (W: number, H: number, ctx: BandCtx, gene: boolean): stri
   const ry = H - 7.5
   s += `<line x1="6" y1="${ry}" x2="${W - 6}" y2="${ry}" stroke="${P.muted}" stroke-opacity=".45" stroke-width="1.5"/>`
   for (let x = 36; x < W - 60; x += 52) s += `<rect x="${x}" y="${ry + 2}" width="1.5" height="${H - ry - 3}" fill="${P.muted}" opacity=".35"/><rect x="${x + 5}" y="${ry + 2}" width="1.5" height="${H - ry - 3}" fill="${P.muted}" opacity=".35"/>`
-  // The inflatable Statue at the left end of the roof (x 6 to 19), clear of the tip dot at x 20; the tube man dances on the roof by the bell.
-  s += statue(6, ry - 20.8, 1.3, gene, gene ? '' : 'bcs-sway')
+  // The inflatable Statue at the left end of the roof (x 6 to 19), clear of the tip dot at x 20: up while a job runs, sagging at
+  // rest. The tube man dances on the roof by the bell.
+  s += statueAt(6, ry, gene, { working: Boolean(ctx.isWorking), at: ctx.at ?? 0, ...(ctx.jobAt !== undefined ? { jobAt: ctx.jobAt } : {}), ...(ctx.partyAt !== undefined ? { partyAt: ctx.partyAt } : {}) })
   s += tubeMan(W - 37, ry - 18, 0.9, gene, gene)
   const mode = bellMode(ctx.ctxPct, ctx.overBudget)
   s += `<g opacity="${mode === 'mad' ? 0.95 : 0.6}">${bell(W - 21, H - 17, 1.3, mode, gene)}</g>`
@@ -531,12 +646,36 @@ export const bcsGauge = (xr: number, y: number, isWorking: boolean, done: number
   return { svg: s, w }
 }
 
-/** The boss bust in the task row's 34 by 40 box at (20, 36): Saul at 0.9 (37 by 36), Gene at 0.9 (30 by 36). */
-export const bcsFigure = (gene: boolean): string =>
-  gene
-    ? // The only colour in GENE: a tiny ad for "Better Call Saul" reflected in the glasses (two pixels, red and yellow).
-      `<g class="bcs-bust">${px(BCS_GENE_BUST, 22, 38, 0.9)}<rect x="${r1(22 + 13 * 0.9)}" y="${r1(38 + 13 * 0.9)}" width=".9" height=".9" fill="#D7262C"/><rect x="${r1(22 + 19 * 0.9)}" y="${r1(38 + 13 * 0.9)}" width=".9" height=".9" fill="#FFD23F"/></g>`
-    : `<g class="bcs-bust">${px(BCS_SAUL_BUST, 18, 38, 0.9)}</g>`
+/**
+ * The boss bust in the task row's 34 by 40 box at (20, 36): Saul at 0.9 (37 by 36), Gene at 0.9 (30 by 36). Idle life, cheap:
+ * a breath (a 0.4 px rise every 4.2 s, two steps) and, for Saul, a blink (two lid pixels for 0.15 s every 7.3 s). `glanceAt`:
+ * the job's end; Saul looks aside after the cheer. `hideAt`: the start of `saul3d`, whose act draws the head (the bust hides
+ * for its 4 s and comes back on its own).
+ */
+export const bcsFigure = (gene: boolean, o: { glanceAt?: number; at?: number; hideAt?: number; hideMs?: number } = {}): string => {
+  const s = 0.9
+  let inner: string
+  if (gene) {
+    // The only colour in GENE: a tiny ad for "Better Call Saul" reflected in the glasses (two pixels, red and yellow).
+    // His blink: the lenses' inner pixels go to the skin's grey for 0.15 s every 6.7 s; a glint crosses the left lens every 5.3 s.
+    const lid = GENE_LENS.map(([ex, ey]) => `<rect x="${r1(22 + ex * s)}" y="${r1(38 + ey * s)}" width="${r1(2 * s)}" height="${s}" fill="#CAC9C9"/>`).join('')
+    const glint = `<path class="bcs-glint" opacity="0" d="M${r1(22 + 12.6 * s)} ${r1(38 + 11.6 * s)}l.5 1.3 1.3 .5 -1.3 .5 -.5 1.3 -.5 -1.3 -1.3 -.5 1.3 -.5z" fill="#FFFFFF"/>`
+    inner = `<g class="bcs-breath">${px(BCS_GENE_BUST, 22, 38, s)}<rect x="${r1(22 + 13 * s)}" y="${r1(38 + 13 * s)}" width=".9" height=".9" fill="#D7262C"/><rect x="${r1(22 + 19 * s)}" y="${r1(38 + 13 * s)}" width=".9" height=".9" fill="#FFD23F"/><g class="bcs-gblk" opacity="0">${lid}</g>${glint}</g>`
+  } else {
+    const lids = SAUL_EYES.map(([ex, ey]) => `<rect x="${r1(18 + ex * s)}" y="${r1(38 + ey * s)}" width="${s}" height="${s}" fill="#E79E73"/>`).join('')
+    inner = `<g class="bcs-breath">${px(BCS_SAUL_BUST, 18, 38, s)}<g class="bcs-blk" opacity="0">${lids}</g></g>`
+    const g = o.glanceAt
+    if (g !== undefined && o.at !== undefined && o.at >= g - 1_000 && o.at < g + GLANCE.T * 1000) {
+      // The ¾ head drawn in the bust's place (40 of its 45 rows, so the scale holds), its turn axis on the bust's centre.
+      const hs = (40 / 45) * s
+      const head = px(BCS_SAUL_HEAD_045, 18 + 20.5 * s - 19 * hs, 38 + 40 * s - 45 * hs, hs)
+      inner = `${windowed(inner, g, GLANCE.T, GLANCE.t0, GLANCE.t1, false)}${windowed(head, g, GLANCE.T, GLANCE.t0, GLANCE.t1, true)}`
+    }
+  }
+  const h = o.hideAt
+  if (h !== undefined) inner = windowed(inner, h, (o.hideMs ?? 4000) / 1000, 0, (o.hideMs ?? 4000) / 1000 - 0.05, false)
+  return `<g class="bcs-bust">${inner}</g>`
+}
 
 /** A paralegal at 0.34 (5 by 16), the blazer tinted by role (one look per role colour). */
 export const bcsCrew = (x: number, y: number, color: string, gene: boolean): string => {
