@@ -52,7 +52,7 @@ import type { Badge, Beat, Cred, CredWords, Frame } from './extras'
 import type { Legend } from './eggs'
 import { perWindow } from './stage/director'
 import type { SwitchFlavour } from './stage/wipe'
-import { CAPRI_SWITCH, D_SWITCH, er2FightBand, er2FightPane, fightLive, playing as er2Playing, slateAct } from './edgerunners2-motion'
+import { CAPRI_SWITCH, D_SWITCH, er2FightBand, er2FightPane, fightLive, fightMeets, playing as er2Playing, slateAct } from './edgerunners2-motion'
 
 /** What the band's figure slot knows: the clock, the context, and whether the job-done celebration is drawing. */
 /** What the log card knows of the clock (Edgerunners 2's tape: it runs while a job works, rewinds on a new beat, CUT! when done). */
@@ -409,7 +409,7 @@ const er2Theme = (sec: boolean): ThemeEggs => ({
     creep: er2PaneCreep,
     halo: er2Halo,
     css: TK_CSS,
-    hack: a => (fightLive(a.at, true, sec) ? '' : er2Hack(sec ? 'capricorn' : 'er2', sec ? a : { ...a, taken: w0 => duetPlan(DUET_SEED, w0, a.ctxPct, er2RoamFor(a.ctxPct)).on }, sec)),
+    hack: a => (fightLive(a.at, true, sec) ? '' : er2Hack(sec ? 'capricorn' : 'er2', { ...a, busy: (t0, t1) => fightMeets(t0, t1, true, sec), ...(sec ? {} : { taken: (w0: number) => duetPlan(DUET_SEED, w0, a.ctxPct, er2RoamFor(a.ctxPct)).on }) }, sec)),
     hush: at => fightLive(at, true, sec),
   },
   takeover: (W, H, line, tm) => er2Takeover(W, H, line, tm, sec),

@@ -89,6 +89,11 @@ export const fightLive = (at: number, working: boolean, sec: boolean): boolean =
   const f = er2Fight(at, working, sec, 0)
   return Boolean(f && at >= f.startAt - 500 && at < f.startAt + ACT_MS[f.kind] + 500)
 }
+/** Does a fight (scheduled or replayed) meet [t0, t1] (half a second either side)? Capri's hack lines drawn ahead keep out of it. */
+export const fightMeets = (t0: number, t1: number, working: boolean, sec: boolean): boolean => {
+  const f = er2Fight(t0, working, sec, Math.max(0, t1 - t0) + 1_000)
+  return Boolean(f && f.startAt < t1 + 500 && f.startAt + ACT_MS[f.kind] > t0 - 500)
+}
 const play = (kind: Er2Kind) => (at: number): void => { PLAY = { kind, at } }
 registerPlay(ER2_SKINS, { name: 'cyberpsycho', what: 'D vs a cyberpsycho, cut like a film', run: play('cyberpsycho') })
 registerPlay(ER2_SKINS, { name: 'capri-vs-d', what: 'Capri vs D for control of the HUD', run: play('capri-vs-d') })
