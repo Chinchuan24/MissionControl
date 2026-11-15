@@ -5,7 +5,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import { meets, overlaps, readouts } from './stage/keep'
 import { BUDGET, audit } from './stage/budget'
-import { bcsCheer, isAdCheer } from './bettercallsaul'
+import { BCS_CSS, bcsCheer, bcsFoot, isAdCheer } from './bettercallsaul'
 import { EGG_MS, HEAD, TURN, ding, namaste, rant, saul3d, turnStage } from './bettercallsaul-motion'
 import { chicaneryBand } from './bettercallsaul-court'
 
@@ -172,4 +172,28 @@ test('saul3d: the head leaves the 45 px bust for a stage in the clear span, turn
   }
   // Off the band (no stage): the bust's own spot at 1x, as before.
   expect(turnStage(1250, 134).sc).toBe(HEAD.sc)
+})
+
+// --- 5. GENE's mall-camera foot ----------------------------------------------------------------------------------------------
+test("gene's foot is the mall: a security camera pans (stepped, 8 s, 1 s holds) and an escalator's stripe creeps up; grey, cheap, still under reduced motion", () => {
+  const g = bcsFoot(1250, 134, { ctxPct: 10, overBudget: false, isWorking: true, at: NOW }, true)
+  expect(g).toContain('class="bcs-cctv"')
+  expect(g).toContain('class="bcs-led"')
+  expect(g).toContain('class="bcs-esc"')
+  // Saul's roof props are gone from GENE (no frozen statue, no tube man); Saul keeps them.
+  expect(g).not.toContain('bcs-tube')
+  const saul = bcsFoot(1250, 134, { ctxPct: 10, overBudget: false, isWorking: true, at: NOW }, false)
+  expect(saul).toContain('bcs-tube')
+  expect(saul).not.toContain('bcs-cctv')
+  // Grey only, no filter at rest, stepped loops only.
+  const cam = /<g shape-rendering="crispEdges"><rect[^]*?bcs-cctv[^]*?<\/g><\/g>/.exec(g)?.[0] ?? ''
+  for (const c of cam.match(/#[0-9A-F]{6}/gi) ?? []) { const [r, gg, b] = [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16)) as [number, number, number]; expect(Math.max(r, gg, b) - Math.min(r, gg, b), c).toBeLessThanOrEqual(2) }
+  expect(cam).not.toContain('filter')
+  for (const k of ['bcs-cctv', 'bcs-led', 'bcs-esc']) {
+    expect(BCS_CSS).toMatch(new RegExp(`\\.${k}\\{animation:${k} [\\d.]+s steps\\(\\d\\) infinite\\}`))
+    expect(BCS_CSS.split('prefers-reduced-motion')[1]).toContain(`.${k}`)
+  }
+  // The pan: a 1 s hold at each end (12.5 % of 8 s), +-12 degrees.
+  expect(BCS_CSS).toContain('0%,12.5%{transform:rotate(-12deg)}')
+  expect(BCS_CSS).toContain('50%,62.5%{transform:rotate(12deg)}')
 })

@@ -244,6 +244,12 @@ ${ringKf('0', 24)}${ringKf('1', 6)}${ringKf('2', 2)}
 .bcs-gun1{animation:bcs-tie1 .8s steps(1) infinite}.bcs-gun2{animation:bcs-tie2 .8s steps(1) infinite}
 .bcs-lamp{animation:bcs-lamp 1.6s steps(1) infinite}
 @keyframes bcs-lamp{50%{opacity:.8}}
+.bcs-cctv{animation:bcs-cctv 8s steps(1) infinite}
+@keyframes bcs-cctv{0%,12.5%{transform:rotate(-12deg)}18.75%{transform:rotate(-8deg)}25%{transform:rotate(-4deg)}31.25%{transform:none}37.5%{transform:rotate(4deg)}43.75%{transform:rotate(8deg)}50%,62.5%{transform:rotate(12deg)}68.75%{transform:rotate(8deg)}75%{transform:rotate(4deg)}81.25%{transform:none}87.5%{transform:rotate(-4deg)}93.75%{transform:rotate(-8deg)}100%{transform:rotate(-12deg)}}
+.bcs-led{animation:bcs-led 2s steps(1) infinite}
+@keyframes bcs-led{50%{opacity:.15}}
+.bcs-esc{animation:bcs-esc 2.5s steps(5) infinite}
+@keyframes bcs-esc{to{stroke-dashoffset:-5}}
 .bcs-breath{animation:bcs-breath 4.2s steps(1) infinite}
 @keyframes bcs-breath{50%{transform:translateY(-.5px)}}
 .bcs-blk{animation:bcs-blk 7.3s steps(1) infinite}
@@ -253,7 +259,7 @@ ${ringKf('0', 24)}${ringKf('1', 6)}${ringKf('2', 2)}
 .bcs-droop{animation-name:bcs-droop;animation-duration:2.5s;animation-timing-function:cubic-bezier(.45,0,.55,1);animation-fill-mode:both}
 @keyframes bcs-droop{0%{transform:none}60%{transform:rotate(3deg) scaleY(.94)}100%{transform:rotate(6deg) scaleY(.86)}}
 @media (prefers-reduced-motion: reduce){
- .bcs-flame,.bcs-pen,.bcs-run,.bcs-chip,.bcs-sway,.bcs-tube,.bcs-arms,.bcs-ring0,.bcs-tilt0,.bcs-ring1,.bcs-tilt1,.bcs-ring2,.bcs-tilt2,.bcs-mad,.bcs-madtilt,.bcs-star,.bcs-wipe,.bcs-shout,.bcs-cheer,.bcs-ad,.bcs-blink,.bcs-stamp,.bcs-fresh,.bcs-flip,.bcs-cam,.bcs-bub,.bcs-gr1,.bcs-gr2,.bcs-gr3,.bcs-flk,.bcs-dust1,.bcs-dust2,.bcs-gblk,.bcs-glint,.bcs-walk,.bcs-go,.bcs-putt,.bcs-tie1,.bcs-tie2,.bcs-up,.bcs-dim,.bcs-lamp,.bcs-fx,.bcs-ding,.bcs-gun1,.bcs-gun2,.bcs-breath,.bcs-blk,.bcs-wob,.bcs-droop,.bcs-win{animation:none}
+ .bcs-flame,.bcs-pen,.bcs-run,.bcs-chip,.bcs-sway,.bcs-tube,.bcs-arms,.bcs-ring0,.bcs-tilt0,.bcs-ring1,.bcs-tilt1,.bcs-ring2,.bcs-tilt2,.bcs-mad,.bcs-madtilt,.bcs-star,.bcs-wipe,.bcs-shout,.bcs-cheer,.bcs-ad,.bcs-blink,.bcs-stamp,.bcs-fresh,.bcs-flip,.bcs-cam,.bcs-bub,.bcs-gr1,.bcs-gr2,.bcs-gr3,.bcs-flk,.bcs-dust1,.bcs-dust2,.bcs-gblk,.bcs-glint,.bcs-walk,.bcs-go,.bcs-putt,.bcs-tie1,.bcs-tie2,.bcs-up,.bcs-dim,.bcs-lamp,.bcs-fx,.bcs-ding,.bcs-gun1,.bcs-gun2,.bcs-breath,.bcs-blk,.bcs-wob,.bcs-droop,.bcs-win,.bcs-cctv,.bcs-led,.bcs-esc{animation:none}
  .bcs-ring0,.bcs-ring1,.bcs-ring2{opacity:0}.bcs-mad{opacity:1}.bcs-star,.bcs-wipe,.bcs-shout,.bcs-cheer,.bcs-ad,.bcs-cam,.bcs-bub{opacity:1;transform:none}.bcs-run{opacity:.6}
  .bcs-gr1{opacity:.07}.bcs-gr2,.bcs-gr3,.bcs-flk,.bcs-dust1,.bcs-dust2,.bcs-gblk,.bcs-glint{opacity:0}
  .bcs-tie2,.bcs-gun2{opacity:0}.bcs-ding{opacity:0}.bcs-fx{opacity:1}.bcs-up{transform:none}.bcs-dim{opacity:.85}.bcs-go{transform:translateX(var(--b))}
@@ -549,6 +555,22 @@ export const s1Ending = (code: string, title: string): boolean => /^S1E\d+$/.tes
 export type BandCtx = { ctxPct: number; overBudget: boolean; isWorking?: boolean; capri?: boolean; at?: number; /** The running job's start (the statue inflates). */ jobAt?: number; /** The last job's end (the cheer; the statue droops after it). */ partyAt?: number }
 
 /** The ground layer: wood grain, the strip-mall roofline with faux-Roman column ticks, the Statue, the tube man, Hector's bell. GENE: vignette, grain. */
+/**
+ * GENE's mall camera (on the roofline at `x`, its pole's foot at `y`): a grey security camera on a pole pans the floor, ±12°
+ * over 8 s with a 1 s hold at each end, ticking 4° every half second (a stepped loop: as cheap at rest as a blink); its LED
+ * blinks. Points left, at the band. Reduced motion: still, at -12°. Gene's paranoia as a prop (12 by 16 px).
+ */
+export const mallCam = (x: number, y: number): string => {
+  const py = y - 12
+  const cam = `<rect x="${r1(x - 10)}" y="${r1(py - 4)}" width="11" height="5" rx="1" fill="#BDBDBD"/><rect x="${r1(x - 11)}" y="${r1(py - 5)}" width="13" height="1.5" fill="#E2E2E2"/><rect x="${r1(x - 12)}" y="${r1(py - 3)}" width="2" height="3" fill="#2A2A2A"/><rect class="bcs-led" x="${r1(x - 1.5)}" y="${r1(py - 3)}" width="1" height="1" fill="#F4F4F4"/>`
+  return `<g shape-rendering="crispEdges"><rect x="${r1(x - 0.75)}" y="${r1(py)}" width="1.5" height="12" fill="#6A6A6A"/><rect x="${r1(x - 3)}" y="${r1(y - 1.5)}" width="6" height="1.5" fill="#5A5A5A"/><g class="bcs-cctv" style="transform-origin:${r1(x)}px ${r1(py)}px" transform="rotate(-12 ${r1(x)} ${r1(py)})">${cam}</g></g>`
+}
+/** GENE's escalator at the roof's left end (x to x + 14): the steps' sawtooth, the handrail, a dashed stripe creeping up it. */
+export const escalator = (x: number, y: number): string => {
+  let steps = `M${r1(x)} ${r1(y)}`
+  for (let i = 0; i < 4; i++) steps += `h3.5v-3.2`
+  return `<g fill="none" stroke-linecap="round"><path d="${steps}" stroke="#5A5A5A" stroke-width="1.2"/><path d="M${r1(x + 1)} ${r1(y - 4)}L${r1(x + 14)} ${r1(y - 15)}" stroke="#7A7A7A" stroke-width="1.6"/><path class="bcs-esc" d="M${r1(x + 1)} ${r1(y - 4)}L${r1(x + 14)} ${r1(y - 15)}" stroke="#BDBDBD" stroke-width="1" stroke-dasharray="2 3"/></g>`
+}
 export const bcsFoot = (W: number, H: number, ctx: BandCtx, gene: boolean): string => {
   const P = pal(gene)
   let s = `<g>`
@@ -562,8 +584,12 @@ export const bcsFoot = (W: number, H: number, ctx: BandCtx, gene: boolean): stri
   for (let x = 36; x < W - 60; x += 52) s += `<rect x="${x}" y="${ry + 2}" width="1.5" height="${H - ry - 3}" fill="${P.muted}" opacity=".35"/><rect x="${x + 5}" y="${ry + 2}" width="1.5" height="${H - ry - 3}" fill="${P.muted}" opacity=".35"/>`
   // The inflatable Statue at the left end of the roof (x 6 to 19), clear of the tip dot at x 20: up while a job runs, sagging at
   // rest. The tube man dances on the roof by the bell.
-  s += statueAt(6, ry, gene, { working: Boolean(ctx.isWorking), at: ctx.at ?? 0, ...(ctx.jobAt !== undefined ? { jobAt: ctx.jobAt } : {}), ...(ctx.partyAt !== undefined ? { partyAt: ctx.partyAt } : {}) })
-  s += tubeMan(W - 37, ry - 18, 0.9, gene, gene)
+  // GENE's foot is the mall, not Saul's roof: an escalator's handrail creeps up at the left end, a security camera pans the floor.
+  if (gene) s += escalator(5, ry) + mallCam(W - 31, ry)
+  else {
+    s += statueAt(6, ry, gene, { working: Boolean(ctx.isWorking), at: ctx.at ?? 0, ...(ctx.jobAt !== undefined ? { jobAt: ctx.jobAt } : {}), ...(ctx.partyAt !== undefined ? { partyAt: ctx.partyAt } : {}) })
+    s += tubeMan(W - 37, ry - 18, 0.9, gene, gene)
+  }
   const mode = bellMode(ctx.ctxPct, ctx.overBudget)
   s += `<g opacity="${mode === 'mad' ? 0.95 : 0.6}">${bell(W - 21, H - 17, 1.3, mode, gene)}</g>`
   s += '</g>'
