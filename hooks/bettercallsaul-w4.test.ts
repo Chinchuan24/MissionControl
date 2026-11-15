@@ -4,9 +4,10 @@ import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import { meets, overlaps, readouts } from './stage/keep'
+import type { Rect } from './stage/keep'
 import { BUDGET, audit } from './stage/budget'
 import { BCS_CSS, bcsCheer, bcsFoot, isAdCheer } from './bettercallsaul'
-import { EGG_MS, HEAD, TURN, ding, namaste, rant, saul3d, turnStage } from './bettercallsaul-motion'
+import { EGG_MS, HEAD, STEP_FLOOR, TURN, ding, namaste, rant, saul3d, turnStage } from './bettercallsaul-motion'
 import { chicaneryBand } from './bettercallsaul-court'
 
 const NOW = Date.parse('2026-10-20T10:00:00Z')
@@ -140,12 +141,44 @@ test('typed eggs: each one drawn at least its minimum size at every band-fit wid
       }
     }
   }
-  // At 1250 the ball is one you cannot miss (4x the old 7 px), the car 80 px.
+  // At 1250 the ball is one you cannot miss (4x the old 7 px), the car 100 px (Howard's Jaguar, side on).
   const big = namaste({ W: 1250, H: 134, at: NOW, gene: false, stage: STAGES[1250] })
   expect(big.size.ball).toBeGreaterThanOrEqual(26)
-  expect(big.size.car).toBe(80)
+  expect(big.size.car).toBe(100)
 })
 
+// --- 2b. final review: namaste stands above the bottom line, the head turn never crosses the task title ---------------------
+/** The task title's box on the real band (slimBandSvg's BandStage.title: from x 61 to just left of the Tasks pill). */
+const TITLES: Record<number, Rect> = { 450: [61, 39, 128, 22], 600: [61, 39, 98, 22], 750: [61, 39, 191, 22], 900: [61, 39, 194, 22], 1250: [61, 39, 194, 22] }
+const titled = (W: number) => ({ ...(STAGES[W] as (typeof STAGES)[number]), title: TITLES[W] as Rect })
+const clipRects = (svg: string): Rect[][] =>
+  [...svg.matchAll(/<clipPath id="[^"]+"><path clip-rule="evenodd" d="(M0 34h[^"]+)"/g)].map(m => [...(m[1] as string).matchAll(/M([-\d.]+) ([-\d.]+)h([-\d.]+)v([-\d.]+)/g)].map(r => [1, 2, 3, 4].map(i => Number(r[i])) as Rect))
+test('namaste: the act stands on the step row (above the bottom line), off the task title and every readout, at five widths', () => {
+  for (const gene of [false, true]) {
+    for (const W of W5) {
+      const st = titled(W)
+      const n = namaste({ W, H: 134, at: NOW, gene, stage: st })
+      const boxes = Object.entries(n.boxes ?? {})
+      expect(boxes.length, `${W}`).toBeGreaterThanOrEqual(2)
+      for (const [name, b] of boxes) {
+        // Every piece above the tip line (it starts at y 110), under the header rule, never on the title or a readout's hole.
+        expect(b[1] + b[3], `${name} ${W} bottom`).toBeLessThanOrEqual(STEP_FLOOR + 0.5)
+        expect(b[1], `${name} ${W} top`).toBeGreaterThanOrEqual(34)
+        expect(meets(b, st.title), `${name} ${W} on the title`).toBe(false)
+        for (const h of st.keep) expect(meets(b, h), `${name} ${W} on ${h}`).toBe(false)
+      }
+      // The act's window stops above the tip line, and the title is one of its holes (never drawn over, never dimmed).
+      const [win, ...holes] = clipRects(n.svg)[0] ?? []
+      expect(win, `${W}`).toBeDefined()
+      expect((win as Rect)[1] + (win as Rect)[3], `${W}`).toBeLessThanOrEqual(110)
+      expect(holes.some(h => h[0] === st.title[0] && h[1] === st.title[1] && h[2] === st.title[2]), `${W} title hole`).toBe(true)
+      expect(audit(n.svg).chars, `${W}`).toBeLessThanOrEqual(BUDGET.fightBand.band - 1000)
+    }
+  }
+  // The car reads as a car: side on, 40 by 14 (wheels, windows, lamps), at least 56 px long on the narrowest band.
+  const n450 = namaste({ W: 450, H: 134, at: NOW, gene: false, stage: titled(450) })
+  expect(n450.size.car).toBeGreaterThanOrEqual(56)
+})
 // --- 3. the 3D head turn on its own stage ------------------------------------------------------------------------------------
 test('saul3d: the head leaves the 45 px bust for a stage in the clear span, turns there large under the spotlight, then goes home', () => {
   for (const gene of [false, true]) {

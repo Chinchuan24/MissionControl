@@ -59,8 +59,9 @@ test('eggs: every act is drawn big enough to see, under the band act budget, wit
       expect(out.svg).toContain('prefers-reduced-motion: reduce')
       expect(/<g class="s\w+-s">[\s\S]*?<(use|rect|path|text)/.test(out.svg), k).toBe(true)
       // Kept clear of the readouts: the act clips to the span minus the holes.
-      // (namaste, ding and 1216 take the band's whole clear span, stage/keep.ts spanOf: to y 131, its last row's foot.)
-      expect(/clip-rule="evenodd" d="M0 34h794v(100|97)h-794zM259 39h84v22h-84zM12 88h114v21h-114z"/.test(out.svg), k).toBe(true)
+      // (ding and 1216 take the band's whole clear span, stage/keep.ts spanOf: to y 131, its last row's foot; namaste stands on the
+      // step row and stops above the tip line, at y 110.)
+      expect(new RegExp(`clip-rule="evenodd" d="M0 34h794v${k === 'namaste' ? '76' : '(100|97)'}h-794zM259 39h84v22h-84zM12 88h114v21h-114z"`).test(out.svg), k).toBe(true)
     }
   }
   // GENE stays grey: no Saul blue, no ad red or yellow in GENE's acts.
@@ -79,7 +80,7 @@ test('eggs: a narrow band still plays them inside its span', () => {
     for (const k of ['namaste', 'ding'] as const) {
       const out = k === 'namaste' ? namaste({ W, H: 134, at: NOW, gene: false, stage: st }) : ding({ W, H: 134, at: NOW, gene: false, stage: st })
       expect(chars(out.svg)).toBeLessThan(BUDGET.fightBand.band)
-      expect(out.svg).toContain(`M0 34h${Math.max(120, st.x1)}v97`)
+      expect(out.svg).toContain(`M0 34h${Math.max(120, st.x1)}v${k === 'namaste' ? 76 : 97}`)
     }
   }
 })

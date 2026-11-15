@@ -25,8 +25,9 @@ export type EggKind = 'saul3d' | 'namaste' | 'ding' | 'chicanery' | '1216'
 /** Each act's length (ms). */
 export const EGG_MS: Record<EggKind, number> = { saul3d: 4_000, namaste: 4_800, ding: 3_400, chicanery: CHIC_MS, '1216': 4_000 }
 export type EggArgs = { W: number; H: number; at: number; gene: boolean; stage?: BandStage }
-/** What an act drew and how big its subject is (the tests hold a minimum drawn size for every egg). */
-export type EggOut = { svg: string; size: Record<string, number> }
+/** What an act drew and how big its subject is (the tests hold a minimum drawn size for every egg), and where its pieces stand
+ *  (band px), for the tests that keep them off the task title and the readouts. */
+export type EggOut = { svg: string; size: Record<string, number>; boxes?: Record<string, Rect> }
 
 /** A sprite in grey for GENE (same rows). */
 export const greySp = (sp: Sprite): Sprite => ({ rows: sp.rows, pal: Object.fromEntries(Object.entries(sp.pal).map(([k, v]) => [k, grey(v)])) })
@@ -45,6 +46,12 @@ export const wideOf = (W: number, H: number, stage?: BandStage): { win: Rect; ke
   if (!stage) return { win: windowOf(W, H), keep: undefined }
   const sp = spanOf(H, stage)
   return { win: [0, sp.r.y, sp.r.x + sp.r.w, sp.r.h], keep: sp.keep }
+}
+/** `wideOf` with the task title (BandStage.title) as one more hole: an act that places its pieces in free runs or rectangles keeps
+ *  off the title, nothing of it is drawn over the title, and its scrim never dims it. */
+export const wideTitled = (W: number, H: number, stage?: BandStage): { win: Rect; keep: BandStage | undefined } => {
+  const w = wideOf(W, H, stage)
+  return w.keep && stage?.title ? { win: w.win, keep: { x1: w.keep.x1, keep: [...w.keep.keep, stage.title] } } : w
 }
 /** The widest free run of x in [a, b] for a row band [y0, y1), around the readouts inside the span. */
 export const freeRun = (stage: BandStage | undefined, a: number, b: number, y0: number, y1: number): [number, number] => {
@@ -180,37 +187,71 @@ export const saul3d = (o: EggArgs): EggOut => {
 }
 
 // ---------------------------------------------------------------- namaste: the bowling ball and Howard's car
-/** Howard's car: a silver saloon (16 by 8), the windshield dark. */
+/**
+ * Howard's car, side on and facing right (40 by 14): a silver Jaguar saloon, long and low. A sloping roof and boot, chrome along
+ * the windows, a glint in the glass, a red tail lamp and a warm head lamp, and two dark tyres with bright hubcaps, so it reads as
+ * a car on the dark band (the old 16 by 8 was a grey lump with its wheels lost in the dark).
+ */
 export const HCAR: Sprite = {
-  rows: ['................', '....ssssss......', '...sswwwwss.....', '..ssswwwwsss....', '.ssssssssssssss.', 'sssssssssssssssd', 'dsssssssssssssss', '.kkk.dddddd.kkk.'],
-  pal: { s: '#AEB6BD', w: '#33414F', d: '#6E767C', k: '#15161A' },
+  rows: [
+    '..............hhhhhhhhhhhh..............',
+    '............sswwwwwwswwwwwws............',
+    '...........sswgwwwwwswgwwwwwss..........',
+    '.........ssswwwwwwwwswwwwwwwwsss........',
+    '..hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh.',
+    '.tssssssssssssssssssssssssssssssssssssll',
+    'tsseeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeessl',
+    'dssssssssssssssssssssssssssssssssssssssd',
+    'sssssdkkkkdsssssssssssssssssdkkkkdssssss',
+    'dddddkkuukkdddddddddddddddddkkuukkdddddd',
+    'bbbbdkummukbbbbbbbbbbbbbbbbbkummukdbbbbb',
+    '.....kummuk.................kummuk......',
+    '.....kkuukk.................kkuukk......',
+    '......kkkk...................kkkk.......',
+  ],
+  pal: { h: '#F1F4F7', s: '#B9C3CC', e: '#D9E0E6', d: '#87929C', b: '#56606A', w: '#1C2A38', g: '#7FA0BE', k: '#2A2E34', u: '#D5DBE0', m: '#7A848D', t: '#D8392F', l: '#FFF1B8' },
 }
 export const NAMASTE = { roll: [0.3, 2.0], hit: 2.0, stop: 0.12 } as const
+/** The slim band's step-row floor: its tip line (the bottom info line) starts at y 110 (register.tsx slimBandSvg). namaste stands
+ *  on it, so nothing of the act sits on the bottom line. */
+export const STEP_FLOOR = 108
 /**
- * namaste on the band's whole clear span: a bowling ball you cannot miss (up to 28 px) rolls the length of the roofline into
- * Howard's car parked at the far end of the floor's free run, sized to that run (48-80 px): the hit-stop, a flash, the star,
- * the crack and the dent, glass, a dust cloud; Howard (up to 1.5x) walks round to look. Every piece behind the readouts' holes.
+ * namaste on the band's clear span, standing on the step row's floor (above the tip line: the bottom line stays whole and
+ * undimmed, and so does the task title, a hole): a bowling ball you cannot miss (up to 28 px) rolls out along the floor into
+ * Howard's silver Jaguar parked at the far end of the floor's free run, sized to that run (56-100 px): the hit-stop, a flash, the
+ * star, the crack and the dent, glass, a dust cloud; Howard (up to 1.5x, where he stands whole) walks round to look.
  */
 export const namaste = (o: EggArgs): EggOut => {
   const { W, H, at, gene, stage } = o
   const act = new Act({ id: `bcs-nm-${gene ? 'g' : 's'}-${W}`, ms: EGG_MS.namaste, at, W, H })
   act.freeze(NAMASTE.hit, NAMASTE.stop) // the hit-stop: everything after the impact waits 0.12 s
-  const { win, keep } = wideOf(W, H, stage)
+  const wide = wideTitled(W, H, stage)
+  const keep = wide.keep
+  const F = stage ? Math.min(floorOf(H), STEP_FLOOR) : floorOf(H)
+  // On the band the act's window stops at its floor: nothing is drawn on (or dims) the tip line under it.
+  const win: Rect = stage ? [wide.win[0], wide.win[1], wide.win[2], Math.round(F + 2 - wide.win[1])] : wide.win
   const x1 = win[0] + win[2]
-  const F = floorOf(H)
-  // The floor's free run (the readouts in the bottom rows are holes): the car parks at its far end, sized to it.
-  const [ra, rb] = freeRun(keep, 8, x1 - 4, F - 44, F + 1)
+  const holes = keep?.keep ?? []
+  const clear = (b: Rect): boolean => b[1] >= win[1] && b[0] >= win[0] && b[0] + b[2] <= x1 && !holes.some(h => meets(b, [h[0] - 2, h[1] - 2, h[2] + 4, h[3] + 4]))
+  // The floor's free run, as tall as the biggest car (the readouts in those rows and the title are holes): the car parks at its
+  // far end, sized to it.
+  const [ra, rb] = freeRun(keep, 8, x1 - 4, F - 14 * 2.5 - 2, F + 1)
   const run = rb - ra
-  const cw = Math.round(Math.max(48, Math.min(80, run * 0.36)))
-  const csc = cw / 16
-  const ch = 8 * csc
-  const hsc = Math.max(1, Math.min(1.5, csc / 3.3))
-  const howard = run >= cw + 14 * hsc + 70
+  const csc = Math.round(Math.max(1.4, Math.min(2.5, (run * 0.36) / 40)) * 20) / 20
+  const cw = Math.round(40 * csc)
+  const ch = 14 * csc
+  // Howard stands whole beside the car: as big as he fits (1.5x down to 1x) with no hole over him; else he stays out.
+  let hsc = 0
+  for (let s = Math.max(1, Math.min(1.5, cw / 53)); s >= 1 - 1e-9 && run >= cw + 14 * s + 70; s -= 0.05) {
+    const hx0 = rb - 7 * s - 2
+    if (clear([hx0 - 7 * s, F - 47 * s, 14 * s, 47 * s])) { hsc = Math.round(s * 100) / 100; break }
+  }
+  const howard = hsc > 0
   const carR = rb - (howard ? 14 * hsc + 10 : 4)
   const carX = carR - cw
-  act.cast('car', look(HCAR, gene), 0, 8).cast('howard', look(BCS_HOWARD, gene), 0.5)
+  act.cast('car', look(HCAR, gene), 0, 12).cast('howard', look(BCS_HOWARD, gene), 0.5)
   // The ball: deep blue with a swirl and three finger holes; it turns as it rolls (drawn at 7, scaled).
-  const r = Math.max(9, Math.min(14, csc * 2.8))
+  const r = Math.max(9, Math.min(14, csc * 5.6))
   const bs = r / 7
   const ballC = gene ? '#2A2A2A' : '#1B2A5E'
   const swirl = gene ? '#5A5A5A' : '#3D5BB0'
@@ -220,55 +261,75 @@ export const namaste = (o: EggArgs): EggOut => {
   const roll = (x0: number, x1b: number): number => ((x1b - x0) / r) * (180 / Math.PI)
   const keys: [number, number, number, number?, string?][] = []
   const [t0, t1] = NAMASTE.roll
-  const x0 = win[0] - r * 2
+  // It rolls out from the run's own start (right of the step count, never behind it), fading in as it comes.
+  const x0 = Math.min(ra + r, hitX - 2 * r)
   for (let i = 0; i <= 6; i++) {
     const u = i / 6
     const xx = x0 + (hitX - x0) * (0.15 * u + 0.85 * u * u) // gathers pace as it comes (a thrown ball, then the lane)
-    keys.push([t0 + (t1 - t0) * u, xx, by, undefined, `rotate(${Math.round(roll(x0, xx))}deg)`])
+    keys.push([t0 + (t1 - t0) * u, xx, by, 1, `rotate(${Math.round(roll(x0, xx))}deg)`])
   }
-  const back = hitX - 2.5 * r
-  keys.push([NAMASTE.hit + 0.45, back, by, undefined, `rotate(${Math.round(roll(x0, hitX) - roll(back, hitX))}deg)`])
-  keys.push([NAMASTE.hit + 1.0, back - 4, by, undefined, `rotate(${Math.round(roll(x0, hitX) - roll(back - 4, hitX))}deg)`])
-  keys.push([act.T, back - 4, by, undefined, `rotate(${Math.round(roll(x0, hitX) - roll(back - 4, hitX))}deg)`])
-  let body = act.mv(ball, [[0, x0, by, undefined, 'rotate(0deg)'], ...keys])
-  // The car shakes on the hit (the hit-stop holds it at the dent); the crack and the dent stay.
+  const back = Math.max(x0 + 4, hitX - 2.5 * r) // it bounces back off the car, never into the step count's hole
+  keys.push([NAMASTE.hit + 0.45, back, by, 1, `rotate(${Math.round(roll(x0, hitX) - roll(back, hitX))}deg)`])
+  keys.push([NAMASTE.hit + 1.0, back - 4, by, 1, `rotate(${Math.round(roll(x0, hitX) - roll(back - 4, hitX))}deg)`])
+  keys.push([act.T, back - 4, by, 1, `rotate(${Math.round(roll(x0, hitX) - roll(back - 4, hitX))}deg)`])
+  let body = act.mv(ball, [[0, x0, by, 0, 'rotate(0deg)'], [t0, x0, by, 0, 'rotate(0deg)'], ...keys])
+  // The lot under the car: a faint kerb line along the run (the tyres stand on it), and the car's shadow.
+  const kerb = `<rect x="${r1(ra)}" y="${r1(F)}" width="${r1(rb - ra)}" height="1.5" fill="${gene ? '#5A5A5A' : PROPS.manilaDark}" opacity=".35"/><ellipse cx="${r1(carX + cw / 2)}" cy="${r1(F)}" rx="${r1(cw * 0.52)}" ry="${r1(1.6 * csc)}" fill="#000000" opacity=".45"/>`
+  body += act.on(kerb, 0.05, act.T - 0.05, { fade: 0.2 })
+  // The car fades in parked, shakes on the hit (the hit-stop holds it at the dent); the crack and the dent stay. A slow glint runs
+  // along it first.
   const car = act.still('car', carX, F - ch / 2, 1, csc)
-  body += act.kf(car, [[0, 'transform:none'], [NAMASTE.hit, 'transform:none'], [NAMASTE.hit + 0.03, 'transform:translate(3px,-2px)'], [NAMASTE.hit + 0.09, 'transform:translate(-3px,0)'], [NAMASTE.hit + 0.15, 'transform:translate(1.5px,0)'], [NAMASTE.hit + 0.21, 'transform:none']])
-  const cx = carX + 4 * csc
-  const cy = F - 4.2 * csc
-  const k = csc / 3
-  const crack = `<g stroke="#F4F7FA" stroke-width="${r1(1.1 * Math.max(1, k * 0.8))}" fill="none" stroke-linecap="round" transform="translate(${r1(cx)} ${r1(cy)}) scale(${r1(k)})"><path d="M0 0l-4 -5M0 0l5 -6l2 -3M0 0l7 1l3 3M0 0l-1 6M5 -6l3 1"/></g><path d="M${r1(carX + 1)} ${r1(F - 3 * csc)}q${r1(3 * k)} ${r1(2 * k)} ${r1(6 * k)} 0" stroke="#2A2F35" stroke-width="${r1(1.4 * k)}" fill="none"/>`
+  body += act.kf(car, [[0, 'transform:none;opacity:0'], [0.3, 'transform:none;opacity:1'], [NAMASTE.hit, 'transform:none'], [NAMASTE.hit + 0.03, 'transform:translate(3px,-2px)'], [NAMASTE.hit + 0.09, 'transform:translate(-3px,0)'], [NAMASTE.hit + 0.15, 'transform:translate(1.5px,0)'], [NAMASTE.hit + 0.21, 'transform:none']])
+  const glintClip = `${act.p}cg`
+  body += `<defs>${light.clipTo(act.bank, 'car', glintClip, carX, F - ch / 2, 1, csc)}</defs>`
+  body += light.sweep({ id: `${act.p}gl`, x: carX, y: F - ch, w: cw, h: ch, clip: glintClip, act, t0: 0.5, t1: 1.6, color: '#FFFFFF', op: 0.55 }).svg
+  // The rear window is the car's 9th to 19th column, rows 1 to 3: the ball's crack spiders across it.
+  const cx = carX + 15 * csc
+  const cy = F - ch + 2.2 * csc
+  const k = csc / 2.2
+  const crack = `<g stroke="#F4F7FA" stroke-width="${r1(Math.max(1, 0.9 * k))}" fill="none" stroke-linecap="round" transform="translate(${r1(cx)} ${r1(cy)}) scale(${r1(k)})"><path d="M0 0l-4 -2M0 0l3 -2l2 -1M0 0l5 1l2 1M0 0l-1 2M0 0l-5 2"/></g><path d="M${r1(carX + 0.5 * csc)} ${r1(F - 8.5 * csc)}q${r1(1.5 * csc)} ${r1(1.2 * csc)} ${r1(3 * csc)} 0" stroke="#2A2F35" stroke-width="${r1(0.9 * csc)}" fill="none"/>`
   body += act.on(crack, NAMASTE.hit, act.T)
-  // The impact: a flash, the star, sparks of glass, a cloud of dust off the roof.
+  // The impact: a flash, the star, sparks of glass, a cloud of dust off the lot.
   body += fx.flash(act, NAMASTE.hit, { a: 0.22 })
   body += fx.star3(act, NAMASTE.hit, carX + 1, by - 2, Math.round(10 + r), { core: '#FFFFFF', star: gene ? '#E0E0E0' : PROPS.adYellow, ring: '#FFFFFF', ink: gene ? '#333' : PROPS.navy })
   body += fx.sparks(act, NAMASTE.hit + 0.02, carX + 2, by - 4, { n: 10, seed: 'bcs-nm-glass', color: '#DDEBF5', len: Math.round(6 + r * 0.4) })
   body += fx.puff(act, NAMASTE.hit + 0.05, carX - 4, F - 4, { s: r1(0.6 + r / 20), fill: gene ? '#9A9A9A' : '#CBB89A' })
   body += fx.dust(act, NAMASTE.hit + 0.08, carX - 10, F - 2, { n: 6, seed: 'bcs-nm-dust', color: gene ? '#8A8A8A' : '#B9A688', dx: -12 })
-  // Howard comes round the car to look (he faces it), with a "?!".
-  let still = `${car}${crack}<g transform="translate(${r1(back - 4)} ${r1(by)})">${ball}</g>`
+  // Howard comes round the car to look (he faces it), with a "?!" where it stands whole: over his head, else beside it.
+  let still = `${kerb}${car}${crack}<g transform="translate(${r1(back - 4)} ${r1(by)})">${ball}</g>`
+  const boxes: Record<string, Rect> = { car: [carX, F - ch, cw, ch], ball: [x0 - r, F - 2 * r, hitX - x0 + 2 * r, 2 * r] }
   if (howard) {
     const hx = rb - 7 * hsc - 2
     const hy = F - (47 * hsc) / 2 - 0.5
+    const top = F - 47 * hsc
     body += act.actor('howard', [[NAMASTE.hit + 0.5, act.T, 'howard', -1]], [[NAMASTE.hit + 0.5, x1 + 20, hy], [NAMASTE.hit + 1.05, hx, hy], [act.T, hx, hy]], { sc: hsc })
-    body += act.cue('pop', NAMASTE.hit + 1.15, C(hx - 6, hy - 25 * hsc, '?!', Math.round(15 * hsc), gene ? '#F2F2F2' : PROPS.adYellow, 'text-anchor="middle"'), { d: 1.5 })
-    still += act.still('howard', hx, hy, -1, hsc)
-  }
-  // The title: S5E4's name, stamped on a manila tab where a row has room (20 px where it fits, else 15).
-  stamp: for (const fs of [20, 15]) {
-    const tw = condW('NAMASTE.', fs, 1) + 22
-    for (const [y0, y1] of [[38, 66], [86, 112]] as const) {
-      const [a, b] = freeRun(keep, y0 < 60 ? 66 : 12, carX - 14, y0, y1)
-      if (b - a < tw + 6) continue
-      const sx = a + (b - a - tw) / 2
-      const th = fs + 6
-      const st = `${tab(sx, y0 + 2, tw, th, prop('manila', gene))}${C(sx + tw / 2, y0 + 2 + th * 0.78, 'NAMASTE.', fs, prop('creamInk', gene), 'text-anchor="middle" letter-spacing="1"')}`
-      body += act.slam(st, NAMASTE.hit + 0.7, act.T - 0.2)
-      still += st
-      break stamp
+    const qs = Math.round(15 * hsc)
+    const qw = qs * 1.05
+    const spots: [number, number][] = [[hx, top - 3], [hx - 7 * hsc - 4 - qw / 2, top + qs], [hx + 7 * hsc + 4 + qw / 2, top + qs]]
+    const q = spots.find(([qx, qy]) => clear([qx - qw / 2, qy - qs * 0.8, qw, qs]) && qy <= F - ch - 2)
+    if (q) {
+      body += act.cue('pop', NAMASTE.hit + 1.15, C(q[0], q[1], '?!', qs, gene ? '#F2F2F2' : PROPS.adYellow, 'text-anchor="middle"'), { d: 1.5 })
+      boxes.q = [q[0] - qw / 2, q[1] - qs * 0.8, qw, qs]
     }
+    still += act.still('howard', hx, hy, -1, hsc)
+    boxes.howard = [hx - 7 * hsc, top, 14 * hsc, 47 * hsc]
   }
-  return { svg: frame(act, win, keep, body, still, gene), size: { ball: 2 * r, car: cw, howard: howard ? Math.round(47 * hsc) : 0 } }
+  // The title: S5E4's name (Howard's plate), stamped on a manila tab in the task row over the car's roof (the car stands lower),
+  // where the row has room (20 px where it fits, else 15): left of Howard and his "?!", never over the title (a hole).
+  const stampEnd = Math.min(x1 - 4, ...(boxes.howard ? [boxes.howard[0] - 8] : []), ...(boxes.q ? [boxes.q[0] - 8] : []))
+  for (const fs of [20, 15]) {
+    const tw = condW('NAMASTE.', fs, 1) + 22
+    const th = fs + 6
+    const [a, b] = freeRun(keep, 12, stampEnd, 38, 40 + th)
+    if (b - a < tw + 6 || 40 + th > F - ch - 2) continue
+    const sx = a + (b - a - tw) / 2
+    const st = `${tab(sx, 40, tw, th, prop('manila', gene))}${C(sx + tw / 2, 40 + th * 0.78, 'NAMASTE.', fs, prop('creamInk', gene), 'text-anchor="middle" letter-spacing="1"')}`
+    body += act.slam(st, NAMASTE.hit + 0.7, act.T - 0.2)
+    still += st
+    boxes.stamp = [sx, 40, tw, th]
+    break
+  }
+  return { svg: frame(act, win, keep, body, still, gene, { scrim: 0.7 }), size: { ball: 2 * r, car: cw, howard: howard ? Math.round(47 * hsc) : 0 }, boxes }
 }
 
 // ---------------------------------------------------------------- ding: Hector rings his bell three times
