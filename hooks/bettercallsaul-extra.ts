@@ -15,7 +15,7 @@ import type { Sprite } from './cast'
 import { PROPS, clamp, px, r1, sid, spW, prop } from './bettercallsaul'
 import { ROAM_WINDOW_MS, roamPlan, unit } from './roamer'
 import { pin } from './smooth'
-import { Director, MIN } from './stage/director'
+import { Director, MIN, fightKey } from './stage/director'
 import { keepClip } from './stage/keep'
 import type { BandStage } from './stage/keep'
 
@@ -69,15 +69,16 @@ export const bcsDirector = (gene: boolean): Director => {
 const SPAN: Record<string, number> = { fight: 46 * MIN, gus: 46 * MIN, car: 15 * MIN, lalo: 41 * MIN }
 const PAGES = new Map<string, { startAt: number; endAt: number }[]>()
 /** One lane's act around `at`: the one under way, else the next, else the last (`on` false when the lane has none near). */
-const laneSlot = (gene: boolean, lane: 'fight' | 'gus' | 'car' | 'lalo', at: number): Slot => {
+const laneSlot = (gene: boolean, lane: 'fight' | 'gus' | 'car' | 'lalo', at: number, working = true): Slot => {
   const span = SPAN[lane] as number
   // Plans come in span-long pages (each with a span either side), cached: a redraw or a test asking every few seconds is cheap.
+  // The fight lane's page also depends on the fight level, the job's start and the skin switch (fightKey), and on the job:
+  // at `often` the bar hearing plays at rest too (its own 15-20 min series).
   const page = Math.floor(at / span)
-  const key = `${gene ? 'g' : 's'}|${lane}|${page}`
+  const key = `${gene ? 'g' : 's'}|${lane}|${page}${lane === 'fight' ? `|${working ? 1 : 0}|${fightKey()}` : ''}`
   let list = PAGES.get(key)
   if (!list) {
-    // The fight lane plays only while a job works: its plan is asked as working (the caller checks the job).
-    list = bcsDirector(gene).plan((page - 1) * span, (page + 2) * span, lane === 'fight' ? { working: true } : {}).filter(x => x.lane === lane)
+    list = bcsDirector(gene).plan((page - 1) * span, (page + 2) * span, lane === 'fight' ? { working } : {}).filter(x => x.lane === lane)
     PAGES.set(key, list)
     if (PAGES.size > 96) PAGES.delete(PAGES.keys().next().value as string)
   }
@@ -87,8 +88,8 @@ const laneSlot = (gene: boolean, lane: 'fight' | 'gus' | 'car' | 'lalo', at: num
 /** A replayed act as a slot from `at`. */
 const replaySlot = (at: number, ms: number): Slot => ({ on: true, startAt: at, endAt: at + ms, bucket: Math.floor(at / 1000) })
 export const carPlan = (at: number, gene: boolean): Slot => laneSlot(gene, 'car', at)
-/** The scheduled bar hearing around `at` (shown only while a job works). */
-export const fightPlan = (at: number, gene: boolean): Slot => laneSlot(gene, 'fight', at)
+/** The scheduled bar hearing around `at`, while a job works or at rest (as often as the fight level says). */
+export const fightPlan = (at: number, gene: boolean, working = true): Slot => laneSlot(gene, 'fight', at, working)
 export const lalooPlan = (at: number, gene: boolean): Slot & { card: 'task' | 'log' } => {
   const p = laneSlot(gene, 'lalo', at)
   return { ...p, card: unit(`${laloSeed(gene)}|card|${p.bucket}`) < 0.5 ? 'task' : 'log' }
@@ -190,8 +191,9 @@ export const bcsExtras = (gene: boolean) => (o: ExtraArgs): string => {
   if (o.party) return swap
   const out: string[] = [swap]
   const typed = o.fx && fxLive(o.fx as Fx, o.at) ? (o.fx as Fx) : undefined
-  // The bar hearing by itself (the director's fight lane), only while a job works and nothing is typed.
-  const f = !typed && o.working ? fightPlan(o.at, gene) : undefined
+  // The bar hearing by itself (the director's fight lane) when nothing is typed: while a job works, and at rest when the fight
+  // level plays fights then (`often`).
+  const f = !typed ? fightPlan(o.at, gene, o.working === true) : undefined
   const hearing: Fx | undefined = typed?.kind === 'chicanery' ? typed : f && live(f, o.at) ? { kind: 'chicanery', at: f.startAt } : undefined
   if (o.surface === 'band') {
     if (hearing && !typed) out.push(fxLayer(o.W, o.H, hearing, o.at, gene, o.stage))
