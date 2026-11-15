@@ -26,14 +26,38 @@ Caliper is an original Mission Control design (no homage): a dark face, a light 
 
 Guide: [`docs/SKINS.md`](../docs/SKINS.md).
 
+## Motion, fights and 3D
+
+The built-in skins move. Fights, stand-offs and turning heads and props are written per skin on a shared engine ([`hooks/stage/`](../hooks/stage/README.md)) and belong to the skins that ship with the mod. A skin you write as JSON has colours, words and tabs (the fields below). It does not get fights, but it does get the short wipe when you switch to it.
+
+- **Fights and stand-offs** play by themselves: `/missioncontrol fights often | normal | rare | off` (default `often`: every 7-10 min while a job runs, every 15-20 at rest). They keep clear of the band's numbers.
+- **Replay one now** with `/missioncontrol play <name>`; with no name it lists the worn skin's.
+- **3D** is pre-rendered turnarounds (frames of a model seen from several angles), not live 3D. The mod draws pictures and cannot run live 3D.
+- **Plain skins stay calm on purpose:** default and Caliper have no fights; Crab Classic only a small claw-off.
+
+| Skin | Fight or stand-off | Replay name |
+|---|---|---|
+| Crab Classic | the claw-off | `claw-off` |
+| The Mentalist | THE READ, a card-trick duel | `the-read` (and `parlour-reveal`) |
+| Breaking Bad | the Desert Stand-off | `desert-standoff` |
+| Better Call Saul | CHICANERY, the bar hearing | `chicanery` |
+| Invincible | THE FIGHT (three cuts); MARK VS CONQUEST (new suit) | `the-catch`, `jet-flick`, `every-angle`; `conquest` |
+| The Boys | Butcher vs Homelander; A-Train vs the progress bar | `offthebooks`, `race` |
+| Cyberpunk Edgerunner | the MaxTac raid | `maxtac` |
+| Lucy · Edgerunners | the ICE duel | `ice-duel` |
+| Arasaka | the boardroom stand-off | `boardroom` |
+| Edgerunners 2 | D vs a cyberpsycho | `cyberpsycho` |
+
+Limits: on a narrow band some fights are smaller or do not play on the band. The Cyberpunk skins' band fights do not play at 450 px wide, and Edgerunners 2's do not at 600 px either; the pane version still plays.
+
 ## Easter eggs
 
 Type the word anywhere in a prompt (any case) while the skin is on.
 
 - **Invincible**: `think, mark`, `guardians`, `multiverse`, `new suit` / `classic suit`
-- **Better Call Saul**: `chicanery`, `namaste`, `ding`, `1216`, `saul3d`
+- **Better Call Saul**: `chicanery` (the bar hearing), `namaste`, `ding`, `1216`, `saul3d` (Saul's head turns all the way round)
 - **The Boys**: 60 typed phrases (`shock and awe, my son` / `never meet your heroes`, `oh, diabolical`, `hughie, blink`, `turbo rush`, `vought on ice`, `7spn`…), 24 event eggs, 8 daily set pieces, 13 rare roamers and THE AMBUSH (the full list is in the main README's spoilers)
-- **Replays**: Invincible `/missioncontrol play fight|showdown|think|eve|oliver|cecil|newsuit|classic`; The Boys `/missioncontrol play` (lists all 92: `ambush`, `ambush-a|b|c`, `scorch`, `sweep`, `kimiko`, `whale`…)
+- **Replays**: Invincible `/missioncontrol play the-catch|jet-flick|every-angle|conquest|fight|showdown|think|eve|oliver|cecil|newsuit|classic`; The Boys `/missioncontrol play` (lists about 95: `offthebooks`, `race`, `ambush`, `ambush-a|b|c`, `scorch`, `sweep`, `kimiko`, `whale`…)
 - Many eggs also play by themselves: daily events, cameos, and extras at 85% and 95% context.
 
 <details>
@@ -42,13 +66,13 @@ Type the word anywhere in a prompt (any case) while the skin is on.
 
 Not listed anywhere until worn.
 
-- **Red John**: type `tyger tyger` on The Mentalist, or `/skin red-john`
-- **Heisenberg**: type `say my name` on Breaking Bad, or `/skin heisenberg`
-- **GENE**: type `takavic` on Better Call Saul, or `/skin gene`; `saul goodman` goes back
-- **CAPRI** (add-on, Edgerunners 2's CAPRI mode): type `capri` or `0+2=1` on Edgerunners 2, `hi capri` within a minute of a takeover, or `/skin capricorn`; `bye capri` goes back
-- **SAMURAI** (add-on): `/skin samurai` only
-- **SOLID GOLD**: type `solidgold` or `soldier boy` on The Boys, or `/skin solidgold`; `back on ice` goes back. It has its own badge and its own secret flag
-- **THIS MEANS NOIR**: type `this means noir` on The Boys, or `/skin noir`; `curtain call` goes back. The silent one (toasts are `…`); its own badge and its own secret flag
+- **Red John**: type `tyger tyger` on The Mentalist, or `/skin red-john`; `patrick jane` goes back. Replays `walk-by`, `tyger-tyger`, `still-watching`
+- **Heisenberg**: type `say my name` on Breaking Bad (a full animation ending on "You're goddamn right."), or `/skin heisenberg`; `walter white` goes back. Replays `say-my-name`, `desert-standoff`, `one-who-knocks`
+- **GENE**: type `takavic` on Better Call Saul (the colour drains out), or `/skin gene`; `saul goodman` (or `better call saul`) goes back. Replays as Better Call Saul
+- **CAPRI** (add-on, Edgerunners 2's CAPRI mode): type `capri` or `0+2=1` on Edgerunners 2, `hi capri` within a minute of a takeover, or `/skin capricorn`; `bye capri` goes back. Replays `capri-vs-d`, `cyberpsycho`, `slate`, `cut`
+- **SAMURAI** (add-on): `/skin samurai` only. Replays `gig-2023`, `never-fade-away`
+- **SOLID GOLD**: type `solidgold` or `soldier boy` on The Boys, or `/skin solidgold`; `back on ice` goes back. Its fight is `reunion`. It has its own badge and its own secret flag
+- **THIS MEANS NOIR**: type `this means noir` on The Boys, or `/skin noir`; `curtain call` goes back. The silent one (toasts are `…`); its fight is the silent-movie `curtainup` (typed: `curtain up`); its own badge and its own secret flag
 
 </details>
 

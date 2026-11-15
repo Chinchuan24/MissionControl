@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/hero.png" alt="Mission Control, a mod for Claude Code. Left: Crab Classic crabs. Right: the Cyberpunk Skins cast in Night City." width="100%">
+  <img src="docs/motion-montage.png" alt="Four Mission Control bands, one above the other. Invincible: Mark and Conquest meet with a WHAM! while the task title and numbers stay readable. The Boys: Butcher and Homelander face off under a red laser on a live-news band. Better Call Saul: Jimmy cross-examines Chuck in the bar hearing. The Mentalist: Jane points across a lamp-lit parlour." width="100%">
 </p>
 
 <h3 align="center">See everything Claude is doing. Live.</h3>
@@ -16,6 +16,7 @@
   <a href="#-what-mission-control-does">Features</a> ·
   <a href="#-what-the-cyberpunk-skins-add">Cyberpunk Skins</a> ·
   <a href="#-skin-showcase">Skins</a> ·
+  <a href="#-motion-fights-and-3d">Motion and fights</a> ·
   <a href="#-easter-eggs">Easter eggs</a> ·
   <a href="#-install">Install</a> ·
   <a href="#-commands">Commands</a>
@@ -34,22 +35,14 @@
 <table align="center">
   <tr>
     <td align="center" width="50%" valign="top">
-      <a href="https://github.com/Chinchuan24/MissionControl/releases/latest/download/mission-control-core.zip">
-        <img src="docs/edition-core.png" alt="Mission Control Core: the live dashboard and its seven core skins" width="100%">
-      </a>
+      <b>Mission Control Core</b><br>
+      The live dashboard and eight skins (the default look included), free.<br>
+      HUD band, pane, crew, Token Manager, crew mode, done chime, rich replies.
     </td>
     <td align="center" width="50%" valign="top">
-      <a href="https://github.com/Chinchuan24/MissionControl/releases/latest/download/mission-control-cyberpunk.zip">
-        <img src="docs/edition-cyberpunk.png" alt="Cyberpunk Skins: Cyberpunk Edgerunner, Lucy Edgerunners, Arasaka and Edgerunners 2" width="100%">
-      </a>
-    </td>
-  </tr>
-  <tr>
-    <td align="center" valign="top">
-      <b>The live dashboard.</b><br>Seven skins, free.
-    </td>
-    <td align="center" valign="top">
-      <b>Jack in, choom.</b><br>Your crew just moved to Night City.
+      <b>Cyberpunk Skins</b> (Core + add-on)<br>
+      Jack in, choom: your crew moves to Night City.<br>
+      Four more skins, a pixel-art cast, Street Cred and Braindance.
     </td>
   </tr>
   <tr>
@@ -92,7 +85,9 @@ Claude works in steps, calls tools and spins up sub-agents. Mission Control show
 - 🚨 **Stuck alarm** (2 min quiet) and 🔔 **done chime** (toast, notification, sound)
 - 🧾 **Rich replies**: diffs, code, tables, math and mermaid as cards
 - 🌍 **7 currencies**, **3 languages** (English, Russian, Hebrew)
-- 🎨 **Skins**: 7 in Core, 4 more in the Cyberpunk add-on, or [make your own](skins/README.md). The **Skins** tab is a gallery: one preview card per skin (its colours, mascot and palette), grouped under Classics, TV shows, Night City and Your skins
+- 🧱 **Steady while it works**: progress bars no longer jump to 100% and back when a sub-agent ends a turn, the band's top row never overlaps itself or runs off the edge, and an agent card you collapsed stays collapsed
+- 🎨 **Skins**: 8 in Core (the default look and 7 more), 4 more in the Cyberpunk add-on, or [make your own](skins/README.md). The **Skins** tab is a gallery: one preview card per skin (its colours, mascot and palette), grouped under Classics, TV shows, Night City and Your skins
+- 🎬 **[Motion, fights and 3D](#-motion-fights-and-3d)**: every skin moves, most have a fight or stand-off that plays now and then, and a few have a head or prop that turns. Plain skins stay calm
 - ⚙️ **Settings cards**: Money, Machine Guard, Crew, Look and feel, and Billing, each a card in the skin's colours with one row per setting and drawn on/off toggles
 - 🥚 **[Easter eggs](#-easter-eggs)** in every skin
 
@@ -149,6 +144,7 @@ The add-on swaps the crabs for a pixel-art cast, moves the HUD to Night City and
 | **Braindance**: replay the session, every tool call a mark | — | ✓ |
 | Breach Protocol card, NCPD heat stars, CYBERPSYCHOSIS / MAXTAC warnings | — | ✓ |
 | Night City skyline, Relic glitch, Sandevistan afterimages, the Afterlife | — | ✓ |
+| Fights: the MaxTac raid, Lucy's ICE duel, the Arasaka boardroom, D vs a cyberpsycho, and a layered skyline with rain | — | ✓ |
 | Per-skin sound packs, eddies (€$), radio, street slang | — | ✓ |
 
 ---
@@ -245,6 +241,91 @@ Or skip the editing: `/skin new ocean sunset` drafts one for you, and `/skin che
 
 ---
 
+## 🎬 Motion, fights and 3D
+
+Every skin has its own motion, built on **one shared stage engine** ([`hooks/stage/`](hooks/stage/README.md)): timelines, particles, a camera with shake and hit-stop, light passes, parallax backdrops, wipes and one scheduler that keeps rare things rare. Skins use the same tools and keep their own look.
+
+![Mark and Conquest meet on the Invincible band: a WHAM! on impact, the task title and every number still readable](docs/motion-mark-vs-conquest.png)
+
+*Invincible, new suit: MARK VS CONQUEST on the band. The fight keeps to the clear stretch between the title and the numbers.*
+
+### Fights and stand-offs
+
+Most skins have one. They start by themselves, while a job runs and a little less often at rest. Try any of them now with `/missioncontrol play <name>` (with no name it lists what the worn skin can play).
+
+| Skin | What plays | Replay name |
+|---|---|---|
+| 🦀 Crab Classic | The claw-off: two crabs, one coin | `claw-off` (also `clack`) |
+| 🕵️ The Mentalist | THE READ, a card-trick mind duel; the daily Parlour Reveal | `the-read`, `parlour-reveal`, `case-closed` |
+| ⚗️ Breaking Bad | The Desert Stand-off; the daily pizza on the roof | `desert-standoff`, `pizza-on-the-roof`, `yeah-science` |
+| ⚖️ Better Call Saul | CHICANERY, the bar hearing: Jimmy against Chuck | `chicanery`, `gus`, `car`, `lalo`, `saul3d`, `namaste`, `ding`, `1216` |
+| 💥 Invincible | THE FIGHT in three cuts; MARK VS CONQUEST (new suit: say `new suit` first) | `the-catch`, `jet-flick`, `every-angle`, `conquest` (older: `fight`, `showdown`, `think`, `eve`, `oliver`, `cecil`, `newsuit`, `classic`) |
+| ⭐ The Boys | Butcher vs Homelander; A-Train races the progress bar; THE AMBUSH | `offthebooks`, `race`, `ambush`, `ambush-a`, `ambush-b`, `ambush-c` (about 90 more: `/missioncontrol play`) |
+| 🟡 Cyberpunk Edgerunner | The MaxTac raid; David's Sandevistan | `maxtac`, `sandevistan`, `preem` |
+| 🌙 Lucy · Edgerunners | Lucy's ICE duel; the dive into the Net | `ice-duel`, `dive`, `to-the-moon` |
+| 🔴 Arasaka | The boardroom stand-off; the hanko seal | `boardroom`, `hanko` |
+| ✂️ Edgerunners 2 | D vs a cyberpsycho, cut like a film | `cyberpsycho`, `slate`, `cut` |
+| ⚪ default · 📐 Caliper | No fight, on purpose. Quiet state motion only | `cards`, `shake` (default) · `zero`, `settle` (Caliper) |
+
+The hidden skins have their own (see the spoilers under [Easter eggs](#-easter-eggs)).
+
+![Butcher and Homelander square off on The Boys band, a red laser between them](docs/motion-boys-offthebooks.png)
+
+*The Boys: Butcher vs Homelander. Every Boys fight is "censored live TV": a LIVE bug, a discretion slate, a mosaic over each hit.*
+
+**How often:** `/missioncontrol fights often | normal | rare | off`. The setting is saved.
+
+| Level | While a job runs | At rest |
+|---|---|---|
+| `often` (default) | one every 7-10 min | one every 15-20 min |
+| `normal` | one every 15-20 min | none |
+| `rare` | one every 30-45 min | none |
+| `off` | none by themselves | none |
+
+Replays work at every level. At `often` and `normal`, no fight starts in a job's first 90 seconds (the job-start acts play then). A skin with several fights takes them in turns. They draw in the band's clear stretch and keep off the percent, cost, context and timers; one act plays at a time.
+
+### 3D, plainly
+
+The mod draws pictures. It cannot run live 3D, and nothing here is rendered live. The 3D you see is **pre-rendered turnarounds**: a model drawn from several angles, with the frames played in order. A symmetric prop needs only half the angles, since the engine mirrors the rest. Where it is used:
+
+- **Heads that turn:** Saul's head (`/missioncontrol play saul3d`), and the Boys' bust when the feed switches mode.
+- **Props that turn:** the crystal on Breaking Bad, the Boys' shield and bust, Arasaka's tower and Lucy's moon.
+- **Depth without 3D:** parallax skylines with rain, light passes and card flips.
+
+![Saul's head, seen from behind in the middle of a turn, on the band's stage](docs/motion-saul-head-turn.png)
+
+*Better Call Saul, `saul3d`: one frame from the turn.*
+
+### A short wipe when the skin changes
+
+`/skin <name>` and the picker play a 0.7-second wipe over the band and the top pane cards, in the new skin's colours. It is see-through, so the numbers stay readable. It skips itself while a big act is drawn, so at the `often` setting some switches show no wipe.
+
+### Calm by design, and honest limits
+
+- The **plain skins stay calm on purpose**: default, Caliper and Crab Classic are what you leave on while you work. Default and Caliper have no fights, Crab Classic only its small claw-off, and nothing on them animates a filter at rest. If your OS asks for reduced motion, acts and idle loops are drawn as still frames.
+- **Narrow bands lose some fights.** On the Cyberpunk skins no band fight plays at 450 px wide, and Edgerunners 2 skips it at 600 px too (the pane version still plays). The Boys' fighters shrink on a narrow band (about 69 px at 1250, 45 below 900).
+- A few acts dim or cross the prose lines (the activity text, the tip) for a few seconds. Numbers, labels and chips stay clear.
+
+<details>
+<summary>More pictures: a daily set piece and the Cyberpunk raid</summary>
+<br>
+
+![The Mentalist's Parlour Reveal: Jane points across a lamp-lit room, with a close-up of his face beside it](docs/motion-parlour-reveal.png)
+
+*The Mentalist: the Parlour Reveal, a daily set piece (`parlour-reveal`).*
+
+![The MaxTac raid on the Cyberpunk Edgerunner band: armoured MaxTac figures on either side of a running David, with blue and green Sandevistan afterimages](docs/motion-maxtac.png)
+
+*Cyberpunk Edgerunner: the MaxTac raid (`maxtac`).*
+
+![Better Call Saul: CHICANERY, Jimmy and Chuck across the hearing room, "I AM NOT CRAZY!" in yellow](docs/motion-chicanery.png)
+
+*Better Call Saul: CHICANERY (`chicanery`).*
+
+</details>
+
+---
+
 ## 🥚 Easter eggs
 
 Type a word anywhere in your prompt (any case) while its skin is on.
@@ -258,17 +339,17 @@ Type a word anywhere in your prompt (any case) while its skin is on.
 | The Boys | `shock and awe, my son` · `never meet your heroes` | SIGNAL HIJACKED: OFF BOOK (Butcher's black and red), and back ON BRAND |
 | The Boys | `7spn` | The test scoreboard comes back for a look |
 | The Boys | 60 phrases from the show (`oh, diabolical`, `hughie, blink`, `turbo rush`, `vought on ice`…) | See the spoiler list below |
-| Better Call Saul | `chicanery` | Chuck: "I AM NOT CRAZY!" |
+| Better Call Saul | `chicanery` | The bar hearing plays: Jimmy against Chuck, "I AM NOT CRAZY!" |
 | Better Call Saul | `1216` | The number flip |
 | Better Call Saul | `namaste` | A bowling ball meets Howard's car |
 | Better Call Saul | `ding` | Hector's bell rings |
-| Better Call Saul | `saul3d` | Saul's bust zooms to a beat |
+| Better Call Saul | `saul3d` | Saul's head turns all the way round (pre-rendered frames) |
 
-**Replays:** `/missioncontrol play <name>` plays one now. Invincible: `fight`, `showdown`, `think`, `eve`, `oliver`, `cecil`, `newsuit`, `classic`. The Boys: `/missioncontrol play` lists all of them (every typed egg, the event eggs, `ambush`, `ambush-a`/`-b`/`-c`, the roamers).
+**Replays:** `/missioncontrol play <name>` plays one now; with no name it lists what the worn skin can play. Every fight's name is in the [table above](#-motion-fights-and-3d). Invincible also has `fight`, `showdown`, `think`, `eve`, `oliver`, `cecil`, `newsuit`, `classic`. The Boys has about 95 (every typed egg, the event eggs, `ambush`, `ambush-a`/`-b`/`-c`, the roamers, the fights).
 
 **They also play by themselves:** daily Invincible and The Boys set pieces, THE AMBUSH, cameos while jobs run, show toasts on job and tool events, and something extra on most skins when context passes 85% and 95%.
 
-**Fights:** every skin's fights and stand-offs pop up by themselves, rotating through the skin's fights. `/missioncontrol fights often` (the default: one every 7-10 min while a job runs, every 15-20 min at rest), `normal` (15-20 min, jobs only), `rare` (30-45 min, jobs only) or `off` (replays only); `/missioncontrol fights` shows the setting, which is saved.
+**Fights:** every skin's fights and stand-offs pop up by themselves, rotating through the skin's fights. `/missioncontrol fights often` (the default: one every 7-10 min while a job runs, every 15-20 min at rest), `normal` (15-20 min, jobs only), `rare` (30-45 min, jobs only) or `off` (replays only); `/missioncontrol fights` shows the setting, which is saved. More in [Motion, fights and 3D](#-motion-fights-and-3d).
 
 <details>
 <summary>Spoilers: hidden skins</summary>
@@ -278,15 +359,51 @@ Hidden skins are not in the gallery, the picker or `/skin` until you wear one.
 
 | Hidden skin | How to find it | Needs |
 |---|---|---|
-| Red John | type `tyger tyger` on The Mentalist, or `/skin red-john` | Core |
-| Heisenberg | type `say my name` (or `what's my name`) on Breaking Bad, or `/skin heisenberg` | Core |
-| GENE | type `takavic` on Better Call Saul, or `/skin gene` (`saul goodman` goes back) | Core |
+| Red John | type `tyger tyger` on The Mentalist (a title card paints itself first), or `/skin red-john`; `patrick jane` goes back | Core |
+| Heisenberg | type `say my name` (or `what's my name`) on Breaking Bad: a full animation plays and ends on "You're goddamn right.", then the skin turns. Or `/skin heisenberg`; `walter white` goes back | Core |
+| GENE | type `takavic` on Better Call Saul: the colour drains out of the band, then the skin is grey. Or `/skin gene`; `saul goodman` (or `better call saul`) goes back | Core |
 | CAPRI (Edgerunners 2's CAPRI mode) | type `capri` or `0+2=1` on Edgerunners 2, answer one of Capri's takeovers with `hi capri` within a minute, or `/skin capricorn`; `bye capri` goes back | Cyberpunk add-on |
 | SAMURAI | `/skin samurai` only (no typed word) | Cyberpunk add-on |
 | SOLID GOLD | type `solidgold` or `soldier boy` on The Boys, or `/skin solidgold`; `back on ice` goes back. Its own badge and its own secret flag | Core |
 | THIS MEANS NOIR | type `this means noir` on The Boys, or `/skin noir`; `curtain call` goes back. The silent one: a real quiet mode (toasts are `…`). Its own badge and its own secret flag | Core |
 
 The Saul words also work on GENE.
+
+![THE SAY MY NAME animation on the Heisenberg band: the full-width title card YOU'RE GODDAMN RIGHT.](docs/motion-say-my-name-title.png)
+
+![A short animated preview of SAY MY NAME: the hat drops onto the head, the head turns, then the title card](docs/motion-say-my-name.gif)
+
+*SAY MY NAME, from the hat drop to the title card. The GIF is a sequence of rendered frames at their real timing, not a screen recording, so it is choppy.*
+
+</details>
+
+<details>
+<summary>Spoilers: the hidden skins' fights and set pieces</summary>
+<br>
+
+Each plays by itself and has a replay name (`/missioncontrol play <name>` while the skin is worn). They follow the same `/missioncontrol fights` setting as the rest.
+
+| Hidden skin | What plays | Replay name |
+|---|---|---|
+| Red John | The man in the dark coat walks by (a red rim on the figure, no words); the Tyger Tyger title card paints itself; the job-done smiley | `walk-by`, `tyger-tyger`, `still-watching` |
+| Heisenberg | SAY MY NAME (stare, the hat drops, a turn, "You're goddamn right."); the Desert Stand-off; the job-done cheer. His hat logo also turns once an hour | `say-my-name`, `desert-standoff`, `one-who-knocks` |
+| GENE | Everything Better Call Saul has, in grey, with film grain, a NIPPY! cheer and CHICANERY | `chicanery`, `saul3d`, `namaste`, `ding`, `1216`, `gus`, `car`, `lalo` |
+| CAPRI (Edgerunners 2's CAPRI mode) | Capri vs D for control of the HUD: a split screen, then "my HUD, choom." | `capri-vs-d`, plus `cyberpsycho`, `slate`, `cut` |
+| SAMURAI | The "2023" gig, once a day at 20:23 while a job works, ending on the rocker; the amp shockwave cheer | `gig-2023`, `never-fade-away` |
+| SOLID GOLD | Homelander vs Soldier Boy, the laser into the shield (its first unlock), plus every Boys act in gold | `reunion` and the Boys' list |
+| THIS MEANS NOIR | A silent-movie fight, Kimiko vs Black Noir, with intertitles and an iris. Typed `curtain up` plays it; `curtain call` goes back | `curtainup`, `curtain` and the Boys' list |
+
+![Capri and D split the band in two for control of the HUD: D's face in blue on the left, Capri's in red on the right](docs/motion-capri-vs-d.png)
+
+*CAPRI mode: Capri vs D for the HUD. The cut-in covers the middle strip and leaves the task title, bar and numbers alone.*
+
+![SAMURAI's 2023 gig on the band: the rocker in a pool of stage light with a spinning ring](docs/motion-samurai-gig.png)
+
+*SAMURAI: the 2023 gig.*
+
+![SOLID GOLD: Homelander's laser crosses the band into Soldier Boy's shield, with a LIVE bug and an APPROVAL -6 tag](docs/motion-boys-reunion.png)
+
+*SOLID GOLD: the laser into the shield.*
 
 </details>
 
@@ -359,6 +476,8 @@ The Saul words also work on GENE.
 | T59 | `truthbomb` | truthbomb |
 | T60 | `7spn` | scoreboard |
 
+Also on THIS MEANS NOIR: `curtain up` plays its silent fight, and `curtain call` goes back to The Boys.
+
 **Events** (they play by themselves from what Claude Code does):
 
 | # | When | Act |
@@ -394,7 +513,9 @@ The Saul words also work on GENE.
 
 **THE AMBUSH** (12 s, band and CRISIS DESK, about every 30–45 min while a job works; three choreographies that take turns): A · THE LANDING, B · THE DROP (Noir first), C · THE SNATCH (A-Train steals your real progress bar, then brings it back: `my bad`).
 
-**Replays:** `/missioncontrol play` lists all 92 names, e.g. `ambush`, `ambush-c`, `scorch`, `sweep`, `blackout`, `shredder`, `teaser`, `kimiko`, `atrain`, `oi`, `whale`, `premiere`.
+**THE FIGHTS** (four, all "censored live TV"; they follow `/missioncontrol fights`, the Boys take them in turns by look): `offthebooks` (Butcher vs Homelander) and `race` (A-Train vs the progress bar) on ON BRAND, `offthebooks` on OFF BOOK, `reunion` on SOLID GOLD, `curtainup` on THIS MEANS NOIR. THE AMBUSH's fight turn plays only at `rare`.
+
+**Replays:** `/missioncontrol play` lists all 95 names (96 on NOIR, which adds `curtain`), e.g. `ambush`, `ambush-c`, `offthebooks`, `reunion`, `scorch`, `sweep`, `blackout`, `shredder`, `teaser`, `kimiko`, `atrain`, `oi`, `whale`, `premiere`.
 
 </details>
 
@@ -512,6 +633,8 @@ Expand-Archive -Force "$env:USERPROFILE\Downloads\cyberpunk-skins-addon.zip" -De
 | `/missioncontrol billing` | Pay with your own Claude API credits instead of the plan: 4 steps, key kept in the macOS Keychain ([security notes](docs/SECURITY-billing.md)) |
 | `/missioncontrol currency <code> [rate]` | Costs in `USD` (the default), `AUTO` (eddies on the cyberpunk skins), `EDDIES`, `EUR`, `GBP`, `JPY`, `MYR` or `SGD`; optional rate per US dollar |
 | `/missioncontrol oneshot <on\|off\|ask>` | Once you approve a plan: do it all and report once (`on`), one part at a time (`off`), or ask each time (`ask`) |
+| `/missioncontrol fights <often\|normal\|rare\|off>` | How often fights and stand-offs play by themselves (default `often`: every 7-10 min while a job runs, every 15-20 at rest). With no word it shows the setting. Saved |
+| `/missioncontrol play [name]` | Replay one of the worn skin's fights or set pieces now; with no name it lists them ([names per skin](#-motion-fights-and-3d)) |
 | `/skins` | The skin picker, every skin as a live preview |
 | `/skin` | `/skin` to list, `/skin <id>` to switch, `/skin off`, `/skin reload` |
 | `/autocrew` | Crew mode: state, `on` (big jobs only), `always` (every job, small ones too), `off`, or `<context %>` to call the crew |
@@ -527,6 +650,7 @@ Expand-Archive -Force "$env:USERPROFILE\Downloads\cyberpunk-skins-addon.zip" -De
 
 - `hooks/register.tsx`: hooks, UI and commands
 - `hooks/cast.ts`: the pixel casts
+- `hooks/stage/`: the shared motion engine every skin's acts, fights and idle loops are built on ([its README](hooks/stage/README.md))
 - `hooks/eggs.ts` and the per-skin files (`invincible-eggs.ts`, `bettercallsaul-fx.ts`, …): the easter eggs
 - `hooks/settingslook.ts`, `hooks/skinslook.ts`: the Settings cards' and Skins gallery's look
 - `hooks/staffing-brain.ts`: the Staffing brain

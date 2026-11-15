@@ -77,7 +77,16 @@ The Boys (a fan homage that ships with the mod, listed under TV shows) is one sk
 | `shock and awe, my son` | SIGNAL HIJACKED: the feed goes OFF BOOK (coat-black, marker red, tape and a LEAKED stamp on every card) |
 | `never meet your heroes` | WE APOLOGISE FOR THE INTERRUPTION: back ON BRAND (Vought navy and gold) |
 
-The mode is saved; the layout never changes, only the palette and the overlays. Other live pieces: the APPROVAL RATING (moved by your test pass rate, decaying back to 50/50), the VNN crawl with BREAKING news, the 7SPN test scoreboard, VOUGHT PR spin on failed tools, the milk glass that drains as the context fills. All text reads at 4.5:1 or better in every mode.
+The mode is saved; the layout never changes, only the palette and the overlays. It also has fights: Butcher vs Homelander (`offthebooks`) and A-Train vs the progress bar (`race`), played as censored live TV, plus THE AMBUSH. Other live pieces: the APPROVAL RATING (moved by your test pass rate, decaying back to 50/50), the VNN crawl with BREAKING news, the 7SPN test scoreboard, VOUGHT PR spin on failed tools, the milk glass that drains as the context fills. All text reads at 4.5:1 or better in every mode.
+
+## Motion: what a JSON skin gets
+
+The built-in skins have motion written for them: fights, stand-offs, heads and props that turn, and acts that play by themselves. It is built on a shared engine ([`hooks/stage/README.md`](../hooks/stage/README.md)) and is part of the mod's code, so a skin made from a `.json` file does not get it. What your skin does get:
+
+- **The skin-switch wipe:** a 0.7 s see-through wipe over the band and the top pane cards, in your skin's colours, when you switch to it with `/skin <id>` or the picker. The numbers stay readable through it.
+- **Reduced motion:** if your OS asks for it, every animated piece is drawn as a still frame.
+
+The built-in skins' fights are listed in the [main README](../README.md#-motion-fights-and-3d) and in [`skins/README.md`](../skins/README.md#motion-fights-and-3d). `/missioncontrol fights often | normal | rare | off` sets how often they play (default `often`), and `/missioncontrol play <name>` replays one.
 
 ## Names and logos
 
