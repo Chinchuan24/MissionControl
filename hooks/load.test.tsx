@@ -222,7 +222,7 @@ test('load: 60 agents at work for 30 s (steps, measures, tool calls) redraw at m
 
 test('compact: the same picture in fewer bytes (dead rules out, one font named once)', () => {
   const F = "-apple-system,'SF Pro Text',sans-serif"
-  const src = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><style>\n.t{fill:#111}.s{fill:#222}\n.ch g{transform-box:fill-box}\n.run .la,.ch .x{animation:st .5s infinite}\n@keyframes st{50%{opacity:.5}}\n@media (prefers-color-scheme: dark){.t{fill:#eee}.s{fill:#ddd}}\n</style><g class="run"><text class="t" font-family="${F}">a</text><text font-family="${F}" font-size="9">b</text></g></svg>`
+  const src = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><style>\n.t{fill:#111}.s{fill:#222}\n.ch g{transform-box:fill-box}.ch .y{animation:hop 1s infinite}\n.run .la,.ch .x{animation:st .5s infinite}\n@keyframes st{50%{opacity:.5}}@keyframes hop{25%,75%{transform:translateY(-5px)}}@keyframes wv{0%{opacity:1}}\n@media (prefers-color-scheme: dark){.t{fill:#eee}.s{fill:#ddd}}\n</style><style>@keyframes zz{50%{opacity:0}}</style><g class="run" style="animation-name:wv"><text class="t" font-family="${F}">a</text><text font-family="${F}" font-size="9">b</text></g></svg>`
   const out = compact(src)
   expect(out.length).toBeLessThan(src.length)
   // Used rules and every at-rule stay; a rule only for absent classes goes.
@@ -232,6 +232,11 @@ test('compact: the same picture in fewer bytes (dead rules out, one font named o
   expect(out).toContain('.run .la,.ch .x{animation:st .5s infinite}')
   expect(out).toContain('@keyframes st{50%{opacity:.5}}')
   expect(out).toContain('@media (prefers-color-scheme: dark){.t{fill:#eee}.s{fill:#ddd}}')
+  // Keyframes nothing names go (hop's only rule went with its class; zz never had one); one named inline stays.
+  expect(out).not.toContain('@keyframes hop')
+  expect(out).not.toContain('zz')
+  expect(out).toContain('@keyframes wv{0%{opacity:1}}')
+  expect(out.split('<style>').length).toBe(2)
   // The one font sits on the root, inherited by every text.
   expect(out.startsWith(`<svg font-family="${F}" xmlns=`)).toBe(true)
   expect(out.split('font-family=').length).toBe(2)
