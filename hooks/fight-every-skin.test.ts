@@ -2,11 +2,11 @@
 // default level (`often`) every skin with a fight or a stand-off gets one at the new cadence: every 7-10 min while a job works,
 // every 15-20 min at rest, over a simulated day (each skin's OWN director, its set pieces and roamers included), and on the REAL
 // band (the plugin mounted, the skin worn, a job running: the act is drawn when its slot comes, and is gone at `fights off`).
-// Plus what the higher rate must not break: one act at a time, nothing in a job's first moments, nothing through the skin switch.
+// Plus what the higher rate must not break: one act at a time, nothing in a job's first moments (fight-level.test.ts too).
 import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
-import { DAY, MIN, fightLevel, localOffsetMs, setFightLevel, setJobStart, setSwitchHold } from './stage/director'
+import { DAY, MIN, fightLevel, localOffsetMs, setFightLevel, setJobStart } from './stage/director'
 import type { Director, FightLevel, Slot } from './stage/director'
 import { directorAt } from './theboys-director'
 import { crabDirector } from './classics'
@@ -84,25 +84,6 @@ test('every skin at often: one act at a time (no fight overlaps another act of i
       expect(work.length, `${skin} rare`).toBeLessThanOrEqual(49)
       expect(plan(T0, T0 + DAY, false), `${skin} rare at rest: none`).toEqual([])
     }
-  })
-})
-
-test('the skin switch holds the fights: none starts in its wipe, none of the new skin is under way through it', () => {
-  at('often', () => {
-    const d = (): Director => fightDirector('maxtac')
-    const f = d().plan(T0, T0 + DAY, { working: true })[10] as Slot
-    for (const sw of [f.startAt - 300, f.startAt + 2_000]) {
-      setSwitchHold(sw - 1000, 2300)
-      try { expect(d().plan(T0, T0 + DAY, { working: true }).some(s => s.startAt === f.startAt), `switch at ${sw - f.startAt} ms`).toBe(false) } finally { setSwitchHold(undefined) }
-    }
-    // A switch well away from it leaves it alone.
-    setSwitchHold(f.startAt - 120_000, 2300)
-    try { expect(d().plan(T0, T0 + DAY, { working: true }).some(s => s.startAt === f.startAt)).toBe(true) } finally { setSwitchHold(undefined) }
-    // Invincible's cached plan follows the switch too (its cache key).
-    const p = duelPlan(T0 + 5 * 3_600_000, 1)
-    expect(p.on).toBe(true)
-    setSwitchHold(p.startAt - 1000, 2300)
-    try { expect(duelPlan(p.startAt + 500, 1).on && duelPlan(p.startAt + 500, 1).startAt === p.startAt).toBe(false) } finally { setSwitchHold(undefined) }
   })
 })
 

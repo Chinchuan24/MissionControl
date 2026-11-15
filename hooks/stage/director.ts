@@ -63,12 +63,8 @@ let JOB_AT: number | undefined
  *  starts from 5 s before a job's start to 90 s after it. The plugin tells the engine when a job starts. */
 export const JOB_BREATH_MS = 90_000
 export const setJobStart = (at: number | undefined): void => { JOB_AT = at }
-let SWITCH: { startAt: number; endAt: number } | undefined
-/** The skin switch's wipe belongs to the switch (final review): at every level no fight starts in it, and none of the new skin's is
- *  under way through it (with the lane's breath on both sides). The plugin tells the engine when a switch plays. */
-export const setSwitchHold = (startAt: number | undefined, ms = 0): void => { SWITCH = startAt === undefined ? undefined : { startAt, endAt: startAt + ms } }
-/** What a cached fight plan depends on besides the clock (the level, the job's start, the skin switch): part of a cache key. */
-export const fightKey = (): string => `${LEVEL}|${LEVEL === 'often' || LEVEL === 'normal' ? JOB_AT ?? '' : ''}|${SWITCH?.startAt ?? ''}`
+/** What a cached fight plan depends on besides the clock (the level, the job's start): part of a cache key. */
+export const fightKey = (): string => `${LEVEL}|${LEVEL === 'often' || LEVEL === 'normal' ? JOB_AT ?? '' : ''}`
 /** The gap a fight lane uses now, working or at rest (undefined: no fight then). */
 export const fightGap = (working: boolean, level: FightLevel = LEVEL): Gap | undefined => (working ? FIGHT_GAPS[level].work : FIGHT_GAPS[level].idle)
 
@@ -236,9 +232,7 @@ export class Director {
     if (ctx.quiet) return []
     const out: Slot[] = []
     // At the frequent levels a fight lane also keeps out of a job's first moments (its job-start act).
-    // And at every level out of the skin switch's wipe.
-    const fightHeld = [...(JOB_AT !== undefined && (LEVEL === 'often' || LEVEL === 'normal') ? [{ startAt: JOB_AT - 5_000, endAt: JOB_AT + JOB_BREATH_MS }] : []), ...(SWITCH ? [SWITCH] : [])]
-    const jobHeld = fightHeld.length ? { ...ctx, held: [...(ctx.held ?? []), ...fightHeld] } : ctx
+    const jobHeld = JOB_AT !== undefined && (LEVEL === 'often' || LEVEL === 'normal') ? { ...ctx, held: [...(ctx.held ?? []), { startAt: JOB_AT - 5_000, endAt: JOB_AT + JOB_BREATH_MS }] } : ctx
     this.lanes.forEach((l, i) => {
       if (!this.allowed(l, ctx)) return
       const c2 = l.o.fight ? jobHeld : ctx
