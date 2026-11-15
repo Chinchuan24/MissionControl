@@ -40,7 +40,10 @@ const BW: Record<number, number> = { 450: 452, 600: 601, 750: 749, 900: 898, 125
 const MIN = {
   omni: { 450: 56, 600: 54, 750: 64, 900: 72, 1250: 84 },
   conquest: { 450: 62, 600: 59, 750: 71, 900: 78, 1250: 89 },
-  boys: { 450: 51, 600: 51, 750: 58, 900: 65, 1250: 84 },
+  // The Boys (final review): the cast stands ABOVE the band's bottom status row (the tip line, the day's totals: from y 110), so
+  // the lane at 1250 is 73 px tall (was 98) and a narrow band's window is the row under the title (46 px): wave 4a's 84/65/58 stood
+  // in the status row.
+  boys: { 450: 45, 600: 45, 750: 45, 900: 45, 1250: 69 },
   psycho: { 450: 61, 600: 61, 750: 61, 900: 61, 1250: 88 },
   hud: { 450: 57, 600: 57, 750: 57, 900: 57, 1250: 87 },
 } as const
@@ -83,7 +86,7 @@ test('wide fights: a lane is full height, right of the task title and the Tasks 
     if (el) expect(allHoles(ER2[W] as BandStage).some(hl => meets([el.x, el.y, el.w, el.h], hl)), `${W}: ER2 lane clear`).toBe(false)
     // The Boys' window: the lane at 1250 (from the header rule), else right of the bust, its cast's heads under the title row.
     const w = winOf({ W: BW[W] as number, H: 148, m: 'brand', at: 0, on: 'band', stage: ST[W] as BandStage })
-    if (W === 1250) { expect(w.y0).toBe(36); expect(w.sc).toBe(LANE_SC); expect(w.x0).toBeGreaterThanOrEqual(343) }
+    if (W === 1250) { expect(w.y0).toBe(36); expect(w.lane).toBe(true); expect(w.sc).toBeLessThanOrEqual(LANE_SC); expect(w.x0).toBeGreaterThanOrEqual(343) }
     else {
       expect(w.x0).toBe(120)
       expect(w.gy - 47 * w.sc, `${W}: heads under the title row`).toBeGreaterThanOrEqual(62)
@@ -199,7 +202,9 @@ for (const [skin, pre, play, cyber] of PLAYS) {
       } else if (W === 1250) {
         // The lane: full height, right of the Tasks chip (so of the title).
         expect(x as number, `${play}: right of the chip`).toBeGreaterThanOrEqual(cyber ? 287 : chipEnd(b))
-        expect(h as number, `${play}: full height`).toBeGreaterThanOrEqual(90)
+        // (The Boys' lane stops above the band's bottom status row, y 110: final review.)
+        if (cyber) expect(h as number, `${play}: full height`).toBeGreaterThanOrEqual(90)
+        else { expect(h as number, `${play}: full height`).toBeGreaterThanOrEqual(70); expect((y as number) + (h as number), `${play}: above the status row`).toBeLessThanOrEqual(110) }
         expect(y as number).toBeGreaterThanOrEqual(33)
       }
     }
