@@ -19,9 +19,9 @@ import type { SkinGroup } from './skinslook'
 import { calPal } from './caliper'
 import { setCalModeWord } from './caliper-theme'
 import { BCS_SKIN_WORDS, BCS_TOOLS, SAUL_GOODMAN_RE, TAKAVIC_RE } from './bettercallsaul'
-import { TOASTS, bashToast, cmdKind, fxOf, mcgillNow, resultFailed, toastDue } from './bettercallsaul-fx'
-import type { BashState, Fx, ToastKey } from './bettercallsaul-fx'
-import { UNPLUG_GAP_MS, shouldUnplug } from './bettercallsaul-extra'
+import { EGG_PLAYS, TOASTS, bashToast, cmdKind, dayOf as bcsDayOf, fxOf, hearingAfterFails, mcgillNow, resultFailed, toastDue } from './bettercallsaul-fx'
+import type { BashState, Fx, FxKind, ToastKey } from './bettercallsaul-fx'
+import { UNPLUG_GAP_MS, bcsDirector, shouldUnplug } from './bettercallsaul-extra'
 import { CLASSIC_RE, GUARDIANS_RE, NEW_SUIT_RE, SWAP_MS, THINK_RE, fightDirector, isVariantsAsk, versionOf } from './invincible-eggs'
 import { CONQUEST, CONQUEST_PLAY } from './invincible-fight'
 import { ERA1, ERA2, TITLE_WORDS as INV_WORDS } from './invincible'
@@ -2132,7 +2132,9 @@ let TB_COST = 0
 let TB_IDLE = { from: 0, ten: false }
 let TB_LINT_FAILED = false
 const boysSwapAt = (): number | undefined => (SKIN.id === 'solidgold' || SKIN.id === 'noir' ? (BOYS_GOLD_SINCE > 0 ? BOYS_GOLD_SINCE : undefined) : BOYS_MODE.since > 0 ? BOYS_MODE.since : undefined)
-const swapAtNow = (): number | undefined => (isInv() && INV_ERA.since > 0 ? INV_ERA.since : isBoys() ? boysSwapAt() : undefined)
+// Better Call Saul / GENE: when the switch word (takavic, saul goodman) last swapped them (0: never), for the colour drain / flood.
+let BCS_SWAP = 0
+const swapAtNow = (): number | undefined => (isInv() && INV_ERA.since > 0 ? INV_ERA.since : isBoys() ? boysSwapAt() : (SKIN.id === 'better-call-saul' || SKIN.id === 'gene') && BCS_SWAP > 0 ? BCS_SWAP : undefined)
 // Caliper's setting (dark, light, auto; only this is stored) and the app's theme from /config (for auto). The atom packs
 // `mode|since|appIsLight` for the drawers; `since` is 0 after a restart. The resolved face is never stored.
 const calMode = atom({ plugin: 'crab-progress', key: 'calMode' } as const, 'auto|0|0')
@@ -2218,6 +2220,13 @@ async function noteSwitch($: EngineInterface, from: Skin): Promise<void> {
 // Better Call Saul / GENE: the last trigger word typed (a drawing for a few seconds), when Chuck last "unplugged" (the dim), the
 // toasts' last times and the run of failed commands behind them. All in memory; the drawings are pinned to these times.
 let BCS_FX: Fx | undefined
+// `/missioncontrol play <name>` on both skins: every typed egg (saul3d, namaste, ding, chicanery, 1216) and the director's
+// scheduled acts (gus, car, lalo), each stored as the typed act, pinned to now.
+// The director's first (its bar hearing is the typed `chicanery` too: the typed egg's line wins the list).
+for (const gene of [false, true]) playsFrom(gene ? 'gene' : 'better-call-saul', bcsDirector(gene), sl => { BCS_FX = { kind: sl.id as FxKind, at: sl.startAt } }, n => `${n} (scheduled)`)
+for (const [kind, what] of EGG_PLAYS) registerPlay(['better-call-saul', 'gene'], { name: kind, what, run: at => { BCS_FX = { kind, at } } })
+// The day the bar hearing last played after three failed test runs in a row (once a local day).
+let BCS_FAILS_DAY = ''
 let BCS_UNPLUG_AT: number | undefined
 const BCS_TOAST_AT: Partial<Record<ToastKey, number>> = {}
 let BCS_BASH: BashState = { testFails: 0, lintFailed: false }
@@ -6344,7 +6353,7 @@ const slimBandSvg = (OW: number, d: HudData): string => {
   // A theme that draws its own edge (a chamfered glass tile) leaves out the engine's rounded one.
   if (!sl?.ownEdge) s.push(`<rect x=".5" y=".5" width="${W - 1}" height="${H - 1}" rx="10" class="tile"/><rect x=".5" y=".5" width="${W - 1}" height="${H - 1}" rx="10" fill="none" stroke="${edge}" stroke-opacity=".5"${d.isWorking ? ' class="hedge"' : ''}/>`)
   const overBudget = Boolean(d.budget && d.budget.usedMs > d.budget.min * 60_000)
-  const tctx: ThemeCtx = { ctxPct: d.ctxPct, overBudget, isWorking: d.isWorking, capri: roamOnBand(th, d.at, d.ctxPct), totalUsd: d.session.total, at: d.at, party: d.isParty, ...(d.partyAt === undefined ? {} : { partyAt: d.partyAt }) }
+  const tctx: ThemeCtx = { ctxPct: d.ctxPct, overBudget, isWorking: d.isWorking, capri: roamOnBand(th, d.at, d.ctxPct), totalUsd: d.session.total, at: d.at, party: d.isParty, ...(d.partyAt === undefined ? {} : { partyAt: d.partyAt }), ...(d.isWorking && d.taskFrom ? { jobAt: d.taskFrom } : {}) }
   if (sl) s.push(sl.foot(W, H, c, tctx))
   if (!sl?.ownEdge) s.push(`<rect x=".5" y="14" width="3" height="${H - 28}" rx="1.5" fill="${edge}"/>`)
   // ---- header (baseline 22)
@@ -6431,7 +6440,7 @@ const slimBandSvg = (OW: number, d: HudData): string => {
   if (cold && crRight - baseEnd > 220) s.push(`<text x="${r2(crRight)}" y="${y}" text-anchor="end" font-family="${FONT}" font-size="11.5" font-style="italic" fill="${c.muted}">${xml(serifClip(`“${cold}”`, 11.5, crRight - baseEnd))}</text>`)
   s.push(sl?.rule ? sl.rule(14, 32.5, W - 14, 32.5) : `<line x1="14" y1="32.5" x2="${W - 14}" y2="32.5" stroke="${c.line}"/>`)
   // ---- task row
-  const fig = sl ? sl.figure({ at: d.at, ctxPct: d.ctxPct, party: d.isParty, working: d.isWorking, ...(d.progress === null ? {} : { progress: Math.round(d.progress * 100) }), ...(activeFx() && th.extras ? { fx: activeFx() as { kind: string; at: number } } : {}) }) : `${crab(14, 38, 'boss', false, d.isWorking, 1.05)}${crown(14, 38, 1.05)}`
+  const fig = sl ? sl.figure({ at: d.at, ctxPct: d.ctxPct, party: d.isParty, working: d.isWorking, ...(d.progress === null ? {} : { progress: Math.round(d.progress * 100) }), ...(activeFx() && th.extras ? { fx: activeFx() as { kind: string; at: number } } : {}), ...(d.partyAt === undefined ? {} : { partyAt: d.partyAt }) }) : `${crab(14, 38, 'boss', false, d.isWorking, 1.05)}${crown(14, 38, 1.05)}`
   s.push(dancing(fig, d.isParty))
   const tx = 64
   // Below 1100 px the three readouts shrink to short labels and values (no bars), so they stay on screen.
@@ -7607,6 +7616,7 @@ export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     // A new session starts the Better Call Saul skins' little memory afresh (trigger word, unplug, toasts).
     BCS_FX = undefined
+    BCS_SWAP = 0
     BCS_UNPLUG_AT = undefined
     BCS_CALLS = []
     BCS_BASH = { testFails: 0, lintFailed: false }
@@ -7966,7 +7976,15 @@ export const register: Register = (on, options) => {
     try {
       const { toast, state } = bashToast(kind, kind === 'force' ? false : resultFailed(res), BCS_BASH)
       BCS_BASH = state
-      if (toast) bcsToast($, toast, await $.clock.now())
+      const now = await $.clock.now()
+      if (toast) bcsToast($, toast, now)
+      // Three failed test runs in a row: the bar hearing (once a day; never over an egg already playing).
+      if (hearingAfterFails(state.testFails, BCS_FAILS_DAY, now) && !(BCS_FX && now < BCS_FX.at + 9_000)) {
+        BCS_FAILS_DAY = bcsDayOf(now)
+        BCS_FX = { kind: 'chicanery', at: now }
+        await update($, bandTick, () => now)
+        await update($, paneTick, () => now)
+      }
     } catch {
       // A garnish only.
     }
@@ -9174,6 +9192,8 @@ export const register: Register = (on, options) => {
       const found = to ? SKINS.get(to) : undefined
       if (found) {
         applySkin(found)
+        // The colour drains out (to GENE) or floods back (to Saul) over both panels, pinned to now (bettercallsaul-gene.ts).
+        BCS_SWAP = at
         await $.store.set('skin', found.id).catch(() => undefined)
         await update($, skin, () => found.id)
         await retitle($).catch(() => undefined)

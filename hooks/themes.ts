@@ -31,11 +31,12 @@ import { CAPRICORN_BOOT, CAPRICORN_GREETING, ER2_BAND_H, ER2_BOOT, ER2_CSS, ER2_
 import { ER2_BADGES, ER2_WORDS as ER2_CRED_WORDS, bootLine, er2RankOf, er2Toast, gigsAlt, gigsCard, syncCard, traceAlt, traceCard } from './edgerunners2-cards'
 import { er2Hack } from './edgerunners2-hack'
 import { DUET_SEED, duetAt, duetPlan } from './edgerunners2-duet'
-import { BAND_H as BCS_BAND_H, BCS_BOOT, BCS_CSS, BCS_GREETING, BCS_TITLE_WORDS, BCS_TOOLS, GENE_BOOT, GENE_GREETING, bcsCheer, bcsChip, bcsCrew, bcsEp, bcsEpW, bcsEpisodeAt, bcsFigure, bcsFoot, bcsGauge, bcsName, bcsTear, bcsWarning, pip as bcsPip } from './bettercallsaul'
+import { BAND_H as BCS_BAND_H, BCS_BOOT, BCS_CSS, BCS_GREETING, BCS_TITLE_WORDS, BCS_TOOLS, GENE_BOOT, GENE_GREETING, bcsCheer, bcsChip, bcsCrew, bcsEp, bcsEpW, bcsEpisodeAt, bcsFoot, bcsGauge, bcsName, bcsTear, bcsWarning, pip as bcsPip } from './bettercallsaul'
 import { BCS_BADGES, BCS_CRED_WORDS, attorneyCard, bcsBootLine, bcsRankOf, bcsToast, docketAlt, docketCard, legalPad, legalPadAlt } from './bettercallsaul-cards'
 import { mikeCameo, mikeRoamer } from './bettercallsaul-mike'
 import { bcsExtras } from './bettercallsaul-extra'
-import { zoomWrap } from './bettercallsaul-fx'
+import { figureFor } from './bettercallsaul-fx'
+import { geneCheer } from './bettercallsaul-gene'
 import type { Fx } from './bettercallsaul-fx'
 import { invTheme } from './invincible-theme'
 import { calTheme } from './caliper-theme'
@@ -54,7 +55,7 @@ import { CAPRI_SWITCH, D_SWITCH, er2FightBand, er2FightPane, fightLive, playing 
 /** What the band's figure slot knows: the clock, the context, and whether the job-done celebration is drawing. */
 /** What the log card knows of the clock (Edgerunners 2's tape: it runs while a job works, rewinds on a new beat, CUT! when done). */
 export type LogNow = { at: number; working?: boolean; doneAt?: number }
-export type FigureCtx = { at: number; ctxPct: number; party?: boolean; fx?: { kind: string; at: number }; /** A job is running. */ working?: boolean; /** The job's progress, 0 to 100 (absent before a plan). */ progress?: number }
+export type FigureCtx = { at: number; ctxPct: number; party?: boolean; fx?: { kind: string; at: number }; /** A job is running. */ working?: boolean; /** The job's progress, 0 to 100 (absent before a plan). */ progress?: number; /** When the last job's celebration began (Better Call Saul's glance). */ partyAt?: number }
 export type ThemeKey = 'mentalist' | 'redjohn' | 'breakingbad' | 'heisenberg' | 'edgerunners2' | 'capricorn' | 'bettercallsaul' | 'gene' | 'invincible' | 'invincible2' | 'caliper' | 'caliperlight' | 'boys' | 'boys2' | 'solidgold' | 'boysnoir'
 /** The pane cards a roaming act can belong to: the level card, the task card, the log. */
 export type PaneCard = 'cred' | 'task' | 'log'
@@ -65,7 +66,7 @@ export type ThemeOrg = { label: string; color: string; kind: string; status?: st
 /** The skin colours a theme's drawers read. */
 export type ThemeColors = { accent: string; accent2: string; done: string; warn: string; alert: string; text: string; subtext: string; muted: string; tile: string; track: string; line: string }
 /** What the band knows when it asks for its corner egg. */
-export type ThemeCtx = { ctxPct: number; overBudget: boolean; /** The session total cost in dollars (a band's "Total $1.23"). */ totalUsd?: number; /** The clock. */ at?: number; /** Is a job running (the Edgerunners 2 frame runs a beam while it works). */ isWorking?: boolean; /** Is a roaming character out on the band (the Edgerunners 2 HUD turns hers). */ capri?: boolean; /** The job-done celebration is drawing, and since when (Caliper's ruler wave). */ party?: boolean; partyAt?: number }
+export type ThemeCtx = { ctxPct: number; overBudget: boolean; /** The session total cost in dollars (a band's "Total $1.23"). */ totalUsd?: number; /** The clock. */ at?: number; /** Is a job running (the Edgerunners 2 frame runs a beam while it works). */ isWorking?: boolean; /** Is a roaming character out on the band (the Edgerunners 2 HUD turns hers). */ capri?: boolean; /** The job-done celebration is drawing, and since when (Caliper's ruler wave). */ party?: boolean; partyAt?: number; /** The running job's start (Better Call Saul's statue inflates). */ jobAt?: number }
 
 /** A character who wanders through both panels now and then (roamer.ts): her sprite, rim colours, lines and chance. */
 export type ThemeRoamer = {
@@ -398,14 +399,15 @@ const saulTheme = (gene: boolean): ThemeEggs => ({
     ownsTotal: true,
     ep: { w: bcsEpW, draw: (xr, y, code, title, full) => bcsEp(xr, y, code, title, full, gene) },
     tear: (x, y, w, pct, _t, ctx) => bcsTear(x, y, w, pct, ctx?.ctxPct ?? 0, gene),
-    figure: ctx => zoomWrap(bcsFigure(gene), ctx?.fx as Fx | undefined, ctx?.at ?? 0),
+    figure: ctx => figureFor(gene, ctx?.fx as Fx | undefined, ctx?.at ?? 0, ctx?.partyAt),
     crew: (x, y, color) => bcsCrew(x, y, color, gene),
     pip: (st, cx, cy) => bcsPip(st, cx, cy, gene),
     gauge: (xr, y, isWorking, done, total) => bcsGauge(xr, y, isWorking, done, total, gene),
     foot: (W, H, _t, ctx) => bcsFoot(W, H, ctx, gene),
   },
   warning: bcsWarning(gene),
-  cheer: (W, H, _font, _t, startAt) => bcsCheer(W, H, gene, startAt),
+  // GENE's own cheer: the mall shutter with NIPPY! on it (bettercallsaul-gene.ts); Saul keeps the TV ad's star-wipe.
+  cheer: (W, H, _font, _t, startAt) => (gene && startAt !== undefined ? geneCheer(W, H, startAt) : bcsCheer(W, H, gene, startAt)),
   cred: { title: 'ATTORNEY AT LAW', ranks: bcsRankOf, words: BCS_CRED_WORDS, badges: BCS_BADGES, toast: bcsToast, card: (W, c) => attorneyCard(W, c, gene) },
   card: {
     draw: (W, task, isWorking, done, total, _t, _font, _frame, legends) => docketCard(W, task, isWorking, done, total, legends, gene),
@@ -421,6 +423,8 @@ const saulTheme = (gene: boolean): ThemeEggs => ({
   roamer: mikeRoamer(gene),
   takeover: (W, H, line, tm) => mikeCameo(W, H, line, tm, gene),
   extras: bcsExtras(gene),
+  // The bar hearing's LEGAL PAD act (bettercallsaul-court.ts, about 34 k between `<!--dl-->` markers): kept free while a job works.
+  paneReserve: 36_000,
 })
 
 export const THEMES: Record<ThemeKey, ThemeEggs> = {

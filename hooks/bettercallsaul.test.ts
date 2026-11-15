@@ -507,8 +507,12 @@ test('the cheer shows on the band when a job finishes, with Mike hushed', async 
 test('trigger words: found as whole words, only in these skins, the prompt unchanged', async ($, on) => {
   expect(fxOf('please chicanery now')).toBe('chicanery')
   expect(fxOf('1216')).toBe('1216')
+  expect(fxOf('it was 1216')).toBe('1216')
+  expect(fxOf('see line 1216')).toBeUndefined()
   expect(fxOf('Namaste')).toBe('namaste')
   expect(fxOf('ding!')).toBe('ding')
+  expect(fxOf('ding ding ding')).toBe('ding')
+  expect(fxOf('add a ding sound')).toBeUndefined()
   expect(fxOf('saul3d')).toBe('saul3d')
   expect(fxOf('coding')).toBeUndefined()
   expect(fxOf('12160')).toBeUndefined()
@@ -518,15 +522,16 @@ test('trigger words: found as whole words, only in these skins, the prompt uncha
   const res = (await $.prompt.submit({ text: 'chicanery', cursor: 0 } as never)) as { text?: string }
   expect(String(res?.text ?? 'chicanery')).toBe('chicanery')
   const b = await bandAt($, 1250)
+  // The bar hearing (bettercallsaul-court.ts): the trap, the break, the title card. 1216 / 1261 is the `1216` egg's.
   expect(b).toContain('I AM NOT CRAZY!')
-  expect(b).toContain('1216')
-  expect(b).toContain('1261')
+  expect(b).toContain('Check your coat pocket')
+  expect(b).toContain('CHICANERY')
   await $.prompt.submit({ text: 'namaste', cursor: 0 } as never)
-  expect(await bandAt($, 1250)).toContain('class="bcs-go"')
+  expect(await bandAt($, 1250)).toContain('NAMASTE.')
   await $.prompt.submit({ text: 'ding', cursor: 0 } as never)
-  expect(await bandAt($, 1250)).toContain('class="bcs-ding"')
+  expect(await bandAt($, 1250)).toContain('DING!')
   await $.prompt.submit({ text: 'saul3d', cursor: 0 } as never)
-  expect(await bandAt($, 1250)).toContain('class="bcs-z3"')
+  expect(await bandAt($, 1250)).toContain('fill="#0B0806"')
 })
 test('trigger words do nothing on other skins', async ($, on) => {
   base(on, 100_000, quietAt(false))
@@ -545,7 +550,7 @@ test('trigger words end on their own and respect reduced motion', async ($, on) 
   await clock.advance(6_000)
   expect(await bandAt($, 1250)).not.toContain('1261')
   const reduced = BCS_CSS.split('prefers-reduced-motion')[1] as string
-  for (const c of ['bcs-fx', 'bcs-ding', 'bcs-z3', 'bcs-gun1', 'bcs-dim', 'bcs-up', 'bcs-go']) expect(reduced).toContain(c)
+  for (const c of ['bcs-fx', 'bcs-ding', 'bcs-gun1', 'bcs-dim', 'bcs-up', 'bcs-go', 'bcs-breath', 'bcs-blk', 'bcs-win']) expect(reduced).toContain(c)
 })
 test('command kinds and results: tests, lint, force push', () => {
   expect(cmdKind('npx vitest run')).toBe('test')
