@@ -23,7 +23,7 @@ import type { Slot } from './stage/director'
 import { FrameBank, silhouette } from './stage/frames'
 import { turntable } from './stage/turntable'
 import * as fx from './stage/fx'
-import { keepClip } from './stage/keep'
+import { allHoles, keepClip, laneIn } from './stage/keep'
 import type { BandStage } from './stage/keep'
 import { registerPlay } from './stage/replay'
 import { Act, r1, r3 } from './stage/timeline'
@@ -112,9 +112,11 @@ const tornFrame = (w: number, h: number, m: number, seed: string): string => {
   const j = (v: number) => r1(v + (R() - 0.5) * m * 0.9)
   let d = `M${-4} ${-4}H${w + 4}V${h + 4}H${-4}Z M${m} ${m}`
   for (let x = m; x <= w - m; x += 9) d += `L${Math.round(x)} ${Math.round(j(m))}`
-  for (let y = m; y <= h - m; y += 7) d += `L${Math.round(j(w - m))} ${Math.round(y)}`
+  // The torn sides keep about the same number of teeth on a tall lane (wave 4) as in the 60 px title rows: the cap's headroom.
+  const sy = Math.max(7, h / 8)
+  for (let y = m; y <= h - m; y += sy) d += `L${Math.round(j(w - m))} ${Math.round(y)}`
   for (let x = w - m; x >= m; x -= 9) d += `L${Math.round(x)} ${Math.round(j(h - m))}`
-  for (let y = h - m; y >= m; y -= 7) d += `L${Math.round(j(m))} ${Math.round(y)}`
+  for (let y = h - m; y >= m; y -= sy) d += `L${Math.round(j(m))} ${Math.round(y)}`
   return `<path d="${d}Z" fill="${C.paper}" fill-rule="evenodd"/>`
 }
 /** A sheet of torn magenta paper over [x0, x1] x [y0, y1] whose right edge is torn, with its drop shadow. */
@@ -156,6 +158,20 @@ const placed = (layer: string, x: number, y: number, w: number, h: number, id: s
 // At most 700 wide: the fighters never grow with the region (its height sets them), only its floor and trails do, so a very wide
 // band (a short slot on a wide window) kept adding chars: 32,049 at 1600 px, over the 32 k fight budget.
 export const bandRegion = (W: number, H: number, stage?: BandStage): { x: number; y: number; w: number; h: number } => ({ x: 8, y: 34, w: Math.round(Math.min(W * 0.64, W - 300, 700, stage ? stage.x1 - 8 : W)), h: Math.max(60, Math.min(74, H - 95)) })
+
+/** The narrowest full-height lane worth taking, and the widest one drawn (its trails and floor cost chars, its cast does not). */
+export const LANE_MIN = 300
+export const LANE_MAX = 520
+/** The band's full-height lane for a fight (wave 4): right of the task title and the Tasks chip, the title row to the floor, free
+ *  of every readout and row part (stage/keep.ts `laneIn`); undefined on a band too narrow for one. */
+export const bandLane = (H: number, stage: BandStage): { x: number; y: number; w: number; h: number } | undefined => {
+  const l = laneIn([8, 34, Math.max(0, stage.x1 - 8), H - 37], allHoles(stage), LANE_MIN)
+  return l ? { x: l[0], y: l[1], w: Math.min(LANE_MAX, l[2]), h: l[3] } : undefined
+}
+/** Each fight's cast scale in a region `h` tall (D and the psycho are padded to 49 rows, the HUD pair to 44). */
+export const er2Sc = (kind: Er2Kind, h: number): number => r1(Math.min(2, (h - 6) / (kind === 'cyberpsycho' ? D_H : 44)))
+/** The tallest fighter's drawn height (band px) in a region `h` tall (the old title rows draw 1.25x and 1.3x). */
+export const er2FighterPx = (kind: Er2Kind, h: number, lane: boolean): number => r1((kind === 'cyberpsycho' ? D_H : 44) * (lane ? er2Sc(kind, h) : kind === 'cyberpsycho' ? 1.25 : 1.3))
 
 // ---------------------------------------------------------------- FIGHT 1: D vs a cyberpsycho, cut like a film (D mode)
 /**
@@ -206,7 +222,7 @@ export const psychoAct = (o: { at: number; w: number; h: number; id: string; sc?
   const R = fx.rng(`${o.id}rip`)
   let top = ''
   let bot = ''
-  for (let i = 0; i <= 7; i++) { top += `L${Math.round(rx0 + (rlen * i) / 7)} ${Math.round(ripY - 3 - R() * 4)}`; bot = `L${Math.round(rx0 + (rlen * i) / 7)} ${Math.round(ripY + 3 + R() * 4)}${bot}` }
+  for (let i = 0; i <= 5; i++) { top += `L${Math.round(rx0 + (rlen * i) / 5)} ${Math.round(ripY - 3 - R() * 4)}`; bot = `L${Math.round(rx0 + (rlen * i) / 5)} ${Math.round(ripY + 3 + R() * 4)}${bot}` }
   const rip = `<path d="M${rx0} ${ripY}${top}${bot}Z" fill="${C.paper}" opacity=".85"/><path d="M${rx0} ${ripY}${top}" fill="none" stroke="${C.white}" stroke-width="1.2"/>`
   body += kf(act, rip, [[0, 'opacity:0;transform:scaleX(0)'], [2.3, 'opacity:0;transform:scaleX(0)'], [2.31, 'opacity:1;transform:scaleX(.2)'], [2.6, 'opacity:1;transform:scaleX(1)'], [2.85, 'opacity:0;transform:scaleX(1)']], { origin: `${rx0}px ${ripY}px` })
   body += cam.wrap(f.body())
@@ -220,9 +236,9 @@ export const psychoAct = (o: { at: number; w: number; h: number; id: string; sc?
   const half = (left: boolean): string => {
     const Rr = fx.rng(`${o.id}half`)
     let e = ''
-    for (let y = -2; y <= o.h + 2; y += 8) e += `L${Math.round(o.w / 2 + (Rr() - 0.5) * 12)} ${y}`
+    for (let y = -2; y <= o.h + 2; y += Math.max(8, Math.round(o.h / 8))) e += `L${Math.round(o.w / 2 + (Rr() - 0.5) * 12)} ${y}`
     const edge = `M${left ? -4 : o.w + 4} -2${e}L${left ? -4 : o.w + 4} ${o.h + 2}Z`
-    const fibres = `<path d="${Array.from({ length: 5 }, (_, i) => `M${Math.round(left ? 10 + i * o.w * 0.08 : o.w * 0.55 + i * o.w * 0.08)} ${Math.round(6 + ((i * 17) % (o.h - 12)))}h${Math.round(o.w * 0.06)}`).join('')}" stroke="${C.paperDark}" stroke-opacity=".35"/>`
+    const fibres = `<path d="${Array.from({ length: 3 }, (_, i) => `M${Math.round(left ? 10 + i * o.w * 0.08 : o.w * 0.55 + i * o.w * 0.08)} ${Math.round(6 + ((i * 17) % (o.h - 12)))}h${Math.round(o.w * 0.06)}`).join('')}" stroke="${C.paperDark}" stroke-opacity=".35"/>`
     return `<path d="${edge}" fill="${C.paper}" stroke="${C.paperDark}" stroke-width="2"/>${fibres}`
   }
   body += kf(act, half(true), [[0, 'transform:none'], [0.3, 'transform:none'], [0.6, `transform:translate(-${r1(o.w * 0.6)}px,6px) rotate(-4deg)`]], { ease: 'cubic-bezier(.5,0,.9,.6)' })
@@ -355,12 +371,16 @@ export const hudAct = (o: { at: number; w: number; h: number; id: string; sc?: n
 export const er2FightBand = (W: number, H: number, at: number, working: boolean, sec: boolean, stage?: BandStage): string => {
   const ft = er2Fight(at, working, sec)
   if (!ft || at >= ft.startAt + ACT_MS[ft.kind]) return ''
-  const r = bandRegion(W, H, stage)
-  const a = ft.kind === 'cyberpsycho' ? psychoAct({ at: ft.startAt, w: r.w, h: r.h, id: `er2-psy-band-${W}-${r.w}` }) : hudAct({ at: ft.startAt, w: r.w, h: r.h, id: `er2-hud-band-${W}-${r.w}` })
+  // Wave 4: on a wide band the fight takes the widest full-height lane right of the task title and the Tasks chip (the title
+  // row down to the floor), its cast scaled to the lane's height (about 1.5x); else the title rows as before.
+  const lane = stage ? bandLane(H, stage) : undefined
+  const r = lane ?? bandRegion(W, H, stage)
+  const sc = lane ? er2Sc(ft.kind, lane.h) : undefined
+  const a = ft.kind === 'cyberpsycho' ? psychoAct({ at: ft.startAt, w: r.w, h: r.h, id: `er2-psy-band-${W}-${r.w}x${r.h}`, ...(sc ? { sc } : {}) }) : hudAct({ at: ft.startAt, w: r.w, h: r.h, id: `er2-hud-band-${W}-${r.w}x${r.h}`, ...(sc ? { sc } : {}) })
   if (!stage) return placed(a.layer, r.x, r.y, r.w, r.h, `${a.act.p}rg`)
   // On the real band: clipped to the region minus the readouts inside it (stage/keep.ts), in the band's coordinates.
   const id = `${a.act.p}rg`
-  return `<defs>${keepClip(id, [r.x, r.y, r.w, r.h], stage.keep)}</defs><g clip-path="url(#${id})"><g transform="translate(${r1(r.x)} ${r1(r.y)})">${a.layer}</g></g>`
+  return `<defs>${keepClip(id, [r.x, r.y, r.w, r.h], lane ? [] : stage.keep)}</defs><g clip-path="url(#${id})"><g transform="translate(${r1(r.x)} ${r1(r.y)})">${a.layer}</g></g>`
 }
 
 // ---------------------------------------------------------------- the pane echoes

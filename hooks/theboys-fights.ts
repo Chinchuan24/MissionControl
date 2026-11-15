@@ -12,7 +12,7 @@
 // The band plays the fight inside a camera window that never reaches the working numbers (the window ends left of the bar's
 // percent, the cost line and the readouts, and below the top row); the CRISIS DESK plays the monitor cut (the night tower arena in
 // parallax, the other close-up).
-import { keepClip } from './stage/keep'
+import { allHoles, keepClip, laneIn } from './stage/keep'
 import type { Rect } from './stage/keep'
 import type { Sprite } from './cast'
 import { COND, PROPS, SP, esc, r1, unit } from './theboys'
@@ -45,21 +45,37 @@ export const winOf = (g: Geo): Win => {
     const right = g.W >= 520 ? q.r0 - 24 : g.W
     // On the real band: never past the band's clear span (the crew, the percent, TODAY), the Tasks chip a hole in the clip.
     const x1 = Math.round(Math.min(g.W * 0.6 - 6, right - 6, g.stage ? g.stage.x1 - 4 : g.W))
-    return { x0: 120, x1, y0: 47, gy: GROUND, sc: 1.1, band: true, W: g.W, H: g.H, m: g.m, ...(g.stage ? { keep: g.stage.keep } : {}) }
+    const st = g.stage
+    // Wave 4, on the real band: the widest full-height lane right of the task title and the Tasks chip, up to the clear span
+    // (a wide band: about 440 px at 1250), from the header rule to the floor: the cast stands 1.8x (80 px), never over the title.
+    const lane = st ? laneIn([0, BAND_TOP, Math.round(Math.min(right - 6, st.x1 - 4)), GROUND - BAND_TOP], allHoles(st), LANE_MIN) : undefined
+    if (lane) return { x0: lane[0], x1: lane[0] + lane[2], y0: BAND_TOP, gy: GROUND, sc: LANE_SC, band: true, W: g.W, H: g.H, m: g.m, keep: [] }
+    // Else the old window (right of the bust and the step count): a cast 1.4x where it is wide enough, its heads under the task
+    // title's row (they pass BEHIND the title, a hole, with the Tasks chip and the step count), 1.25x at 750, 1.1x narrower.
+    const sc = x1 - 120 >= 280 ? 1.4 : x1 - 120 >= 160 ? 1.25 : 1.1
+    return { x0: 120, x1, y0: 47, gy: GROUND, sc, band: true, W: g.W, H: g.H, m: g.m, ...(st ? { keep: [...st.keep, ...(st.title ? [st.title] : [])] } : {}) }
   }
   // The CRISIS DESK (THE JOB, THE SCRIPT): under the card's title row (the title, LIVE · ON MESSAGE, the card's own line, all at
   // y 26) and left of its right-hand column (the stamps, `N of M spun`, the percent, the releases' time and cost, all within
   // PANE_RIGHT of the right edge), so the card keeps every number and chip while the monitor cut plays.
   return { x0: 8, x1: g.W - PANE_RIGHT, y0: PANE_TOP, gy: g.H - 10, sc: Math.max(1, Math.min(1.6, (g.H - PANE_TOP - 26) / 58)), band: false, W: g.W, H: g.H, m: g.m }
 }
+/** The lane's top on the band (under the header rule), the narrowest lane worth it, and the cast's scale there (wave 4). */
+export const BAND_TOP = 36
+export const LANE_MIN = 300
+export const LANE_SC = 1.8
+/** The tallest pose of a fight on the band, drawn (band px): every pose is padded to PH rows; the tallest stand about 47. */
+export const castPx = (w: Win): number => r1(47 * w.sc)
 /** The window's clip (static: the camera moves inside it); `clipDef` once per layer, `clipped` for each group in it. */
 const clipDef = (a: Act, w: Win): string => `<defs>${w.keep ? keepClip(`${a.sg.p}w`, [w.x0, w.y0, w.x1 - w.x0, w.gy + 1 - w.y0], w.keep) : `<clipPath id="${a.sg.p}w"><rect x="${w.x0}" y="${w.y0}" width="${w.x1 - w.x0}" height="${w.gy + 1 - w.y0}"/></clipPath>`}</defs>`
 const clipped = (a: Act, inner: string): string => `<g clip-path="url(#${a.sg.p}w)">${inner}</g>`
 /** A fighter's centre y (every pose is padded to PH rows, feet on the window's ground). */
 const cy = (w: Win): number => r1(w.gy - (PH * w.sc) / 2)
 /** Casts poses (padded, anchored at their foot pivot `ax`) on the act's stage. */
-const cast = (a: Act, poses: Record<string, [Sprite, number]>): void => {
-  a.sgK = 7
+const cast = (a: Act, poses: Record<string, [Sprite, number]>, w?: Win, k?: number): void => {
+  // 7 colours a pose; 6 in the band's old window (1.1-1.4x figures, where the 7th shade barely reads) and for the gold-graded
+  // reunion on the band (its ramp is one hue): the fight cap's 1 k headroom.
+  a.sgK = w?.band && (k !== undefined || w.sc < LANE_SC) ? (k ?? 6) : 7
   for (const [k, [sp, ax]] of Object.entries(poses)) if (!a.sg.bank.has(k)) a.sg.cast(k, padPose(sp), ax)
 }
 
@@ -184,7 +200,7 @@ const swing = (a: Act, w: Win, t: number, delta: number): string => {
 const cutin = (a: Act, w: Win, t: number, key: string, sp: Sprite, d: number, from: 1 | -1 = 1): string => {
   if (!a.sg.bank.has(key)) a.sg.cast(key, gradeOf(key, sp, w.m))
   const ww = w.x1 - w.x0
-  const s = r1(Math.min(w.band ? 2 : 3, (ww * 0.8) / 80, ((w.gy - w.y0) * 0.62) / 20))
+  const s = r1(Math.min(w.band && w.sc < LANE_SC ? 2 : 3, (ww * 0.8) / 80, ((w.gy - w.y0) * 0.62) / 20))
   const cx = r1((w.x0 + w.x1) / 2)
   const y = r1(w.y0 + (w.gy - w.y0) * 0.42)
   const hh = 10 * s
@@ -256,7 +272,7 @@ const offthebooks = (a: Act, g: Geo): string => {
   cast(a, {
     bW: [SP.TB_BUTCHER_WALK, 0.5], bD: [MS.TB_BUTCHER_DUCK, 0.56], bC: [MS.TB_BUTCHER_CONNECT, 0.29],
     hH: [SP.TB_HOMELANDER_HOVER, 0.5], hL: [SP.TB_HOMELANDER_LASER, 0.42],
-  })
+  }, w)
   const sc = w.sc
   const ww = w.x1 - w.x0
   const y = cy(w)
@@ -320,7 +336,7 @@ const reunion = (a: Act, g: Geo): string => {
   cast(a, {
     hH: [MS.TB_GOLD_HOMELANDER_HOVER, 0.5], hL: [MS.TB_GOLD_HOMELANDER_LASER, 0.4],
     sW: [MS.TB_GOLD_SOLDIERBOY_SHIELD, 0.5], sB: [MS.TB_GOLD_SOLDIERBOY_BASH, 0.35], sX: [MS.TB_GOLD_SOLDIERBOY_BLAST, 0.55],
-  })
+  }, w, 6)
   const sc = w.sc
   const ww = w.x1 - w.x0
   const y = cy(w)
@@ -349,7 +365,7 @@ const reunion = (a: Act, g: Geo): string => {
   const shy = r1(y - 6 * sc)
   const beam = `<path d="M${ex} ${ey}L${shx} ${shy}" stroke="#FF8A7A" stroke-width="${r1(3 * sc)}" opacity=".35"/><path d="M${ex} ${ey}L${shx} ${shy}" stroke="#FF2A2A" stroke-width="1.4"/><circle cx="${shx}" cy="${shy}" r="${r1(5 * sc)}" fill="#FFF3C4" opacity=".55"/>`
   fight += a.sg.win(2.9, 3.85, beam)
-  fight += fx.sparks(a.sg, 3.0, shx, shy, { seed: 'f1sp', n: 7, color: '#F4DC86', len: 9 }) + a.sg.win(3.1, 3.85, `<circle cx="${shx}" cy="${shy}" r="${r1(10 * sc)}" fill="none" stroke="#FFF3C4" stroke-width="1.5" opacity=".8"/>`)
+  fight += fx.sparks(a.sg, 3.0, shx, shy, { seed: 'f1sp', n: 5, color: '#F4DC86', len: 9 }) + a.sg.win(3.1, 3.85, `<circle cx="${shx}" cy="${shy}" r="${r1(10 * sc)}" fill="none" stroke="#FFF3C4" stroke-width="1.5" opacity=".8"/>`)
   f.at(3.3).flinch('s', { px: 3, d: 0.2 })
   over += swing(a, w, 3.2, -6)
   // 4.0: the SHIELD BASH. Contact under the mosaic, hit-stop, impact frame; Homelander skids back.
@@ -385,7 +401,7 @@ const curtainup = (a: Act, g: Geo): string => {
   cast(a, {
     kS: [MS.TB_BW_KIMIKO_STANCE, 0.5], kK: [MS.TB_BW_KIMIKO_KICK, 0.37], kL: [MS.TB_BW_KIMIKO_LEAP, 0.4], kB: [MS.TB_BW_KIMIKO_BOW, 0.4],
     nR: [MS.TB_BW_NOIR_READY, 0.32], nS: [MS.TB_BW_NOIR_SLASH, 0.31], nT: [MS.TB_BW_NOIR_THUMBSUP, 0.4], nB: [MS.TB_BW_NOIR_BOW, 0.32],
-  })
+  }, w)
   const sc = w.sc
   const ww = w.x1 - w.x0
   const y = cy(w)
