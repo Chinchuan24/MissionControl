@@ -126,7 +126,8 @@ export type ThemeEggs = {
   chipStays?: boolean
   warning: (ctxPct: number) => string
   /** The cheer when a job is done. */
-  cheer: (W: number, H: number, font: string, t: ThemeColors, startAt?: number) => string
+  /** The band's job-done cheer. `stage`: the band's clear span and keep-out (stage/keep.ts), for a cheer that keeps off the numbers. */
+  cheer: (W: number, H: number, font: string, t: ThemeColors, startAt?: number, stage?: BandStage) => string
   /** `card` is the theme's own cred card; without it the shared medal card is drawn with `title`, `ranks` and `words`. */
   cred: { title: string; ranks: (level: number) => string; words: CredWords; badges: Badge[]; toast: (level: number) => string; card?: (W: number, c: Cred, t: ThemeColors, font: string, frame: Frame) => string }
   /** The pane's card about the task (cold read, lab notes). */
@@ -449,7 +450,7 @@ const saulTheme = (gene: boolean): ThemeEggs => ({
   },
   warning: bcsWarning(gene),
   // GENE's own cheer: the mall shutter with NIPPY! on it (bettercallsaul-gene.ts); Saul keeps the TV ad's star-wipe.
-  cheer: (W, H, _font, _t, startAt) => (gene && startAt !== undefined ? geneCheer(W, H, startAt) : bcsCheer(W, H, gene, startAt)),
+  cheer: (W, H, _font, _t, startAt, stage) => (gene && startAt !== undefined ? geneCheer(W, H, startAt, stage) : bcsCheer(W, H, gene, startAt)),
   cred: { title: 'ATTORNEY AT LAW', ranks: bcsRankOf, words: BCS_CRED_WORDS, badges: BCS_BADGES, toast: bcsToast, card: (W, c) => attorneyCard(W, c, gene) },
   card: {
     draw: (W, task, isWorking, done, total, _t, _font, _frame, legends) => docketCard(W, task, isWorking, done, total, legends, gene),

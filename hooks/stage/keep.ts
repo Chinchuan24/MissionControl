@@ -57,3 +57,23 @@ export const overlaps = (boxes: Rect[], clipD: string): Rect[] => {
   // A box is safe when outside the window, or when the window's part of it lies inside a hole.
   return boxes.filter(b => meet(b, win) && !holes.some(h => holesIn(win, [b]).every(p => inside(p, h))))
 }
+
+/** Do two boxes overlap? */
+export const meets = (a: Rect, b: Rect): boolean => a[0] < b[0] + b[2] && b[0] < a[0] + a[2] && a[1] < b[1] + b[3] && b[1] < a[1] + a[3]
+/**
+ * The largest empty rectangles of a region w by h around `holes` (each kept `pad` px clear, 2 px above and below): where a
+ * piece of an act can stand whole. Brute force over the holes' edges (a band has two holes), the maximal ones only.
+ */
+export const freeRects = (w: number, h: number, holes: Rect[], pad = 4): Rect[] => {
+  const hs = holes.map(([x, y, hw, hh]) => [x - pad, y - 2, hw + pad * 2, hh + 4] as Rect)
+  const edges = (v: number[], max: number): number[] => [...new Set([0, max, ...v].map(n => Math.max(0, Math.min(max, n))))].sort((a, b) => a - b)
+  const xs = edges(hs.flatMap(([x, , hw]) => [x, x + hw]), w)
+  const ys = edges(hs.flatMap(([, y, , hh]) => [y, y + hh]), h)
+  const all: Rect[] = []
+  xs.forEach((x0, i) => xs.slice(i + 1).forEach(x1 => ys.forEach((y0, k) => ys.slice(k + 1).forEach(y1 => {
+    const r: Rect = [x0, y0, x1 - x0, y1 - y0]
+    if (!hs.some(q => meets(r, q))) all.push(r)
+  }))))
+  const inside = (a: Rect, b: Rect): boolean => b[0] <= a[0] && b[1] <= a[1] && b[0] + b[2] >= a[0] + a[2] && b[1] + b[3] >= a[1] + a[3]
+  return all.filter((a, i) => !all.some((b, j) => j !== i && inside(a, b)))
+}

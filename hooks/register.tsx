@@ -6710,7 +6710,7 @@ const slimBandSvg = (OW: number, d: HudData): string => {
     wide: { x2: Math.round(Math.min(Math.max(crewLeft - 6, pctX - 6, rx - 2), hasReadouts ? r0 - 24 : W - 14)), keep: [[pctX - 6, 34, W, 50], [crewLeft - 6, 79, W, 31], [rx - 2, 110, W, 24]] },
   }
   const extras = th.extras ? th.extras({ W, H, surface: 'band', stage, at: d.at, ctxPct: d.ctxPct, ...(d.isWorking && d.taskFrom ? { job: { at: d.taskFrom, n: d.today.tasks } } : {}), ...(d.isParty ? { party: true, ...(d.partyAt !== undefined ? { partyAt: d.partyAt } : {}) } : {}), ...(BCS_UNPLUG_AT !== undefined ? { unplugAt: BCS_UNPLUG_AT } : {}), ...(activeFx() ? { fx: activeFx() as { kind: string; at: number } } : {}), working: d.isWorking, ...(swapAtNow() !== undefined ? { swapAt: swapAtNow() } : {}), task: d.title, titleW }) : ''
-  const body = `${s.join('\n')}${extras}${d.isParty ? th.cheer(W, H, FONT, c, d.partyAt) : ''}${d.isParty && th.roamer?.hushParty ? '' : roam}${trLayer}`
+  const body = `${s.join('\n')}${extras}${d.isParty ? th.cheer(W, H, FONT, c, d.partyAt, stage) : ''}${d.isParty && th.roamer?.hushParty ? '' : roam}${trLayer}`
   return shakeInto(glitchPanel(svg(W, H, body), th, { at: d.at, ctxPct: d.ctxPct, party: d.isParty }), th, { W, H, surface: 'band', at: d.at, working: d.isWorking, party: d.isParty, fx: activeFx(), ...(swapAtNow() !== undefined ? { swapAt: swapAtNow() } : {}) })
 }
 
@@ -6903,7 +6903,7 @@ ${hudSpare(W)}
 </g>
 ${egg && !d.lite ? cyberCheer(egg, OW, OH, d) : egg && d.isParty ? celebration(OW, OH, egg, FONT, d.partyAt) : ''}
 ${egg && !d.lite && !d.isParty ? cyberFightBand(egg, OW, d.at, d.isWorking, stage) : ''}
-${th && d.isParty ? th.cheer(OW, OH, FONT, c, d.partyAt) : ''}
+${th && d.isParty ? th.cheer(OW, OH, FONT, c, d.partyAt, stage) : ''}
 ${th?.corner ? th.corner(OW, OH, { ctxPct: d.ctxPct, overBudget: Boolean(d.budget && d.budget.usedMs > d.budget.min * 60_000) }) : ''}`,
   )
 }

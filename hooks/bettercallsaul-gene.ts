@@ -3,12 +3,15 @@
 //   drain   typing "takavic" in Better Call Saul: the panels are GENE already; a wash of Saul's colour (the wood, the ad's red
 //           and yellow) drains off them right to left behind a soft grey edge, the grain swells in, the projector flickers twice
 //   flood   "saul goodman" in GENE: the panels are Saul already; GENE's grey drains off left to right behind Saul's red star-wipe
-//   NIPPY!  GENE's own job-done cheer: the mall shutter rolls down over the band with a bounce, NIPPY! stencilled on its slats, one
-//           brief flash of colour (the slats in Saul red for three frames, then they drain), and it rolls back up
+//   NIPPY!  GENE's own job-done cheer: the mall shutter rolls down over the band's clear span (never over a number) with a bounce,
+//           NIPPY! stencilled on its slats, one brief flash of colour (the slats in Saul red for three frames, then they drain), and it
+//           rolls back up
 // Pinned (a redraw resumes), a still frame under reduced motion, no filters: veils, clips and stepped opacity only.
 import { burst, PROPS, star } from './bettercallsaul'
 import { GENE_NIPPY_STENCIL, GENE_SHUTTER_BOTTOM, GENE_SHUTTER_SLAT, GENE_SHUTTER_SLAT_RED } from './bettercallsaul-sprites'
 import { rectPaths } from './stage/frames'
+import { freeRects, holesIn, keepClip } from './stage/keep'
+import type { BandStage, Rect } from './stage/keep'
 import { Act, r1 } from './stage/timeline'
 import * as wipe from './stage/wipe'
 
@@ -53,30 +56,40 @@ export const swapLayer = (o: { W: number; H: number; at: number; toGene: boolean
 /** NIPPY!: the cheer's length (s) and beats. */
 export const NIPPY = { ms: 2_400, down: [0, 0.5], red: 0.95, up: [1.85, 2.3] } as const
 /**
- * GENE's own cheer over the band: the mall shutter. Slats (GENE_SHUTTER_SLAT as a pattern) roll down from the top and land with a
- * small bounce, the bottom bar and its lock (GENE_SHUTTER_BOTTOM, its ends stretched), NIPPY! stencilled three times its size in the
- * middle; for three frames the slats are Saul red (GENE_SHUTTER_SLAT_RED), then the colour drains; it rolls back up.
- * Reduced motion: the shutter down, NIPPY! on it. Without a start time: the shutter drawn down, still.
+ * GENE's own cheer over the band: the mall shutter. Slats (GENE_SHUTTER_SLAT as a pattern) roll down and land with a small
+ * bounce, the bottom bar and its lock (GENE_SHUTTER_BOTTOM, its ends stretched), NIPPY! stencilled three times its size; for three
+ * frames the slats are Saul red (GENE_SHUTTER_SLAT_RED), then the colour drains; it rolls back up. The shutter comes down over the
+ * band's clear span only (`stage`: under the header, left of the first readout, the Tasks chip and the step count showing through
+ * its keep-out holes), so every number stays readable; the stencil sits in the span's biggest free rectangle. Without a stage: the
+ * band's middle strip. Reduced motion: the shutter down, NIPPY! on it. Without a start time: the shutter drawn down, still.
  */
-export const geneCheer = (W: number, H: number, startAt?: number): string => {
-  const act = new Act({ id: `bcs-nippy-${W}x${H}`, ms: NIPPY.ms, at: startAt ?? 0, W, H, K: 6 })
+export const geneCheer = (W: number, H: number, startAt?: number, stage?: BandStage): string => {
+  const win: Rect = stage ? [0, 34, Math.round(Math.max(160, Math.min(W, stage.x1))), H - 34] : [0, Math.round(H / 2 - 23), W, 46]
+  const [x0, y0, w, h] = win
+  const act = new Act({ id: `bcs-nippy-${W}x${H}-${w}`, ms: NIPPY.ms, at: startAt ?? 0, W, H, K: 6 })
   const p = act.p
   const pat = (id: string, sp: typeof GENE_SHUTTER_SLAT): string => `<pattern id="${id}" patternUnits="userSpaceOnUse" width="16" height="6"><g shape-rendering="crispEdges">${rectPaths(sp, 6)}</g></pattern>`
   const bottom = (y: number): string => {
     // The bar's ends are its first and last columns stretched; the lock (the middle 8 columns) sits at the centre.
-    const end = `<rect y="${r1(y)}" width="${W}" height="6" fill="#A9A9A4"/><rect y="${r1(y)}" width="${W}" height="1" fill="#D6D6D2"/><rect y="${r1(y + 5)}" width="${W}" height="1" fill="#4A4A47"/>`
-    return `${end}<g transform="translate(${r1(W / 2 - 24)} ${r1(y)})" shape-rendering="crispEdges">${rectPaths(GENE_SHUTTER_BOTTOM, 6)}</g>`
+    const end = `<rect y="${r1(y)}" width="${w}" height="6" fill="#A9A9A4"/><rect y="${r1(y)}" width="${w}" height="1" fill="#D6D6D2"/><rect y="${r1(y + 5)}" width="${w}" height="1" fill="#4A4A47"/>`
+    return `${end}<g transform="translate(${r1(w / 2 - 24)} ${r1(y)})" shape-rendering="crispEdges">${rectPaths(GENE_SHUTTER_BOTTOM, 6)}</g>`
   }
+  // NIPPY! in the biggest free rectangle of the shutter (clear of the holes), as big as it fits (2 to 4 px a stencil pixel).
+  const holes = stage ? holesIn(win, stage.keep).map(([x, y, hw, hh]) => [x - x0, y - y0, hw, hh] as Rect) : []
+  const [fx, fy, fw, fh] = freeRects(w, h - 6, holes).sort((a, b) => b[2] * b[3] - a[2] * a[3])[0] ?? [0, 0, w, h - 6]
   const sw = 29
-  const s = Math.max(2, Math.min(4, Math.floor((H * 0.3) / 5)))
-  const stencil = `<g transform="translate(${r1(W / 2 - (sw * s) / 2)} ${r1(H / 2 - (5 * s) / 2 - 3)}) scale(${s})" shape-rendering="crispEdges">${rectPaths(GENE_NIPPY_STENCIL, 2)}</g>`
-  const sub = `<text x="${r1(W / 2)}" y="${r1(H / 2 + (5 * s) / 2 + 12)}" text-anchor="middle" font-family="'Avenir Next Condensed','Arial Narrow',sans-serif" font-weight="800" font-size="9" letter-spacing="1.6" fill="#2C2C2A">MALL BAKERY · JOB DONE</text>`
-  const shutter = (fill: string): string => `<rect width="${W}" height="${H - 6}" fill="url(#${fill})"/>${bottom(H - 6)}`
-  const defs = `<defs>${pat(`${p}sl`, GENE_SHUTTER_SLAT)}${pat(`${p}sr`, GENE_SHUTTER_SLAT_RED)}</defs>`
+  const s = Math.max(2, Math.min(4, Math.floor(Math.min((fw * 0.8) / sw, (fh - 16) / 5, (h * 0.3) / 5))))
+  const cx = fx + fw / 2
+  const cy = fy + fh / 2 - 5
+  const stencil = `<g transform="translate(${r1(cx - (sw * s) / 2)} ${r1(cy - (5 * s) / 2)}) scale(${s})" shape-rendering="crispEdges">${rectPaths(GENE_NIPPY_STENCIL, 2)}</g>`
+  const sub = `<text x="${r1(cx)}" y="${r1(cy + (5 * s) / 2 + 12)}" text-anchor="middle" font-family="'Avenir Next Condensed','Arial Narrow',sans-serif" font-weight="800" font-size="9" letter-spacing="1.6" fill="#2C2C2A">MALL BAKERY · JOB DONE</text>`
+  const shutter = (fill: string): string => `<rect width="${w}" height="${h - 6}" fill="url(#${fill})"/>${bottom(h - 6)}`
+  const defs = `<defs>${pat(`${p}sl`, GENE_SHUTTER_SLAT)}${pat(`${p}sr`, GENE_SHUTTER_SLAT_RED)}${stage ? keepClip(`${p}w`, win, stage.keep) : `<clipPath id="${p}w"><rect x="${x0}" y="${y0}" width="${w}" height="${h}"/></clipPath>`}</defs>`
   const [d0, d1] = NIPPY.down
   const [u0, u1] = NIPPY.up
-  // The roll: down with a bounce at the bottom, held, back up (a translate of the whole shutter).
-  const red = act.kf(`<rect width="${W}" height="${H - 6}" fill="url(#${p}sr)"/>`, [[0, 'opacity:0'], [NIPPY.red, 'opacity:0'], [NIPPY.red + 0.01, 'opacity:1'], [NIPPY.red + 0.13, 'opacity:1'], [NIPPY.red + 0.45, 'opacity:0']])
-  const roll = act.mv(`${shutter(`${p}sl`)}${red}${stencil}${sub}`, [[0, 0, -H], [d0, 0, -H], [d1 - 0.08, 0, 2], [d1, 0, -1.5], [d1 + 0.07, 0, 0], [u0, 0, 0], [u1, 0, -H]], { ease: 'snap' })
-  return `${defs}${act.done(roll, `${shutter(`${p}sl`)}${stencil}${sub}`)}`
+  // The roll: down with a bounce at the bottom, held, back up (a translate of the whole shutter, inside the span's clip).
+  const red = act.kf(`<rect width="${w}" height="${h - 6}" fill="url(#${p}sr)"/>`, [[0, 'opacity:0'], [NIPPY.red, 'opacity:0'], [NIPPY.red + 0.01, 'opacity:1'], [NIPPY.red + 0.13, 'opacity:1'], [NIPPY.red + 0.45, 'opacity:0']])
+  const roll = act.mv(`${shutter(`${p}sl`)}${red}${stencil}${sub}`, [[0, 0, -h], [d0, 0, -h], [d1 - 0.08, 0, 2], [d1, 0, -1.5], [d1 + 0.07, 0, 0], [u0, 0, 0], [u1, 0, -h]], { ease: 'snap' })
+  const place = (inner: string): string => `<g clip-path="url(#${p}w)"><g transform="translate(${x0} ${y0})">${inner}</g></g>`
+  return `${defs}${act.done(place(roll), place(`${shutter(`${p}sl`)}${stencil}${sub}`))}`
 }

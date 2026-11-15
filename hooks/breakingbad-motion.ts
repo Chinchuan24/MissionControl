@@ -30,7 +30,7 @@ import { Director, localOffsetMs } from './stage/director'
 import type { Slot } from './stage/director'
 import { FrameBank } from './stage/frames'
 import * as fx from './stage/fx'
-import { keepClip } from './stage/keep'
+import { freeRects, keepClip, meets } from './stage/keep'
 import type { BandStage, Rect } from './stage/keep'
 import { registerPlay } from './stage/replay'
 import { Act, r1, r3 } from './stage/timeline'
@@ -192,24 +192,7 @@ export const freeSpan = (holes: Rect[], w: number, y0: number, y1: number, x0 = 
 const LINE = "YOU'RE GODDAMN RIGHT."
 const LINE2: [string, string] = ["YOU'RE GODDAMN", 'RIGHT.']
 const LINE3: [string, string, string] = ["YOU'RE", 'GODDAMN', 'RIGHT.']
-const meets = (a: Rect, b: Rect): boolean => a[0] < b[0] + b[2] && b[0] < a[0] + a[2] && a[1] < b[1] + b[3] && b[1] < a[1] + a[3]
-/**
- * The largest empty rectangles of a region w by h around `holes` (each kept `pad` px clear, 2 px above and below): where a
- * piece of an act can stand whole. Brute force over the holes' edges (a band has two holes), the maximal ones only.
- */
-export const freeRects = (w: number, h: number, holes: Rect[], pad = 4): Rect[] => {
-  const hs = holes.map(([x, y, hw, hh]) => [x - pad, y - 2, hw + pad * 2, hh + 4] as Rect)
-  const edges = (v: number[], max: number): number[] => [...new Set([0, max, ...v].map(n => Math.max(0, Math.min(max, n))))].sort((a, b) => a - b)
-  const xs = edges(hs.flatMap(([x, , hw]) => [x, x + hw]), w)
-  const ys = edges(hs.flatMap(([, y, , hh]) => [y, y + hh]), h)
-  const all: Rect[] = []
-  xs.forEach((x0, i) => xs.slice(i + 1).forEach(x1 => ys.forEach((y0, k) => ys.slice(k + 1).forEach(y1 => {
-    const r: Rect = [x0, y0, x1 - x0, y1 - y0]
-    if (!hs.some(q => meets(r, q))) all.push(r)
-  }))))
-  const inside = (a: Rect, b: Rect): boolean => b[0] <= a[0] && b[1] <= a[1] && b[0] + b[2] >= a[0] + a[2] && b[1] + b[3] >= a[1] + a[3]
-  return all.filter((a, i) => !all.some((b, j) => j !== i && inside(a, b)))
-}
+export { freeRects }
 export type TitleL = { x: number; y: number; size: number; lines: string[]; over: boolean; box: Rect }
 /** The title card's plate (x, y, w, h) for a layout. */
 export const plateOf = (L: { x: number; y: number; size: number; lines: string[] }): Rect => {
