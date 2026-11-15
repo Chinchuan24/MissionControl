@@ -5,8 +5,10 @@
 // in a window (every window starts under its rule, y >= 33).
 
 export type Rect = [number, number, number, number]
-/** What the band hands a band act: the clear span's right edge and the readouts inside it (x, y, w, h). */
-export type BandStage = { x1: number; keep: Rect[] }
+/** What the band hands a band act: the clear span's right edge and the readouts inside it (x, y, w, h). `wide`, when the band
+ *  gives it: a wider window (to `x2`) for an act that keeps out of each row's own readouts (`keep` there holds those rows'
+ *  right parts, as holes, on top of the span's own). */
+export type BandStage = { x1: number; keep: Rect[]; wide?: { x2: number; keep: Rect[] } }
 
 /** The holes of `keep` that fall inside `win`, clipped to it (an even-odd hole outside the window would show, not hide). */
 export const holesIn = (win: Rect, keep: Rect[]): Rect[] => {

@@ -6705,6 +6705,9 @@ const slimBandSvg = (OW: number, d: HudData): string => {
   const stage: BandStage = {
     x1: Math.round(Math.min(crewLeft - 6, pctX - 6, rx - 2, hasReadouts ? r0 - 24 : W)),
     keep: [[px - 3, 39, pillW + 6, 22], [x0 - 8, 88, stepEnd - x0 + 8, 21]],
+    // Further right, each row only up to its own first readout: the task row to the percent, the step row to the crew, the tip
+    // line to the totals (each row's right part is a hole), and never into the readout column.
+    wide: { x2: Math.round(Math.min(Math.max(crewLeft - 6, pctX - 6, rx - 2), hasReadouts ? r0 - 24 : W - 14)), keep: [[pctX - 6, 34, W, 50], [crewLeft - 6, 79, W, 31], [rx - 2, 110, W, 24]] },
   }
   const extras = th.extras ? th.extras({ W, H, surface: 'band', stage, at: d.at, ctxPct: d.ctxPct, ...(d.isWorking && d.taskFrom ? { job: { at: d.taskFrom, n: d.today.tasks } } : {}), ...(d.isParty ? { party: true, ...(d.partyAt !== undefined ? { partyAt: d.partyAt } : {}) } : {}), ...(BCS_UNPLUG_AT !== undefined ? { unplugAt: BCS_UNPLUG_AT } : {}), ...(activeFx() ? { fx: activeFx() as { kind: string; at: number } } : {}), working: d.isWorking, ...(swapAtNow() !== undefined ? { swapAt: swapAtNow() } : {}), task: d.title, titleW }) : ''
   const body = `${s.join('\n')}${extras}${d.isParty ? th.cheer(W, H, FONT, c, d.partyAt) : ''}${d.isParty && th.roamer?.hushParty ? '' : roam}${trLayer}`

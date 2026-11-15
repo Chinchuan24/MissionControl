@@ -8,7 +8,7 @@ import { SAY_MY_NAME_RE, WALTER_WHITE_RE } from './breakingbad'
 import { jesseChance } from './breakingbad-jesse'
 import {
   BB_MS, BB_SWITCH, HEIS_SWITCH, bbBusy, bbDirector, bbDue, crystal, freeSpan, half, hatLogo, heisDirector, heisFlip, knocksAct, liveBust,
-  nameAct, nameEcho, nameVeil, pizzaAct, scienceAct, setBbPlay, standoffAct, titleLayout,
+  freeRects, nameAct, nameEcho, nameVeil, pizzaAct, plateOf, scienceAct, setBbPlay, standoffAct, titleLayout,
 } from './breakingbad-motion'
 import { sansW, walt } from './breakingbad-cards'
 import { BBAD_CRYSTAL_0 } from './breakingbad-sprites'
@@ -110,9 +110,13 @@ test('trigger words: "say my name" / "what\'s my name" and "walter white" are wh
 
 // ---------------------------------------------------------------- the acts: still frames, budgets, structure
 const HOLES: Rect[] = [[253, 5, 85, 22], [4, 54, 104, 21]]
+// SAY MY NAME's region is the whole clear span under the header (97 px tall): the Tasks chip, the step count and the rows'
+// right parts (the percent, the totals) are its holes.
+const NAME_HOLES: Rect[] = [[253, 5, 85, 22], [4, 54, 104, 21], [839, 0, 400, 50], [706, 76, 500, 24]]
 const ACTS: [string, () => string, number][] = [
+  ['say-my-name band 895', () => nameAct({ at: NOW, w: 895, h: 97, id: 't-name-895', holes: NAME_HOLES }).layer, BAND_CAP],
   ['say-my-name band 640', () => nameAct({ at: NOW, w: 640, h: 56, id: 't-name-640', holes: HOLES }).layer, BAND_CAP],
-  ['say-my-name band 280', () => nameAct({ at: NOW, w: 280, h: 56, id: 't-name-280', holes: [[150, 5, 85, 22]] }).layer, BAND_CAP],
+  ['say-my-name band 280', () => nameAct({ at: NOW, w: 280, h: 97, id: 't-name-280', holes: [[150, 5, 85, 22], [4, 54, 104, 21]] }).layer, BAND_CAP],
   ['say-my-name band 150', () => nameAct({ at: NOW, w: 150, h: 56, id: 't-name-150', holes: [] }).layer, BAND_CAP],
   ['say-my-name pane', () => nameEcho({ at: NOW, w: 964, h: 152, id: 't-name-pane' }).layer, PANE_CAP],
   ['say-my-name pane narrow', () => nameEcho({ at: NOW, w: 380, h: 150, id: 't-name-pane-n' }).layer, PANE_CAP],
@@ -140,20 +144,21 @@ test('acts: each is pinned, has a reduced-motion still, no duplicate attribute o
 })
 
 test('SAY MY NAME: the stare, the hat dropping and turning, the head turn, a hit-stop, the slam with a shake, the wipe; a still', () => {
-  const n = nameAct({ at: NOW, w: 640, h: 56, id: 't-name-beats', holes: HOLES })
+  const n = nameAct({ at: NOW, w: 895, h: 97, id: 't-name-beats', holes: NAME_HOLES })
   // The poses in order: bare head in profile, the hat man's profile, three-quarter, front; the hat turns as it falls.
   const keys = n.act.chainKeys()
   for (const k of ['hv0', 'hv1', 'hv2', 'hv3']) expect(keys).toContain(k)
   expect(n.act.bank.has('cut')).toBe(true)
   for (const k of ['b90', 'h90', 'h45', 'h0']) expect(n.act.bank.has(k)).toBe(true)
-  // The hit-stop: the act holds .2 s at 2.55 (everything after it moves on by that), a 1 px tap; then the 3 px slam shake.
+  // The hat's landing tap; the hit-stop: the act holds .2 s at 2.55 (everything after it moves on by that), a 1 px tap; then
+  // the 3 px slam shake.
   expect(Math.abs(n.act.warp(3) - 3.2)).toBeLessThan(1e-6)
-  expect(n.layer).toMatch(/animation-name:sg-sh1,sg-sh3,sg-sh1/)
+  expect(n.layer).toMatch(/animation-name:sg-sh1,sg-sh1,sg-sh3,sg-sh1/)
   // The slam (2.4x to rest), the line, the wipe downward on the crystal-blue bar; the hat's landing squash.
   expect(n.layer).toContain('scale(2.4)')
   expect(n.layer).toContain("YOU'RE GODDAMN")
   expect(n.layer).toContain('clip-path:inset(100% 0 0 0)')
-  expect(n.layer).toMatch(/scale\(1,0\.82\)/)
+  expect(n.layer).toMatch(/scale\(1,0\.8\)/)
   expect(n.layer).toContain('Say my name.')
   expect(n.layer).toContain('Heisenberg.')
   // The still (reduced motion) carries the line too: once in the act, once in the still.
@@ -165,26 +170,30 @@ test('SAY MY NAME: the stare, the hat dropping and turning, the head turn, a hit
   expect(p.layer).toContain("YOU'RE GODDAMN RIGHT.")
 })
 
-test('the title card: large, never inside a keep-out hole, right of the bust where it fits, at every span', () => {
-  for (const [w, holes] of [[640, HOLES], [640, [[90, 5, 85, 22]]], [400, [[300, 5, 85, 22]]], [280, [[150, 5, 85, 22]]], [150, []], [964, []]] as [number, Rect[]][]) {
-    const big = w === 964
-    const h = big ? 152 : 56
-    const L = titleLayout(w, h, holes, 80, big)
-    expect(L.size, `${w}`).toBeGreaterThanOrEqual(big ? 30 : 12)
-    const wide = Math.max(...L.lines.map(l => sansW(l, L.size, L.size * 0.04, true) * 1.07))
-    const top = L.y - L.size
-    const bottom = L.y + (L.lines.length - 1) * L.size * 1.04 + 4
+test('the title card: whole, as big as the span allows, never touching a keep-out hole, clear of his face when it costs little', () => {
+  const head: Rect = [104, 9, 88, 88]
+  for (const [w, h, holes, min] of [[895, 97, NAME_HOLES, 30], [560, 97, [[253, 5, 85, 22], [4, 54, 104, 21], [462, 0, 200, 50], [215, 76, 400, 24]], 18], [190, 97, [[4, 54, 104, 21]], 14], [640, 56, HOLES, 14], [150, 56, [], 8], [964, 152, [], 40]] as [number, number, Rect[], number][]) {
+    const L = titleLayout(w, h, holes, w === 964 ? undefined : head)
+    expect(L.size, `${w}`).toBeGreaterThanOrEqual(min)
+    const [px, py, pw, ph] = plateOf(L)
+    // Whole: inside the region and inside its own free rectangle (the slam is clipped to that rectangle).
+    expect(px >= -0.5 && py >= -0.5 && px + pw <= w + 0.5 && py + ph <= h + 0.5, `${w}: plate ${px},${py},${pw},${ph}`).toBe(true)
+    const [bx, by, bw, bh] = L.box
+    expect(px >= bx - 0.5 && py >= by - 0.5 && px + pw <= bx + bw + 0.5 && py + ph <= by + bh + 0.5, `${w}: plate in its box`).toBe(true)
     for (const [hx, hy, hw, hh] of holes) {
-      const xs = L.x < hx + hw + 4 && L.x + wide > hx - 4
-      const ys = top < hy + hh && bottom > hy
-      expect(xs && ys, `${w}: card ${L.x}..${r(L.x + wide)} ${r(top)}..${r(bottom)} vs hole ${hx},${hy}`).toBe(false)
+      const meets = bx < hx + hw && hx < bx + bw && by < hy + hh && hy < by + bh
+      expect(meets, `${w}: box ${L.box.join(',')} vs hole ${hx},${hy}`).toBe(false)
     }
-    expect(L.x + wide, `${w}`).toBeLessThanOrEqual(w + 2)
   }
-  // At 640 the line is at least 20 px; the pane's echo at least 40 (it fills the card).
-  expect(titleLayout(640, 56, HOLES, 80, false).size).toBeGreaterThanOrEqual(20)
-  expect(titleLayout(964, 152, [], 80, true).size).toBeGreaterThanOrEqual(40)
+  // On the widest band it stays clear of his face, right of the Tasks chip.
+  const wide = titleLayout(895, 97, NAME_HOLES, head)
+  expect(wide.over).toBe(false)
+  expect(wide.x).toBeGreaterThan(338)
   expect(freeSpan([[100, 0, 50, 56]], 400, 0, 56)).toEqual([154, 400])
+  // Free rectangles: the region around two holes, each maximal, none touching a hole.
+  const rs = freeRects(400, 97, [[150, 5, 80, 22], [4, 54, 100, 21]])
+  expect(rs.length).toBeGreaterThanOrEqual(3)
+  for (const [x, y, rw, rh] of rs) for (const [hx, hy, hw, hh] of [[146, 3, 88, 26], [0, 52, 108, 25]]) expect(x < hx + hw && hx < x + rw && y < hy + hh && hy < y + rh).toBe(false)
 })
 const r = (n: number): number => Math.round(n)
 
@@ -330,7 +339,8 @@ const start = async ($: Engine, skin: string) => {
   await $.session.start({ source: 'startup', cwd: '/repo', surface: 'desktop', isInteractive: true } as never)
   await $.command.run({ command: 'skin', args: skin } as never)
 }
-const CARD = "YOU'RE GODDAMN"
+// The title card in one, two or three lines: "GODDAMN" is on it whichever (the stand-off's subtitle is lower case).
+const CARD = 'GODDAMN'
 const WIDE = [450, 600, 750, 900, 1250]
 const layerOf = (b: string): string => (b.match(/<!--dl-->[\s\S]*?<!--\/dl-->/g) ?? []).filter(l => !l.includes('skin-switch')).sort((a, c) => c.length - a.length)[0] ?? ''
 /** The act's keep-out clip on a band source; the readouts it must miss come from the band drawn without any act. */

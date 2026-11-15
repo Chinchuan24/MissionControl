@@ -483,7 +483,7 @@ test('jesse: reduced motion has no walking, only a still faint peek or the bubbl
 const RIGHT = "You're goddamn right!"
 const CARD = "YOU&apos;RE GODDAMN"
 const heisToasts = (): number => toasts.filter(t => t === RIGHT).length
-const hasCard = (s: string): boolean => s.includes("YOU'RE GODDAMN") || s.includes(CARD)
+const hasCard = (s: string): boolean => s.includes('GODDAMN') || s.includes(CARD)
 
 test('heisenberg reveal: the phrase plays SAY MY NAME and the toast; pinned (a redraw resumes it), gone after 4.9 s', async ($, on) => {
   const clock = base(on)

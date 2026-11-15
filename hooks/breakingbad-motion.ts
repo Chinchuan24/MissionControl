@@ -191,127 +191,153 @@ export const freeSpan = (holes: Rect[], w: number, y0: number, y1: number, x0 = 
 // ---------------------------------------------------------------- SAY MY NAME (the owner's must-have)
 const LINE = "YOU'RE GODDAMN RIGHT."
 const LINE2: [string, string] = ["YOU'RE GODDAMN", 'RIGHT.']
+const LINE3: [string, string, string] = ["YOU'RE", 'GODDAMN', 'RIGHT.']
+const meets = (a: Rect, b: Rect): boolean => a[0] < b[0] + b[2] && b[0] < a[0] + a[2] && a[1] < b[1] + b[3] && b[1] < a[1] + a[3]
 /**
- * The title card's layout in a region w by h with keep-out `holes`: one line where it fits big, else two; the span free of
- * the Tasks chip (above or below it), right of the bust when there is room for it, over the dimmed bust when not.
+ * The largest empty rectangles of a region w by h around `holes` (each kept `pad` px clear, 2 px above and below): where a
+ * piece of an act can stand whole. Brute force over the holes' edges (a band has two holes), the maximal ones only.
  */
-export const titleLayout = (w: number, h: number, holes: Rect[], left: number, big: boolean): { x: number; y: number; size: number; lines: string[]; over: boolean } => {
-  const maxS = big ? Math.min(46, h * 0.3) : Math.min(30, h * 0.52)
-  const cands: { x: number; y: number; size: number; lines: string[]; over: boolean }[] = []
-  for (const over of [false, true]) {
-    const from = over ? 4 : left
-    // Full height, or above / below a hole (the Tasks chip), when that leaves a row tall enough for a line.
-    const rows: [number, number][] = [[2, h - 2]]
-    for (const [, hy, , hh] of holes) { if (hy + hh + 1 < h - 18) rows.push([hy + hh + 1, h - 2]); if (hy - 1 > 18) rows.push([2, hy - 1]) }
-    for (const [y0, y1] of rows) {
-      const [a, b] = freeSpan(holes, w - 6, y0, y1, from)
-      const room = b - a - 10
-      if (room < 40) continue
-      const tall = y1 - y0
-      const one = Math.min(maxS, tall * 0.62, (room / heavyW(LINE, 10, 0.4)) * 10)
-      const two = Math.min(maxS, (tall * 0.84) / 2.1, (room / heavyW(LINE2[0], 10, 0.4)) * 10)
-      const pick = one >= two * 0.94 ? { size: one, lines: [LINE] } : { size: two, lines: [...LINE2] }
-      const lh = pick.size * 1.04
-      cands.push({ x: a + 6, y: r1((y0 + y1) / 2 - ((pick.lines.length - 1) * lh) / 2 + pick.size * 0.36), size: r1(pick.size), lines: pick.lines, over })
-    }
-  }
-  // Right of the bust beats over it when it is nearly as big (the face stays in the shot).
-  cands.sort((p, q) => (q.over ? q.size * 0.82 : q.size) - (p.over ? p.size * 0.82 : p.size))
-  return cands[0] ?? { x: 4, y: r1(h / 2 + 4), size: 10, lines: [LINE], over: true }
+export const freeRects = (w: number, h: number, holes: Rect[], pad = 4): Rect[] => {
+  const hs = holes.map(([x, y, hw, hh]) => [x - pad, y - 2, hw + pad * 2, hh + 4] as Rect)
+  const edges = (v: number[], max: number): number[] => [...new Set([0, max, ...v].map(n => Math.max(0, Math.min(max, n))))].sort((a, b) => a - b)
+  const xs = edges(hs.flatMap(([x, , hw]) => [x, x + hw]), w)
+  const ys = edges(hs.flatMap(([, y, , hh]) => [y, y + hh]), h)
+  const all: Rect[] = []
+  xs.forEach((x0, i) => xs.slice(i + 1).forEach(x1 => ys.forEach((y0, k) => ys.slice(k + 1).forEach(y1 => {
+    const r: Rect = [x0, y0, x1 - x0, y1 - y0]
+    if (!hs.some(q => meets(r, q))) all.push(r)
+  }))))
+  const inside = (a: Rect, b: Rect): boolean => b[0] <= a[0] && b[1] <= a[1] && b[0] + b[2] >= a[0] + a[2] && b[1] + b[3] >= a[1] + a[3]
+  return all.filter((a, i) => !all.some((b, j) => j !== i && inside(a, b)))
+}
+export type TitleL = { x: number; y: number; size: number; lines: string[]; over: boolean; box: Rect }
+/** The title card's plate (x, y, w, h) for a layout. */
+export const plateOf = (L: { x: number; y: number; size: number; lines: string[] }): Rect => {
+  const tw = Math.max(...L.lines.map(l => heavyW(l, L.size, L.size * 0.04)))
+  return [r1(L.x - 7), r1(L.y - L.size * 0.86), r1(tw + 14), r1(L.size * (1.04 * (L.lines.length - 1) + 1.12))]
 }
 /**
- * SAY MY NAME in a region w by h (the band's clear span, or the CLASSROOM board), 4.9 s. Act times (the hit-stop adds .2 s
- * after 2.55 on the timeline):
- *   0.04  the stare: the close-up under the brim slams on (a flash, a 2 px tap); "Say my name." types itself
- *   1.0   cut to him, bare-headed, in profile; 1.06 the black hat drops, turning as it falls, lands (a squash) and settles
+ * The title card's layout in a region w by h: the biggest size it reaches in one, two or three lines, whole, inside a free
+ * rectangle (never touching a hole). Clear of `avoid` (his face) unless going over it is much bigger (then the act dims him).
+ * `box` is the rectangle it stands in: the slam is clipped to it, so the 2.4x scale never reaches a chip. `most`: the most lines.
+ */
+export const titleLayout = (w: number, h: number, holes: Rect[], avoid?: Rect, maxS = 44, most = 3): TitleL => {
+  const cands: TitleL[] = []
+  // Every free rectangle around the holes (over his face allowed), and those clear of his face too.
+  for (const box of [...freeRects(w, h, holes, 3), ...(avoid ? freeRects(w, h, [...holes, avoid], 3) : [])]) {
+    const [bx, by, bw, bh] = box
+    for (const lines of [[LINE], [...LINE2], [...LINE3]].slice(0, most)) {
+      const n = lines.length
+      const per = Math.max(...lines.map(l => heavyW(l, 10, 0.4))) / 10
+      const size = r1(Math.min(maxS, (bh - 4) / (1.04 * (n - 1) + 1.12), (bw - 16) / per))
+      if (size < 8) continue
+      const plateH = size * (1.04 * (n - 1) + 1.12)
+      const L = { x: r1(bx + (bw - per * size) / 2), y: r1(by + (bh - plateH) / 2 + size * 0.86), size, lines, over: false, box }
+      cands.push({ ...L, over: Boolean(avoid && meets(plateOf(L), avoid)) })
+    }
+  }
+  // Clear of his face beats over it when nearly as big; fewer lines beat more at the same size.
+  const score = (c: TitleL): number => (c.over ? c.size * 0.8 : c.size) - c.lines.length * 0.3
+  cands.sort((p, q) => score(q) - score(p))
+  return cands[0] ?? { x: 4, y: r1(h / 2 + 4), size: 10, lines: [LINE], over: true, box: [0, 0, w, h] }
+}
+/** A clip to one rectangle (an act's piece that must stay inside its free rectangle), with a fresh id. */
+const boxed = (id: string, [x, y, w, h]: Rect, svg: string): string => `<defs><clipPath id="${id}"><rect x="${r1(x)}" y="${r1(y)}" width="${r1(w)}" height="${r1(h)}"/></clipPath></defs><g clip-path="url(#${id})">${svg}</g>`
+/** The title card at rest: heavy white caps on a black plate with a crystal-blue edge. */
+const titleCard = (L: TitleL): string => {
+  const [px, py, pw, ph] = plateOf(L)
+  const words = L.lines.map((l, i) => `<text x="${r1(L.x)}" y="${r1(L.y + i * L.size * 1.04)}" font-size="${L.size}" font-weight="900" letter-spacing="${r1(L.size * 0.04)}" fill="${C.white}">${esc(l)}</text>`).join('')
+  return `<rect x="${px}" y="${py}" width="${pw}" height="${ph}" fill="#000" opacity=".86"/><rect x="${px}" y="${py}" width="3" height="${ph}" fill="${C.blue}"/>${words}`
+}
+/**
+ * SAY MY NAME in a region w by h (the band's whole clear span under the header: the task row, the step row and the tip line,
+ * with the Tasks chip and the step count as `holes`), 4.9 s. Every piece stands whole in a free rectangle, as big as it fits.
+ * Act times (the hit-stop adds .2 s after 2.55 on the timeline):
+ *   0.04  the stare: the close-up under the brim slams on in a letterbox (a flash, a 2 px tap); "Say my name." types on under it
+ *   1.0   cut to him, bare-headed, in profile, under a cold light from above; the black hat drops out of the dark toward him
+ *         (from the camera: it comes in big and shrinks as it falls), turning, lands (a squash, a ring of air, a 1 px tap)
  *   1.78  the head turns to face you (profile, three-quarter, front: the hat man's turn), the camera pushes in; "Heisenberg."
  *   2.55  HIT-STOP: everything holds .2 s, the lens glints
- *   2.62  YOU'RE GODDAMN RIGHT. slams on (2.4x to rest), a flash, a 3 px camera shake
+ *   2.62  YOU'RE GODDAMN RIGHT. slams on (2.4x to rest, inside its own rectangle), a flash, a 3 px camera shake
  *   3.9   the scene wipes away downward on a crystal-blue bar: Heisenberg's own panel underneath
- * `lite` (the pane): the bust faces front from the start (no turn), the hat stays on it. Reduced motion: the face under the
- * hat and the line.
+ * Reduced motion: his face under the hat and the line.
  */
-export const nameAct = (o: { at: number; w: number; h: number; id: string; holes?: Rect[]; lite?: boolean }): { layer: string; act: Act } => {
+export const nameAct = (o: { at: number; w: number; h: number; id: string; holes?: Rect[] }): { layer: string; act: Act } => {
   const { w, h } = o
-  const lite = Boolean(o.lite)
   const holes = o.holes ?? []
   const act = new Act({ id: o.id, ms: BB_MS.name, at: o.at, W: w, H: h, K: 5 })
   const cam = new Camera(act)
-  // The hit-stop first: every later time on this act shifts by it (stage trap 11). The pane's echo has no camera (its reserve
-  // is small: a busy Breaking Bad pane sits near the drawing's cap), so it holds without the tap.
-  if (lite) act.freeze(2.55, 0.2)
-  else cam.freeze(2.55, 0.2)
-  const hsc = r3(lite ? Math.min(3.4, (h - 10) / 40) : Math.min(1.3, (h - 4) / 40))
-  const hw = 18 * hsc
-  const bx = r1(lite ? Math.max(hw + 10, Math.min(w * 0.2, hw + 40)) : Math.max(hw + 4, Math.min(w * 0.14, hw + 26)))
-  const by = r1(h - 20 * hsc)
-  if (!lite) act.cast('cut', SP.BBAD_CUTIN_HAT, 0.5, 6)
-  // The pane's echo draws its bust and hat at half resolution, twice the size: the same pictures in a third of the chars.
-  if (lite) act.cast('b0', half(SP.BBAD_HEAD_000), 0.5, 4)
-  else act.cast('b90', SP.BBAD_HEAD_090, 12 / 24, 5).cast('h90', SP.HEIS_HEAD_090, 13 / 27, 5).cast('h45', SP.HEIS_HEAD_045, 16 / 32, 5).cast('h0', SP.HEIS_HEAD_000, 18 / 36, 6)
-  castHats(act, 3, lite ? half : undefined, lite ? 3 : 4)
-  const bsc = lite ? hsc * 2 : hsc
-  // 1. The stare: the close-up in a letterbox, in the widest span free of the Tasks chip. (The pane's echo leaves the close-up
-  // to the band, as the reserve is small: it opens on his bare head and the line.)
-  const [sa, sb] = freeSpan(holes, w, 2, h - 2)
-  const lbH = r1(Math.min(h * (lite ? 0.62 : 0.86), ((sb - sa - 8) / 80) * 20))
-  const ksc = r3(lbH / 20)
-  const ccx = r1(lite ? w / 2 : sa + 4 + 40 * ksc)
-  const lbY = r1((h - lbH) / 2)
-  const strip = lite ? '' : `<rect x="${r1(ccx - 40 * ksc)}" y="${lbY}" width="${r1(80 * ksc)}" height="${lbH}" fill="#000"/>${act.bank.use('cut', ccx, r1(lbY + lbH / 2), 1, ksc)}<rect x="${r1(ccx - 40 * ksc)}" y="${lbY}" width="${r1(80 * ksc)}" height="${lbH}" fill="none" stroke="${C.blue}" stroke-opacity=".55"/>`
-  const stare = lite ? act.on(act.still('b0', bx, by, 1, bsc), 0.04, 4.6) : act.win(0.04, 1.0, act.kf(strip, [[0, 'transform:scale(1.14)'], [0.04, 'transform:scale(1.14)'], [0.16, 'transform:scale(1)'], [0.2, 'transform:translateX(2px)'], [0.26, 'transform:none']], { origin: `${ccx}px ${r1(h / 2)}px` }))
-  const capS = r1(lite ? Math.min(22, h * 0.11) : Math.max(10, Math.min(13, h * 0.23)))
-  const sayX = r1(lite ? bx + hw + 14 : ccx + 40 * ksc + 10)
-  const roomR = w - sayX - 6
-  const clear = (x: number, w2: number, y: number, size: number): boolean => x + w2 < w - 4 && !holes.some(([hx, hy, hw, hh]) => x < hx + hw + 2 && x + w2 > hx - 2 && y - size < hy + hh && y + size * 0.3 > hy)
-  const say = roomR > heavyW('Say my name.', capS) && clear(sayX, heavyW('Say my name.', capS), h / 2 + capS * 0.36, capS) ? act.on(typed(act, 0.25, 0.7, sayX, r1(h / 2 + capS * 0.36), 'Say my name.', capS, C.white, { italic: true }), 0.2, lite ? 1.75 : 1.0, { fade: 0.12 })
-    : act.on(cap(ccx, r1(lbY + lbH - 3), 'Say my name.', capS, C.white, { anchor: 'middle', italic: true }), 0.3, 1.0)
-  // 2. The hat drops onto the bare head (the hat turntable's views along a falling path), lands with a squash, settles.
-  const hs = r3(0.68 * hsc * (lite ? 2 : 1))
-  const brim = r1(by - 10.5 * hsc)
+  // The hit-stop first: every later time on this act shifts by it (stage trap 11).
+  cam.freeze(2.55, 0.2)
+  const rects = freeRects(w, h, holes)
+  const best = (fit: (r: Rect) => number): Rect => [...rects].sort((p, q) => fit(q) - fit(p) || p[0] - q[0])[0] ?? [0, 0, w, h]
+  // His head: the close-up as big as a free rectangle holds it (at most 2.2 band px a sprite px), the leftmost of the biggest.
+  // The hat drops in a wider shot (the head smaller, standing on the same spot, room above it for the fall); the camera then
+  // pushes in about his foot to the close-up as he turns.
+  const fitHead = ([, , rw, rh]: Rect): number => Math.min(2.2, (rh - 2) / 40, (rw - 6) / 36)
+  const hr = best(fitHead)
+  const hsc = r3(Math.max(0.6, fitHead(hr)))
+  const hsw = r3(Math.max(0.5, Math.min(hsc * 0.64, (hr[3] * 0.56) / 40)))
+  const bx = r1(hr[0] + 3 + 18 * hsc)
+  const foot = r1(hr[1] + hr[3] - 1)
+  const by = r1(foot - 20 * hsw)
+  act.cast('cut', SP.BBAD_CUTIN_HAT, 0.5, 6)
+  act.cast('b90', SP.BBAD_HEAD_090, 12 / 24, 5).cast('h90', SP.HEIS_HEAD_090, 13 / 27, 5).cast('h45', SP.HEIS_HEAD_045, 16 / 32, 5).cast('h0', SP.HEIS_HEAD_000, 18 / 36, 6)
+  castHats(act, 3)
+  // 1. The stare: the close-up in a letterbox as big as a free rectangle takes (4:1, at most 4x), slammed on inside it.
+  const cr = best(([, , rw, rh]) => Math.min(4, (rw - 8) / 80, (rh - 4) / 20))
+  const ksc = r3(Math.max(0.5, Math.min(4, (cr[2] - 8) / 80, (cr[3] - 4) / 20)))
+  const lbW = r1(80 * ksc)
+  const lbH = r1(20 * ksc)
+  const ccx = r1(cr[0] + cr[2] / 2)
+  const lbY = r1(cr[1] + (cr[3] - lbH) / 2)
+  const strip = `<rect x="${r1(ccx - lbW / 2)}" y="${lbY}" width="${lbW}" height="${lbH}" fill="#000"/>${act.bank.use('cut', ccx, r1(lbY + lbH / 2), 1, ksc)}<rect x="${r1(ccx - lbW / 2)}" y="${lbY}" width="${lbW}" height="${lbH}" fill="none" stroke="${C.blue}" stroke-opacity=".55"/>`
+  const stare = act.win(0.04, 1.0, boxed(`${act.p}sc`, cr, act.kf(strip, [[0, 'transform:scale(1.14)'], [0.04, 'transform:scale(1.14)'], [0.16, 'transform:scale(1)'], [0.2, 'transform:translateX(2px)'], [0.26, 'transform:none']], { origin: `${ccx}px ${r1(lbY + lbH / 2)}px` })))
+  // "Say my name." as a subtitle on the letterbox's foot, typed on.
+  const capS = r1(Math.max(11, Math.min(17, lbH * 0.17)))
+  const sayW = heavyW('Say my name.', capS)
+  const say = act.on(typed(act, 0.25, 0.7, r1(ccx - sayW / 2), r1(lbY + lbH - capS * 0.5), 'Say my name.', capS, C.white, { italic: true }), 0.2, 1.0, { fade: 0.1 })
+  // 2. The cold light from above (the hat drops through it: a black hat on a lit ground reads), the glow behind his head.
+  const light = act.on(`<defs><linearGradient id="${act.p}cn" x1="0" x2="0" y2="1"><stop offset="0" stop-color="${C.ice}" stop-opacity=".2"/><stop offset="1" stop-color="${C.blue}" stop-opacity=".05"/></linearGradient><radialGradient id="${act.p}hz"><stop offset="0" stop-color="${C.ice}" stop-opacity=".38"/><stop offset=".55" stop-color="${C.blue}" stop-opacity=".14"/><stop offset="1" stop-color="${C.blue}" stop-opacity="0"/></radialGradient></defs><path d="M${r1(bx - 9 * hsw)} -12H${r1(bx + 9 * hsw)}L${r1(bx + 30 * hsw)} ${foot}H${r1(bx - 30 * hsw)}Z" fill="url(#${act.p}cn)"/><ellipse cx="${bx}" cy="${r1(by - 11 * hsw)}" rx="${r1(30 * hsw)}" ry="${r1(21 * hsw)}" fill="url(#${act.p}hz)"/>`, 1.0, 4.6, { fade: 0.2 })
+  // The hat drops onto the bare head (the hat turntable's views along a falling path), lands with a squash, settles. It comes
+  // from the camera: scaled 1.45x about its landing spot, back to 1x as it lands; two streaks of air above it as it falls.
+  const hs = r3(0.68 * hsw)
+  const brim = r1(by - 10.5 * hsw)
   const hy = r1(brim - 7.5 * hs)
-  const hx = r1(bx + (lite ? 0 : 0.5 * hsc))
-  const fall: [number, number, number, number?, number?, number?][] = [[1.06, hx - 8 * hsc, r1(-12 * hsc - 4), -16], [1.3, hx - 3 * hsc, r1(hy - (hy + 12 * hsc) * 0.5), -8], [1.5, hx, r1(hy + 0.8 * hsc), 0, 1, 0.82], [1.58, hx, r1(hy - 0.5 * hsc), 0, 1, 1.05], [1.68, hx, hy, 0, 1, 1]]
-  const hatEnd = lite ? 4.5 : 1.78
-  // The pane's echo turns through three views (the reserve is small; at its speed the missing one never shows).
-  const hatSegs = [...spin(turnViews(lite ? HAT_VIEWS.slice(0, 3) : HAT_VIEWS), 1.06, 1.5, lite ? 0.27 : 0.36), [1.5, hatEnd, 'hv0']] as [number, number, string][]
-  const hat = act.actor('hat', hatSegs, [...fall, [hatEnd, hx, hy, 0, 1, 1], [act.T - 0.21, hx, hy, 0, 1, 1]], { sc: hs })
-  // The landing: a flat ring of air at the brim.
-  const dust = lite ? '' : fx.ring(act, 1.5, hx, r1(brim + 0.5), { rx: r1(16 * hs), color: C.sub, w: 1 })
+  const hx = r1(bx + 0.5 * hsw)
+  const fall: [number, number, number, number?, number?, number?][] = [[1.0, r1(hx - 9 * hsw), r1(6 * hs), -16], [1.3, r1(hx - 3 * hsw), r1(6 * hs + (hy - 6 * hs) * 0.55), -8], [1.55, hx, r1(hy + 0.8 * hsw), 0, 1, 0.8], [1.63, hx, r1(hy - 0.5 * hsw), 0, 1, 1.05], [1.72, hx, hy, 0, 1, 1]]
+  const hatSegs = [...spin(turnViews(HAT_VIEWS), 1.0, 1.55, 0.36), [1.55, 1.78, 'hv0']] as [number, number, string][]
+  const streaks = `<path d="M${r1(-7 * hs)} ${r1(-9 * hs)}v${r1(-12 * hs)}M${r1(6 * hs)} ${r1(-10 * hs)}v${r1(-8 * hs)}" stroke="${C.ice}" stroke-opacity=".55" stroke-width="1.2" stroke-linecap="round"/>`
+  const hat = act.kf(act.actor('hat', hatSegs, [...fall, [1.78, hx, hy, 0, 1, 1], [act.T - 0.21, hx, hy, 0, 1, 1]], { sc: hs, trail: [[1.0, 1.5, streaks]] }), [[0, 'transform:scale(1.45)'], [1.0, 'transform:scale(1.45)'], [1.55, 'transform:none']], { origin: `${hx}px ${hy}px` })
+  // The landing: a flat ring of air at the brim and a 1 px tap.
+  const dust = fx.ring(act, 1.55, hx, r1(brim + 0.5), { rx: r1(16 * hs), color: C.sub, w: 1 })
+  cam.shake(1.55, 1, 0.08)
   // 3. The head turns to face you: bare profile under the falling hat, then the hat man's profile, three-quarter, front.
-  const turn = lite ? ''
-    : act.on(act.still('b90', bx, by, 1, hsc), 1.0, 1.78) + act.on(act.still('h90', bx, by, 1, hsc), 1.78, 2.08) + act.on(act.still('h45', bx, by, 1, hsc), 2.08, 2.3) + act.on(act.still('h0', bx, by, 1, hsc), 2.3, 4.6)
-  if (!lite) cam.push(1.8, 2.5, 1.06, bx, r1(by - 6 * hsc), 'settle')
-  // The title card's place is known now: the dealer's answer sits where the card will slam.
-  const L = titleLayout(w, h, holes, r1(bx + hw + 10), lite)
-  const ansS = r1(Math.max(capS, Math.min(L.size * 0.62, lite ? 26 : 14)))
-  // The dealer's answer: right of the bust when it fits clear of the holes, else where the card will be (left of it, low).
-  const ansW = heavyW('\u201CHeisenberg.\u201D', ansS)
-  const nextTo = r1(bx + hw + 8)
-  const ansX = lite ? sayX : clear(nextTo, ansW, h / 2 + ansS * 0.36, ansS) ? nextTo : L.over ? r1(Math.max(nextTo, w - ansW - 6)) : L.x
-  const ansY = r1(lite ? h / 2 + capS * 0.36 : !L.over && L.lines.length === 1 ? L.y : h / 2 + ansS * 0.36)
-  const answer = act.on(cap(ansX, ansY, '\u201CHeisenberg.\u201D', lite ? capS : ansS, C.sub, { italic: true, weight: 600 }), 1.9, 2.56, { fade: 0.12 })
+  const turn = act.on(act.still('b90', bx, by, 1, hsw), 1.0, 1.78) + act.on(act.still('h90', bx, by, 1, hsw), 1.78, 2.08) + act.on(act.still('h45', bx, by, 1, hsw), 2.08, 2.3) + act.on(act.still('h0', bx, by, 1, hsw), 2.3, 4.6)
+  cam.push(1.78, 2.4, r3(hsc / hsw), bx, foot, 'settle')
+  // The title card's place: the biggest it fits whole, clear of his face (the close-up) when that costs little.
+  const face: Rect = [r1(bx - 18 * hsc - 2), r1(foot - 40 * hsc), r1(36 * hsc + 4), r1(40 * hsc)]
+  const L = titleLayout(w, h, holes, face)
+  // The dealer's answer: centred in the free rectangle clear of his face where it reads biggest, else where the card will be.
+  const perAns = heavyW('\u201CHeisenberg.\u201D', 10) / 10
+  const ansFit = ([, , rw, rh]: Rect): number => Math.min(22, L.size * 0.6, (rw - 12) / perAns, rh / 1.6)
+  const ar = freeRects(w, h, [...holes, face], 3).filter(r => ansFit(r) >= 10.5).sort((p, q) => ansFit(q) - ansFit(p))[0] ?? L.box
+  const ansS = r1(Math.max(10.5, ansFit(ar)))
+  const answer = act.on(cap(r1(ar[0] + ar[2] / 2), r1(ar[1] + ar[3] / 2 + ansS * 0.36), '\u201CHeisenberg.\u201D', ansS, C.sub, { anchor: 'middle', italic: true, weight: 600 }), 1.9, 2.56, { fade: 0.12 })
   // 4. The hit-stop's glint on the lens (front view: the glasses at row 20 of 40, left of the turn axis).
-  const lens = lite ? '' : fx.star3(act, 2.56, r1(bx - 5 * hsc), r1(by + 0.5 * hsc), r1(Math.max(4, 3.2 * hsc)), { core: C.white, star: C.ice, ring: C.blue })
-  // 5. The title card: heavy white caps on a black plate with a crystal-blue edge, slammed (2.4x to rest), a flash, a shake.
-  const lh = L.size * 1.04
-  const tw = Math.max(...L.lines.map(l => heavyW(l, L.size, L.size * 0.04)))
-  const top = r1(L.y - L.size * 0.86)
-  const plateH = r1(lh * (L.lines.length - 1) + L.size * 1.12)
-  const words = L.lines.map((l, i) => `<text x="${r1(L.x)}" y="${r1(L.y + i * lh)}" font-size="${L.size}" font-weight="900" letter-spacing="${r1(L.size * 0.04)}" fill="${C.white}">${esc(l)}</text>`).join('')
-  const card = `<rect x="${r1(L.x - 7)}" y="${top}" width="${r1(tw + 14)}" height="${plateH}" fill="#000" opacity=".86"/><rect x="${r1(L.x - 7)}" y="${top}" width="3" height="${plateH}" fill="${C.blue}"/>${words}`
-  const slam = act.slam(card, 2.62, 4.3)
-  const dim = L.over ? act.on(`<rect width="${w}" height="${h}" fill="#000" opacity=".55"/>`, 2.62, 4.4) : ''
-  const flashes = (lite ? '' : fx.flash(act, 0.04, { a: 0.3 })) + fx.flash(act, 2.63, { a: 0.24 })
-  if (!lite) cam.shake(2.64, 3, 0.26).shake(2.92, 1, 0.12)
-  // 6. The wipe: the whole scene pulled away downward on a crystal-blue bar.
-  // A cold blue haze behind him once the hat is coming (the only colour Heisenberg keeps).
-  const haze = lite ? '' : act.on(`<defs><radialGradient id="${act.p}hz"><stop offset="0" stop-color="${C.blue}" stop-opacity=".3"/><stop offset="1" stop-color="${C.blue}" stop-opacity="0"/></radialGradient></defs><ellipse cx="${bx}" cy="${r1(by - 4 * hsc)}" rx="${r1(34 * hsc)}" ry="${r1(24 * hsc)}" fill="url(#${act.p}hz)"/>`, 1.0, 4.6, { fade: 0.4 })
-  const scene = `${scrim(act, 0.97, C.ink)}${haze}${stare}${say}${cam.wrap(`${turn}${hat}${dust}`)}${answer}${lens}${dim}${slam}${flashes}`
-  // Its life ends before the hit-stop's .2 s runs past the timeline's end (a later end would clamp and fade the whole act).
+  const lens = fx.star3(act, 2.56, r1(bx - 5 * hsw), r1(by + 0.5 * hsw), r1(Math.max(2.5, 3.2 * hsw)), { core: C.white, star: C.ice, ring: C.blue })
+  // 5. The title card slammed (2.4x to rest) inside its own rectangle, a flash, a shake; his face dimmed when it goes over him.
+  const card = titleCard(L)
+  const slam = boxed(`${act.p}tc`, L.box, act.slam(card, 2.62, 4.3))
+  const dimFace = `<rect width="${w}" height="${h}" fill="#000" opacity=".55"/>`
+  const dim = L.over ? act.on(dimFace, 2.62, 4.4) : ''
+  const flashes = fx.flash(act, 0.04, { a: 0.3 }) + fx.flash(act, 2.63, { a: 0.24 })
+  cam.shake(2.64, 3, 0.26).shake(2.92, 1, 0.12)
+  const scene = `${scrim(act, 0.97, C.ink)}${stare}${say}${cam.wrap(`${light}${turn}${hat}${dust}${lens}`)}${answer}${dim}${slam}${flashes}`
+  // 6. The wipe: the whole scene pulled away downward on a crystal-blue bar. Its life ends before the hit-stop's .2 s runs past
+  // the timeline's end (a later end would clamp and fade the whole act).
   const body = act.on(`${wipe.clip(act, 3.9, 4.45, scene, { dir: 'd', mode: 'out', ease: 'settle' })}${wipe.bar(act, 3.9, 4.45, { dir: 'd', color: C.blue, core: C.ice, ease: 'settle' })}`, 0.01, 4.66, { fade: 0.1 })
-  const face = lite ? `${act.still('b0', bx, by, 1, bsc)}${act.still('hv0', hx, hy, 1, hs)}` : act.still('h0', bx, by, 1, hsc)
-  const still = `${scrimFlat(act, 0.97, C.ink)}${face}${L.over ? `<rect width="${w}" height="${h}" fill="#000" opacity=".55"/>` : ''}${card}`
+  const still = `${scrimFlat(act, 0.97, C.ink)}${act.still('h0', bx, r1(foot - 20 * hsc), 1, hsc)}${L.over ? dimFace : ''}${card}`
   return { layer: act.done(body, still), act }
 }
 /**
@@ -335,7 +361,7 @@ export const nameEcho = (o: { at: number; w: number; h: number; id: string }): {
   const capS = r1(Math.min(22, h * 0.11))
   const say = act.on(cap(r1(bx + hw + 14), r1(h / 2 + capS * 0.36), 'Say my name.', capS, C.white, { italic: true }), 0.2, 1.75, { fade: 0.12 })
   const hat = act.actor('hat', [[1.0, 4.7, 'hv0']], [[1.0, bx, r1(-6 * hsc)], [1.5, bx, r1(hy + 0.8 * hsc)], [1.6, bx, r1(hy - 0.4 * hsc)], [1.7, bx, hy], [act.T - 0.21, bx, hy]], { sc: hs })
-  const L = titleLayout(w, h, [], r1(bx + hw + 10), true)
+  const L = titleLayout(w, h, [], [0, 0, r1(bx + hw + 6), h], 46, 2)
   const lh = L.size * 1.04
   const tw = Math.max(...L.lines.map(l => heavyW(l, L.size, L.size * 0.04)))
   const top = r1(L.y - L.size * 0.86)
@@ -534,6 +560,13 @@ export const knocksAct = (o: { at: number; w: number; h: number; id: string; hol
 export const bandRegion = (W: number, H: number, stage?: BandStage): { x: number; y: number; w: number; h: number } => ({
   x: 8, y: 34, w: Math.round(Math.max(120, Math.min(W * 0.64, W - 300, 640, stage ? stage.x1 - 8 : W))), h: Math.max(48, Math.min(56, H - 78)),
 })
+/** SAY MY NAME's region: the band's whole clear span under the header (the task row, the step row, the tip line), from the
+ *  figure box to the band's wide edge (each row up to its own first readout); the Tasks chip, the step count and the rows' right
+ *  parts are its holes (`nameKeep`). Without a stage: the task row. */
+export const nameRegion = (W: number, H: number, stage?: BandStage): { x: number; y: number; w: number; h: number } =>
+  stage ? { x: 8, y: 34, w: Math.round(Math.max(120, (stage.wide?.x2 ?? stage.x1) - 8)), h: Math.max(56, H - 37) } : bandRegion(W, H)
+/** SAY MY NAME's keep-out: the span's holes and, in the wide window, the rows' right parts. */
+const nameKeep = (stage: BandStage): BandStage => ({ x1: stage.wide?.x2 ?? stage.x1, keep: [...stage.keep, ...(stage.wide?.keep ?? [])] })
 /** The keep-out holes in the region's own coordinates. */
 const holesIn = (r: { x: number; y: number }, stage?: BandStage): Rect[] => (stage?.keep ?? []).map(([x, y, w, h]) => [x - r.x, y - r.y, w, h] as Rect)
 const placeBand = (layer: string, p: string, r: { x: number; y: number; w: number; h: number }, stage?: BandStage): string => {
@@ -558,12 +591,17 @@ export const bbBand = (o: { W: number; H: number; at: number; working: boolean; 
     return placeBand(a.layer, a.act.p, r, o.stage)
   }
   if (!d || o.at >= d.startAt + BB_MS[d.kind]) return ''
+  if (d.kind === 'name') {
+    const nr = nameRegion(o.W, o.H, o.stage)
+    const nk = o.stage ? nameKeep(o.stage) : undefined
+    const a = nameAct({ at: d.startAt, w: nr.w, h: nr.h, id: `name-band-${o.W}-${nr.w}x${nr.h}`, holes: holesIn(nr, nk) })
+    return `${nameVeil({ at: d.startAt, W: o.W, H: o.H, id: `name-veil-${o.W}x${o.H}` })}${placeBand(a.layer, a.act.p, nr, nk)}`
+  }
   const id = `${d.kind}-band-${o.W}-${r.w}`
   const base = { at: d.startAt, w: r.w, h: r.h, id }
-  const a = d.kind === 'name' ? nameAct({ ...base, holes }) : d.kind === 'standoff' ? standoffAct({ ...base, holes }) : d.kind === 'pizza' ? pizzaAct({ ...base, holes })
+  const a = d.kind === 'standoff' ? standoffAct({ ...base, holes }) : d.kind === 'pizza' ? pizzaAct({ ...base, holes })
     : d.kind === 'cheer' ? scienceAct({ ...base, holes }) : knocksAct({ ...base, holes })
-  const veil = d.kind === 'name' ? nameVeil({ at: d.startAt, W: o.W, H: o.H, id: `name-veil-${o.W}x${o.H}` }) : ''
-  return `${veil}${placeBand(a.layer, a.act.p, r, o.stage)}`
+  return placeBand(a.layer, a.act.p, r, o.stage)
 }
 /**
  * The CLASSROOM card's act now: SAY MY NAME filling its board, else ''. Lite: a busy Breaking Bad pane sits near the drawing's
