@@ -830,13 +830,15 @@ const build = (a: FightArgs, surface: 'band' | ActIndex): Built => {
   const W = st ? pk.W : a.W
   const box: [number, number, number, number] = band ? [0, 0, Math.round(W * 0.67), a.H] : [0, 0, a.W, a.H]
   const sc = band ? (st ? pk.sc : scOf(W)) : 1.9
-  const fr = cq && !band ? cqFrame(a.W, a.H) : undefined
+  // Every pane act (wave 4: THE FIGHT's three too, as MARK VS CONQUEST's two) is framed under the card's title row and pushed
+  // in to fill a wide card.
+  const fr = !band ? cqFrame(a.W, a.H) : undefined
   const c = fr
     ? new Cut(`invf-p${surface}-${v}-${a.era}-${a.W}x${a.H}`, a.startAt, off, a.era, sc, fr.Wv, fr.Hv, [0, 0, fr.Wv, fr.Hv], a.K ?? 4, T.ms, cq)
     : new Cut(`invf-${band ? 'b' : `p${surface}`}-${v}-${a.era}-${a.W}x${a.H}`, a.startAt, off, a.era, sc, W, a.H, box, a.K ?? 4, T.ms, cq, st ? 2 : undefined)
   // The card under the fight: a veil (COVER STORY is the fight's own panel; GDA WALL's live feed stays readable through it),
   // and the downtown arena where the card has the room for it (GDA WALL; COVER STORY's card is at its 60 k).
-  if (fr) c.set += `<rect x="${r1(-fr.x / fr.k)}" width="${r1(a.W / fr.k)}" height="${fr.Hv}" fill="${PROPS.ink}" opacity="${surface === 0 ? 0.8 : 0.5}"/>${surface === 1 ? arena(c, Math.round(fr.Hv * 0.32)) : ''}`
+  if (fr && cq) c.set += `<rect x="${r1(-fr.x / fr.k)}" width="${r1(a.W / fr.k)}" height="${fr.Hv}" fill="${PROPS.ink}" opacity="${surface === 0 ? 0.8 : 0.5}"/>${surface === 1 ? arena(c, Math.round(fr.Hv * 0.32)) : ''}`
   // The readouts and the task title, in the cut's own (pushed) coordinates: a word that would sit on one drops under it.
   const holes = st ? [...st.keep, ...(st.title ? [st.title] : [])] : []
   if (st) c.keep = holes.map(([x, y, w, h]) => [r1(x / pk.k), r1((y - pk.ty) / pk.k), r1(w / pk.k), r1(h / pk.k)] as [number, number, number, number])
