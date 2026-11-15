@@ -16,6 +16,8 @@ import { playsOf, runPlay } from './stage/replay'
 import { skinSwitch } from './stage/wipe'
 
 const NOW = Date.parse('2026-10-20T10:00:00Z')
+// The band's whole clear span (97 px under the header): the Tasks chip, the step count, the percent's and the totals' rows.
+const SPAN_HOLES: [number, number, number, number][] = [[253, 5, 85, 22], [4, 54, 104, 21], [839, 0, 400, 50], [706, 76, 500, 24]]
 
 // ---------------------------------------------------------------- the schedule
 test('director: THE READ plays at most once per 30-45 min, only while working; never at rest', () => {
@@ -98,6 +100,7 @@ test('trigger words: "tyger tyger" and "patrick jane" are whole phrases; 34 ever
 const ACTS: [string, () => string][] = [
   ['the-read band', () => readAct({ at: NOW, w: 640, h: 56, id: 't-read-band' }).layer],
   ['the-read narrow', () => readAct({ at: NOW, w: 140, h: 56, id: 't-read-narrow' }).layer],
+  ['the-read band span', () => readAct({ at: NOW, w: 895, h: 97, id: 't-read-span', holes: SPAN_HOLES }).layer],
   ['the-read pane', () => readAct({ at: NOW, w: 960, h: 84, id: 't-read-pane', sc: 1.85, lite: true }).layer],
   ['parlour band', () => parlourAct({ at: NOW, w: 640, h: 56, id: 't-par-band' }).layer],
   ['parlour pane', () => parlourAct({ at: NOW, w: 960, h: 84, id: 't-par-pane', sc: 1.57, lite: true }).layer],
@@ -317,4 +320,24 @@ test('the way back: "patrick jane" on Red John wears The Mentalist again; the pr
   await $.prompt.submit({ text: 'patrick jane', cursor: 0 } as never)
   expect(await skinList($)).toContain('▸ crab-classic')
   setMentPlay(undefined)
+})
+
+test('THE READ on the band span: the two and every line stand whole in a free rectangle, never cut by a chip', () => {
+  for (const [w, holes] of [[895, SPAN_HOLES], [560, [[253, 5, 85, 22], [4, 54, 104, 21], [462, 0, 200, 50], [215, 76, 400, 24]]], [190, [[4, 54, 104, 21]]]] as [number, [number, number, number, number][]][]) {
+    const r = readAct({ at: NOW, w, h: 97, id: `t-read-span-${w}`, holes })
+    const lines = [...r.layer.matchAll(/>(a blink\.|Seven of hearts\.)<\/text>/g)]
+    expect(lines.length, `${w}: the tell, the reveal, the still's reveal`).toBeGreaterThanOrEqual(3)
+    for (const [, x, y, size, text] of r.layer.matchAll(/<text x="([\d.]+)" y="([\d.]+)"(?: text-anchor="middle")? font-family="[^"]*" font-size="([\d.]+)"[^>]*>(a blink\.|Seven of hearts\.)<\/text>/g)) {
+      const fs = Number(size)
+      const tw = (text as string).length * fs * 0.5
+      const left = text === 'a blink.' ? Number(x) : Number(x) - tw / 2
+      expect(left, `${w} ${text}`).toBeGreaterThanOrEqual(0)
+      expect(left + tw, `${w} ${text}`).toBeLessThanOrEqual(w)
+      for (const [hx, hy, hw, hh] of holes) {
+        const meets = left < hx + hw && hx < left + tw && Number(y) - fs < hy + hh && hy < Number(y) + fs * 0.3
+        expect(meets, `${w}: "${text}" at ${left},${y} meets the hole at ${hx},${hy}`).toBe(false)
+      }
+    }
+    expect([...r.layer.matchAll(/<text x="[\d.]+" y="[\d.]+"(?: text-anchor="middle")? font-family="[^"]*" font-size="[\d.]+"[^>]*>(a blink\.|Seven of hearts\.)<\/text>/g)].length).toBe(lines.length)
+  }
 })

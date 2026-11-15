@@ -77,3 +77,12 @@ export const freeRects = (w: number, h: number, holes: Rect[], pad = 4): Rect[] 
   const inside = (a: Rect, b: Rect): boolean => b[0] <= a[0] && b[1] <= a[1] && b[0] + b[2] >= a[0] + a[2] && b[1] + b[3] >= a[1] + a[3]
   return all.filter((a, i) => !all.some((b, j) => j !== i && inside(a, b)))
 }
+/**
+ * A band act's whole clear span under the header (the task row, the step row, the tip line), from the figure box to the band's
+ * wide edge (each row up to its own first readout), and its keep-out: the span's own readouts plus, in the wide window, the
+ * rows' right parts. For an act that places every piece in a free rectangle (`freeRects`).
+ */
+export const spanOf = (H: number, stage: BandStage): { r: { x: number; y: number; w: number; h: number }; keep: BandStage } => ({
+  r: { x: 8, y: 34, w: Math.round(Math.max(120, (stage.wide?.x2 ?? stage.x1) - 8)), h: Math.max(56, H - 37) },
+  keep: { x1: stage.wide?.x2 ?? stage.x1, keep: [...stage.keep, ...(stage.wide?.keep ?? [])] },
+})

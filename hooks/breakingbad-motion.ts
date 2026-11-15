@@ -30,7 +30,7 @@ import { Director, localOffsetMs } from './stage/director'
 import type { Slot } from './stage/director'
 import { FrameBank } from './stage/frames'
 import * as fx from './stage/fx'
-import { freeRects, keepClip, meets } from './stage/keep'
+import { freeRects, keepClip, meets, spanOf } from './stage/keep'
 import type { BandStage, Rect } from './stage/keep'
 import { registerPlay } from './stage/replay'
 import { Act, r1, r3 } from './stage/timeline'
@@ -546,10 +546,9 @@ export const bandRegion = (W: number, H: number, stage?: BandStage): { x: number
 /** SAY MY NAME's region: the band's whole clear span under the header (the task row, the step row, the tip line), from the
  *  figure box to the band's wide edge (each row up to its own first readout); the Tasks chip, the step count and the rows' right
  *  parts are its holes (`nameKeep`). Without a stage: the task row. */
-export const nameRegion = (W: number, H: number, stage?: BandStage): { x: number; y: number; w: number; h: number } =>
-  stage ? { x: 8, y: 34, w: Math.round(Math.max(120, (stage.wide?.x2 ?? stage.x1) - 8)), h: Math.max(56, H - 37) } : bandRegion(W, H)
+export const nameRegion = (W: number, H: number, stage?: BandStage): { x: number; y: number; w: number; h: number } => (stage ? spanOf(H, stage).r : bandRegion(W, H))
 /** SAY MY NAME's keep-out: the span's holes and, in the wide window, the rows' right parts. */
-const nameKeep = (stage: BandStage): BandStage => ({ x1: stage.wide?.x2 ?? stage.x1, keep: [...stage.keep, ...(stage.wide?.keep ?? [])] })
+const nameKeep = (H: number, stage: BandStage): BandStage => spanOf(H, stage).keep
 /** The keep-out holes in the region's own coordinates. */
 const holesIn = (r: { x: number; y: number }, stage?: BandStage): Rect[] => (stage?.keep ?? []).map(([x, y, w, h]) => [x - r.x, y - r.y, w, h] as Rect)
 const placeBand = (layer: string, p: string, r: { x: number; y: number; w: number; h: number }, stage?: BandStage): string => {
@@ -576,7 +575,7 @@ export const bbBand = (o: { W: number; H: number; at: number; working: boolean; 
   if (!d || o.at >= d.startAt + BB_MS[d.kind]) return ''
   if (d.kind === 'name') {
     const nr = nameRegion(o.W, o.H, o.stage)
-    const nk = o.stage ? nameKeep(o.stage) : undefined
+    const nk = o.stage ? nameKeep(o.H, o.stage) : undefined
     const a = nameAct({ at: d.startAt, w: nr.w, h: nr.h, id: `name-band-${o.W}-${nr.w}x${nr.h}`, holes: holesIn(nr, nk) })
     return `${nameVeil({ at: d.startAt, W: o.W, H: o.H, id: `name-veil-${o.W}x${o.H}` })}${placeBand(a.layer, a.act.p, nr, nk)}`
   }

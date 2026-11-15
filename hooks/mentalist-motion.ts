@@ -24,8 +24,8 @@ import { Director, localOffsetMs } from './stage/director'
 import type { Slot } from './stage/director'
 import { esc } from './stage/budget'
 import { FrameBank } from './stage/frames'
-import { keepClip } from './stage/keep'
-import type { BandStage } from './stage/keep'
+import { freeRects, keepClip, spanOf } from './stage/keep'
+import type { BandStage, Rect } from './stage/keep'
 import { registerPlay } from './stage/replay'
 import { Act, r1, r3 } from './stage/timeline'
 import type { SwitchFlavour } from './stage/wipe'
@@ -186,15 +186,20 @@ const life = (act: Act, body: string, fade = 0.35): string => act.on(body, 0.01,
  *   5.2  the other man backs down; 6.4 Jane's smile. No blows.
  * Reduced motion: the smile, the card face up, the line. Returns the layer (an `Act.done`) in the region's coordinates.
  */
-export const readAct = (o: { at: number; w: number; h: number; id: string; sc?: number; lite?: boolean }): { layer: string; act: Act; fight: Fight } => {
+export const readAct = (o: { at: number; w: number; h: number; id: string; sc?: number; lite?: boolean; holes?: Rect[] }): { layer: string; act: Act; fight: Fight } => {
   const act = new Act({ id: o.id, ms: MENT_MS['the-read'], at: o.at, W: o.w, H: o.h, K: o.lite ? 4 : 6 })
-  const sc = o.sc ?? r3(Math.min(1.25, (o.h - 8) / 40, o.w / 200))
-  const gy = o.h - 3
+  // On the band (`holes`: its clear span's keep-out) the two sit in the free rectangle that holds them biggest (up to 2x, a
+  // caption row kept above their heads), every line inside it: nothing is ever cut by a chip. The pane's echo fills its card.
+  const rects = o.holes ? freeRects(o.w, o.h, o.holes) : []
+  const fit = ([, , rw, rh]: Rect): number => Math.min(2, (rh - 24) / 40, (rw - 12) / 96)
+  const box: Rect = o.holes ? ([...rects].sort((p, q) => fit(q) - fit(p) || p[0] - q[0])[0] ?? [0, 0, o.w, o.h]) : [0, 0, o.w, o.h]
+  const sc = o.holes ? r3(Math.max(0.6, fit(box))) : (o.sc ?? r3(Math.min(1.25, (o.h - 8) / 40, o.w / 200)))
+  const gy = r1(box[1] + box[3] - 3)
   const cyJ = r1(gy - (38 * sc) / 2)
   const cyO = r1(gy - (40 * sc) / 2)
   // Jane keeps 6 colours even in the lite echo (at 4 his suit and shirt fold into one pale blob); the silhouette needs 4.
   act.cast('jFan', SP.MENT_READ_FAN, 16 / 22, 6).cast('jRev', padTo(SP.MENT_READ_REVEAL, 38), 14 / 27, 6).cast('jSmile', SP.MENT_READ_SMILE, 17 / 27, 6).cast('oHold', SP.MENT_READ_OPP_HOLD, 10 / 21, 4).cast('oFlinch', SP.MENT_READ_OPP_FLINCH, 10 / 21, 4)
-  const mid = r1(Math.min(o.w * 0.42, 120 * sc + 30))
+  const mid = o.holes ? r1(box[0] + box[2] / 2) : r1(Math.min(o.w * 0.42, 120 * sc + 30))
   const jx = r1(mid - 30 * sc)
   const ox = r1(mid + 34 * sc)
   const cam = new Camera(act)
@@ -208,33 +213,39 @@ export const readAct = (o: { at: number; w: number; h: number; id: string; sc?: 
   f.at(5.2).backdown('o', 5, 0.6)
   f.at(6.4).pose('j', 'jSmile')
   // The room: the drawing room's chairs and lamp, faint, drifting; the lamp's pool of light on the table.
-  let room = o.lite ? '' : roomLayer(act, 'mid', SP.MENT_ARENA_MID, gy + 1, Math.min(1.6, (o.h * 0.62) / 25), 0.28, 6)
-  room += lampGlow(act, mid + 6 * sc, gy - 22 * sc, 80 * sc, 34 * sc, C.lamp, 0.4)
+  let room = o.lite ? '' : roomLayer(act, 'mid', SP.MENT_ARENA_MID, gy + 1, Math.min(1.6, (box[3] * 0.62) / 25), 0.28, 6)
+  room += lampGlow(act, mid + 6 * sc, gy - 22 * sc, 80 * sc, 34 * sc, C.lamp, o.holes ? 0.5 : 0.4)
   // A side table between them, a cup on it.
   const tw = 14 * sc
   const ty = r1(gy - 15 * sc)
   const table = `<path d="M${r1(mid - tw / 2)} ${ty}h${r1(tw)}v${r1(1.6 * sc)}h${r1(-tw)}z" fill="#5A4030"/><path d="M${r1(mid - 0.8 * sc)} ${r1(ty + 1.6 * sc)}h${r1(1.6 * sc)}V${gy}h${r1(-1.6 * sc)}z" fill="#3A2A20"/><path d="M${r1(mid - 4 * sc)} ${gy}h${r1(8 * sc)}v1h${r1(-8 * sc)}z" fill="#3A2A20"/><path d="M${r1(mid + 1 * sc)} ${r1(ty - 2.4 * sc)}h${r1(3.4 * sc)}v${r1(1.6 * sc)}a${r1(1 * sc)} ${r1(0.8 * sc)} 0 0 1 ${r1(-1 * sc)} ${r1(0.8 * sc)}h${r1(-1.4 * sc)}a${r1(1 * sc)} ${r1(0.8 * sc)} 0 0 1 ${r1(-1 * sc)} ${r1(-0.8 * sc)}z" fill="${C.cream}"/>`
-  // The tell, and the reveal's card and line.
-  const capY = r1(Math.max(13, gy - 42 * sc))
-  const fs = r1(Math.max(10, Math.min(14, 10.5 * sc)))
-  const tell = act.on(line(ox + 10 * sc, capY, 'a blink.', fs * 0.9, C.sub), 3.2, 4.3, { fade: 0.15 })
+  // The tell, and the reveal's card and line: on the band, in the caption row at the top of the two's rectangle (inside it).
+  const fs = r1(Math.max(10, Math.min(o.holes ? 15 : 14, 10.5 * sc)))
+  const capY = o.holes ? r1(box[1] + fs + 3) : r1(Math.max(13, gy - 42 * sc))
+  const tellW = 8 * fs * 0.9 * 0.5
+  const tellX = o.holes ? r1(Math.max(box[0] + 3, Math.min(box[0] + box[2] - tellW - 3, ox - tellW / 2))) : r1(ox + 10 * sc)
+  const tell = act.on(line(tellX, capY, 'a blink.', r1(fs * 0.9), C.sub), 3.2, 4.3, { fade: 0.15 })
   const cw = r1(9 * sc)
   const ch = r1(13 * sc)
   const cx0 = r1(jx + 12 * sc)
   const cy0 = r1(cyJ - 12 * sc)
   const card = flipCard(act, 4.45, 4.6, 8.9, cx0, cy0, cw, ch, '7')
   const reveal = act.on(line(mid, capY, 'Seven of hearts.', fs, C.cream, { anchor: 'middle' }), 4.9, 8.9, { fade: 0.25 })
-  // THE PALM: his close-up in a letterbox, slammed in (scale 1.08 to 1), a 2 px tap; the room dims around it. (The pane's lite
-  // echo leaves the close-up to the band: a line instead.)
+  // THE PALM: his close-up in a letterbox, slammed in (scale 1.08 to 1), a 2 px tap; the room dims around it. On the band the
+  // letterbox stands whole in the free rectangle that holds it biggest (4:1, at most 3x), clipped to it. (The pane's lite echo
+  // leaves the close-up to the band: a line instead.)
   if (!o.lite) act.cast('cut', SP.MENT_CUTIN_JANE, 0.5, 6)
-  const lbH = r1(Math.min(o.h * 0.7, 30 * sc))
+  const fitK = ([, , rw, rh]: Rect): number => Math.min(3, (rw - 8) / 80, (rh - 4) / 20)
+  const cr: Rect = o.holes ? ([...rects].sort((p, q) => fitK(q) - fitK(p) || p[0] - q[0])[0] ?? box) : [0, 0, o.w, o.h]
+  const lbH = r1(o.holes ? 20 * Math.max(0.5, fitK(cr)) : Math.min(o.h * 0.7, 30 * sc))
   const ksc = r3(lbH / 20)
-  const lbY = r1((o.h - lbH) / 2)
-  // At the region's right end: the title's Tasks chip (a keep-out hole) sits to the left, never in the strip.
-  const ccx = r1(Math.max(mid + 10, o.w - 40 * ksc - 12))
-  const strip = o.lite ? '' : `<rect width="${o.w}" height="${o.h}" fill="${C.ink}" opacity=".94"/><rect x="${r1(ccx - 40 * ksc)}" y="${lbY}" width="${r1(80 * ksc)}" height="${lbH}" fill="#000"/>${act.bank.use('cut', ccx, r1(lbY + lbH / 2), 1, ksc)}<rect x="${r1(ccx - 40 * ksc)}" y="${lbY}" width="${r1(80 * ksc)}" height="${lbH}" fill="none" stroke="${C.gold}" stroke-opacity=".6"/>`
-  const palm = o.lite ? act.on(line(jx + 14 * sc, capY, 'the palm.', fs * 0.9, C.sub), 2.3, 3.1, { fade: 0.15 })
-    : act.win(2.4, 3.0, act.kf(strip, [[0, 'transform:scale(1.08)'], [2.4, 'transform:scale(1.08)'], [2.52, 'transform:scale(1)'], [2.58, 'transform:translateX(2px)'], [2.64, 'transform:none']], { origin: `${ccx}px ${r1(o.h / 2)}px` }))
+  const lbY = r1(cr[1] + (cr[3] - lbH) / 2)
+  // Off the band: at the region's right end (the title's Tasks chip, a keep-out hole, sits to the left, never in the strip).
+  const ccx = o.holes ? r1(cr[0] + cr[2] / 2) : r1(Math.max(mid + 10, o.w - 40 * ksc - 12))
+  const letterbox = `<rect x="${r1(ccx - 40 * ksc)}" y="${lbY}" width="${r1(80 * ksc)}" height="${lbH}" fill="#000"/>${o.lite ? '' : act.bank.use('cut', ccx, r1(lbY + lbH / 2), 1, ksc)}<rect x="${r1(ccx - 40 * ksc)}" y="${lbY}" width="${r1(80 * ksc)}" height="${lbH}" fill="none" stroke="${C.gold}" stroke-opacity=".6"/>`
+  const slam = o.lite ? '' : act.kf(letterbox, [[0, 'transform:scale(1.08)'], [2.4, 'transform:scale(1.08)'], [2.52, 'transform:scale(1)'], [2.58, 'transform:translateX(2px)'], [2.64, 'transform:none']], { origin: `${ccx}px ${r1(lbY + lbH / 2)}px` })
+  const strip = o.lite ? '' : `<rect width="${o.w}" height="${o.h}" fill="${C.ink}" opacity=".94"/>${o.holes ? `<defs><clipPath id="${act.p}pc"><rect x="${r1(cr[0])}" y="${r1(cr[1])}" width="${r1(cr[2])}" height="${r1(cr[3])}"/></clipPath></defs><g clip-path="url(#${act.p}pc)">${slam}</g>` : slam}`
+  const palm = o.lite ? act.on(line(jx + 14 * sc, capY, 'the palm.', fs * 0.9, C.sub), 2.3, 3.1, { fade: 0.15 }) : act.win(2.4, 3.0, strip)
   const body = life(act, `${scrim(act, 0.96, C.ink)}${room}${cam.wrap(`${table}${f.body()}${card}`)}${tell}${reveal}${palm}`)
   const still = `${scrimFlat(act, 0.96, C.ink)}${table}${act.still('jSmile', jx, cyJ, 1, sc)}${act.still('oHold', ox - 5 * sc, cyO, -1, sc)}${cardFace(cx0, cy0, cw, ch, '7')}${line(mid, capY, 'Seven of hearts.', fs, C.cream, { anchor: 'middle' })}`
   return { layer: act.done(body, still), act, fight: f }
@@ -388,6 +399,12 @@ export const mentBand = (o: { W: number; H: number; at: number; working: boolean
   const d = mentDue(o.at, o.working, o.red)
   if (!d || o.at >= d.startAt + MENT_MS[d.kind]) return ''
   const id = `${d.kind}-band-${o.W}-${r.w}`
+  // THE READ plays in the band's whole clear span (stage/keep.ts spanOf), every piece in a free rectangle around its holes.
+  if (d.kind === 'the-read' && o.stage) {
+    const sp = spanOf(o.H, o.stage)
+    const a = readAct({ at: d.startAt, w: sp.r.w, h: sp.r.h, id: `${id}x${sp.r.h}`, holes: sp.keep.keep.map(([x, y, w, h]) => [x - sp.r.x, y - sp.r.y, w, h] as Rect) })
+    return placeBand(a.layer, a.act.p, sp.r, sp.keep)
+  }
   const a = d.kind === 'the-read' ? readAct({ at: d.startAt, w: r.w, h: r.h, id }) : d.kind === 'parlour' ? parlourAct({ at: d.startAt, w: r.w, h: r.h, id })
     : d.kind === 'tyger' ? tygerAct({ at: d.startAt, w: r.w, h: r.h, id }) : d.kind === 'walk-by' ? walkAct({ at: d.startAt, w: r.w, h: r.h, id })
     : d.kind === 'cheer' ? caseClosedAct({ at: d.startAt, w: r.w, h: r.h, id }) : rjCheerAct({ at: d.startAt, w: r.w, h: r.h, id })
