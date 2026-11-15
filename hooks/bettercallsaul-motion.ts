@@ -85,12 +85,16 @@ export const TURN = { dip: 0.3, from: 0.72, holds: [0.14, 0.2, 0.18, 0.2, 0.3, 0
 export const GENE_GLINTS: [string, 1 | -1, number, number][] = [['v1', 1, 2, 14], ['v2', 1, 8, 13], ['v2', -1, 8, 13], ['v1', -1, 2, 14]]
 /** The head's place: on the bust's spot in the task row (x 14 to 60), bottom on the row's floor, full size (45 px tall). */
 export const HEAD = { x: 37, foot: 82, sc: 1 } as const
+/** How small the head shrinks as it vanishes from one place and pops up at the other (it never flies across the band: the task
+ *  title is in the way). */
+export const TURN_POP = 0.5
 /**
  * Where the turn plays big: the band's whole clear span (stage/keep.ts spanOf), in the free rectangle where the head can be
- * largest (up to 2x, 90 px), its foot on that rectangle's floor. Without a stage: the bust's own spot at 1x.
+ * largest (up to 2x, 90 px), its foot on that rectangle's floor; the task title is a hole too (on a narrow band the stage goes
+ * under it, never over it). Without a stage: the bust's own spot at 1x.
  */
 export const turnStage = (W: number, H: number, stage?: BandStage): { x: number; foot: number; sc: number; rect: Rect } => {
-  const { win, keep } = wideOf(W, H, stage)
+  const { win, keep } = wideTitled(W, H, stage)
   const holes = (keep?.keep ?? []).map(([hx, hy, hw, hh]) => [hx - win[0], hy - win[1], hw, hh] as Rect)
   let best: { x: number; foot: number; sc: number; rect: Rect } = { x: HEAD.x, foot: HEAD.foot, sc: HEAD.sc, rect: [3, 35, 60, 48] }
   if (!stage) return best
@@ -129,11 +133,19 @@ export const saul3d = (o: EggArgs): EggOut => {
   // The snap back to front: an overshoot about the foot.
   const pop = act.kf(head, [[0, 'transform:none'], [TURN.snap, 'transform:none'], [TURN.snap + 0.1, 'transform:scale(1.12)'], [TURN.snap + 0.3, 'transform:scale(.97)'], [TURN.snap + 0.45, 'transform:none']], { origin: `${x}px ${foot}px` })
   // Out to the stage and home again: the head drawn on the stage, mapped onto the bust (its foot on the bust's foot, 1x) at
-  // either end, with an eased glide between.
-  const home = `transform:translate(${r1(HEAD.x - x)}px,${r1(HEAD.foot - foot)}px) scale(${r1(HEAD.sc / sc)})`
+  // either end. It never flies across the band (the task title lies between the bust and the stage): it shrinks away where it
+  // is, then pops up, growing, at the other place (the jump is made while it is invisible), a sparkle where it lands.
+  const homeAt = (k: number): string => `transform:translate(${r1(HEAD.x - x)}px,${r1(HEAD.foot - foot)}px) scale(${r1((HEAD.sc / sc) * k)})`
+  const home = homeAt(1)
   const [o0, o1] = TURN.out
   const [b0, b1] = TURN.back
-  const travel = sc > HEAD.sc ? act.kf(pop, [[0, home], [o0, home], [o1, 'transform:none'], [b0, 'transform:none'], [b1, home], [act.T, home]], { origin: `${x}px ${foot}px`, ease: 'settle' }) : pop
+  const gone = 'opacity:0'
+  const shown = 'opacity:1'
+  const travel = sc > HEAD.sc
+    ? act.kf(pop, [[0, `${home};${shown}`], [o0, `${home};${shown}`], [o0 + 0.14, `${homeAt(TURN_POP)};${gone}`], [o0 + 0.15, `transform:scale(${TURN_POP});${gone}`], [o1, `transform:none;${shown}`], [b0, `transform:none;${shown}`], [b0 + 0.2, `transform:scale(${TURN_POP});${gone}`], [b0 + 0.21, `${homeAt(TURN_POP)};${gone}`], [b1, `${home};${shown}`], [act.T, `${home};${shown}`]], { origin: `${x}px ${foot}px`, ease: 'settle' })
+    : pop
+  const twinkle = (tx: number, ty: number, s: number): string => `<path d="M${r1(tx)} ${r1(ty - s)}L${r1(tx + s * 0.28)} ${r1(ty - s * 0.28)}L${r1(tx + s)} ${r1(ty)}L${r1(tx + s * 0.28)} ${r1(ty + s * 0.28)}L${r1(tx)} ${r1(ty + s)}L${r1(tx - s * 0.28)} ${r1(ty + s * 0.28)}L${r1(tx - s)} ${r1(ty)}L${r1(tx - s * 0.28)} ${r1(ty - s * 0.28)}z" fill="${gene ? '#FFFFFF' : PROPS.adYellow}"/>`
+  const sparkles = sc > HEAD.sc ? `${act.cue('pop', o1 - 0.12, twinkle(x + 17 * sc, foot - 40 * sc, 5 * sc), { d: 0.4 })}${act.cue('pop', b1 - 0.12, twinkle(HEAD.x + 17, HEAD.foot - 40, 5), { d: 0.4 })}` : ''
   // The stage: a dark card over the free rectangle, a spotlight that swings with the turn, a lit floor under it.
   const warm = gene ? '#E8E8E8' : '#FFE7A8'
   const [rx, ry, rw0, rh] = st.rect
@@ -150,7 +162,7 @@ export const saul3d = (o: EggArgs): EggOut => {
   const clipId = `${act.p}h`
   const glint = light.sweep({ id: `${act.p}g`, x: x - 19 * sc, y: cy - 22.5 * sc, w: 38 * sc, h: 45 * sc, clip: clipId, act, t0: TURN.snap + 0.15, t1: TURN.snap + 0.6, color: '#FFF6DA', op: 0.65 })
   const clip = `<defs>${light.clipTo(act.bank, 'v0', clipId, x, cy, 1, sc)}</defs>`
-  let body = `${card}${lights}${travel}${clip}${glint.svg}`
+  let body = `${card}${lights}${travel}${clip}${glint.svg}${sparkles}`
   let still = `${cardR}${floorLit}${act.still('v1', x, cy, 1, sc)}`
   const size: Record<string, number> = { head: 45 * sc, bust: 45 * HEAD.sc }
   if (gene) {
@@ -183,7 +195,8 @@ export const saul3d = (o: EggArgs): EggOut => {
       size.line = fs
     }
   }
-  return { svg: frame(act, wideOf(W, H, stage).win, wideOf(W, H, stage).keep, body, still, gene, { scrim: 0 }), size }
+  const wt = wideTitled(W, H, stage)
+  return { svg: frame(act, wt.win, wt.keep, body, still, gene, { scrim: 0 }), size, boxes: { stage: st.rect, head: [x - 19 * sc, foot - 45 * sc, 38 * sc, 45 * sc], home: [HEAD.x - 19, HEAD.foot - 45, 38, 45] } }
 }
 
 // ---------------------------------------------------------------- namaste: the bowling ball and Howard's car

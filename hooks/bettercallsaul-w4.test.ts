@@ -7,7 +7,7 @@ import { meets, overlaps, readouts } from './stage/keep'
 import type { Rect } from './stage/keep'
 import { BUDGET, audit } from './stage/budget'
 import { BCS_CSS, bcsCheer, bcsFoot, isAdCheer } from './bettercallsaul'
-import { EGG_MS, HEAD, STEP_FLOOR, TURN, ding, namaste, rant, saul3d, turnStage } from './bettercallsaul-motion'
+import { EGG_MS, HEAD, STEP_FLOOR, TURN, TURN_POP, ding, namaste, rant, saul3d, turnStage } from './bettercallsaul-motion'
 import { chicaneryBand } from './bettercallsaul-court'
 
 const NOW = Date.parse('2026-10-20T10:00:00Z')
@@ -179,6 +179,53 @@ test('namaste: the act stands on the step row (above the bottom line), off the t
   const n450 = namaste({ W: 450, H: 134, at: NOW, gene: false, stage: titled(450) })
   expect(n450.size.car).toBeGreaterThanOrEqual(56)
 })
+test('saul3d / GENE: the head never crosses the task title: it vanishes from one place and pops up at the other, the stage off the title', () => {
+  for (const gene of [false, true]) {
+    for (const W of W5) {
+      const st = turnStage(W, 134, titled(W))
+      expect(meets(st.rect, TITLES[W] as Rect), `${W} stage on the title`).toBe(false)
+      expect(st.sc, `${W}`).toBeGreaterThanOrEqual(W >= 900 ? 1.5 : 1.4)
+      const out = saul3d({ W, H: 134, at: NOW, gene, stage: titled(W) })
+      expect(meets(out.boxes?.head as Rect, TITLES[W] as Rect), `${W} head on the title`).toBe(false)
+      // The travel's keyframes: wherever two stops put the head in different places, it is invisible at both (no glide across).
+      const kf = [...out.svg.matchAll(/@keyframes [\w-]+\{([^@]*?)\}\}/g)].map(m => m[1] as string).find(b => b.includes(`translate(${HEAD.x - st.x}px,${HEAD.foot - st.foot}px)`) && b.includes(`scale(${TURN_POP})`))
+      expect(kf, `${W}`).toBeDefined()
+      const stops = [...(kf as string).matchAll(/([\d.]+)%\{([^}]*)/g)].map(m => m[2] as string)
+      const place = (s: string): string => /translate\(([^)]*)\)/.exec(s)?.[1] ?? '0'
+      stops.slice(1).forEach((s, i) => {
+        const prev = stops[i] as string
+        if (place(s) !== place(prev)) {
+          expect(prev, `${W} ${i}`).toContain('opacity:0')
+          expect(s, `${W} ${i}`).toContain('opacity:0')
+        }
+      })
+      // The title is a hole of the act's clip: nothing of it can be drawn there.
+      const [, ...holes] = clipRects(out.svg)[0] ?? []
+      expect(holes.some(h => h[0] === 61 && h[1] === 39), `${W} title hole`).toBe(true)
+    }
+  }
+})
+test('namaste and saul3d on the real band: their keep-out clip holds the task title as a hole at every band-fit width', { timeoutMs: 120_000 }, async ($, on) => {
+  const clock = base(on)
+  await jobIn($, clock, 'better-call-saul')
+  for (const name of ['namaste', 'saul3d']) {
+    await $.command.run({ command: 'missioncontrol', args: `play ${name}` } as never)
+    await clock.advance(1_500)
+    for (const W of W5) {
+      const b = await bandOf($, W)
+      const title = /<text x="([\d.]+)" y="([\d.]+)"[^>]*font-size="([\d.]+)"[^>]*>(Sandpiper[^<]*)<\/text>/.exec(b)
+      expect(title, `${name} ${W}: the title is drawn`).not.toBeNull()
+      const [, tx, ty, fs, text] = title as RegExpExecArray
+      const tb: Rect = [Number(tx), Number(ty) - Number(fs) * 0.8, (text as string).length * Number(fs) * 0.55, Number(fs)]
+      const clips = [...b.matchAll(/<clipPath id="[^"]+"><path clip-rule="evenodd" d="(M0 34h[^"]+)"/g)].map(m => m[1] as string)
+      expect(clips.length, `${name} ${W}: the act is drawn`).toBeGreaterThanOrEqual(1)
+      for (const d of clips) expect(overlaps([tb], d), `${name} ${W}`).toEqual([])
+      if (name === 'namaste') for (const d of clips) { const m = /^M0 34h[\d.]+v([\d.]+)/.exec(d); expect(34 + Number(m?.[1]), `${W}: above the tip line`).toBeLessThanOrEqual(110) }
+    }
+    await clock.advance(6_000)
+  }
+})
+
 // --- 3. the 3D head turn on its own stage ------------------------------------------------------------------------------------
 test('saul3d: the head leaves the 45 px bust for a stage in the clear span, turns there large under the spotlight, then goes home', () => {
   for (const gene of [false, true]) {
