@@ -54,8 +54,9 @@ const windowOf = (b: string): Rect | undefined => {
 }
 const FIGHTS = [['cyberpunk-2077', 'maxtac'], ['arasaka', 'boardroom'], ['lucy-edgerunners', 'ice-duel']] as const
 // The tallest fighter's drawn height (band px) at each band-fit width: wave 2 drew them 40 (raid), 41 (stand-off) and 40 (duel)
-// px tall in a 46 px title row. Wide bands give the title row AND the crew row; narrow ones keep the title row.
-const MIN_PX: Record<number, number> = { 450: 30, 600: 40, 750: 40, 900: 56, 1250: 64 }
+// px tall in a 46 px title row, over the task title. Wide bands give a lane right of the title and its chip (the title row AND
+// the crew row); 600 and 750 a low lane under the title's row (wave 4 final); 450 none: no room clear of the title.
+const MIN_PX: Record<number, number> = { 450: 0, 600: 42, 750: 42, 900: 56, 1250: 64 }
 
 for (const [skin, play] of FIGHTS) {
   test(`cyber wide: ${play} on the real band is drawn large (a minimum fighter height at 450 to 1250) and keeps 1 k headroom`, { timeoutMs: 90_000 }, async ($, on) => {
@@ -71,9 +72,12 @@ for (const [skin, play] of FIGHTS) {
     for (const W of Object.keys(COLS).map(Number)) {
       const b = await band($, W)
       const win = windowOf(b)
+      if (!MIN_PX[W]) { expect(win, `${play} ${W}: no room clear of the title, none`).toBeUndefined(); continue }
       expect(win, `${play} ${W}: drawn`).toBeDefined()
-      const [, y, w, h] = win as Rect
+      const [x, y, w, h] = win as Rect
       expect(y).toBeGreaterThanOrEqual(33)
+      // never over the task title: a lane right of it (the title box ends by 287 at its widest), or under its row
+      expect(y >= 62 || x >= 287, `${play} ${W}: clear of the title (${x}, ${y})`).toBe(true)
       got[W] = fighterPx(play, w, h)
       expect(got[W], `${play} ${W}: fighter ${got[W]} px in ${w}x${h}`).toBeGreaterThanOrEqual(MIN_PX[W] as number)
       // the act itself (its own layer, compacted) keeps 1 k under the band cut's 32 k

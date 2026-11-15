@@ -130,7 +130,7 @@ const slateParts = (x: number, y: number, w: number, lines: [string, string]): {
   const stripes = `<path d="${Array.from({ length: 6 }, (_, i) => `M${r1(x + 4 + i * (w / 6))} ${y}h${r1(w / 12)}l-4 7h-${r1(w / 12)}z`).join('')}" fill="${C.white}"/>`
   const bar = `<rect x="${x}" y="${y}" width="${w}" height="7" fill="${C.ink}" stroke="${C.white}" stroke-width=".8"/>${stripes}`
   const board = `<rect x="${x}" y="${y + 8}" width="${w}" height="${r1(h)}" fill="${C.ink}" stroke="${C.white}" stroke-width=".8"/><line x1="${x}" y1="${r1(y + 8 + h / 2)}" x2="${x + w}" y2="${r1(y + 8 + h / 2)}" stroke="${C.white}" stroke-opacity=".5"/>`
-    + `<text x="${x + 5}" y="${r1(y + 8 + h / 2 - 4)}" font-family="${MONO}" font-size="${r1(h * 0.28)}" font-weight="700" fill="${C.white}">${esc(lines[0])}</text>`
+    + `<text x="${x + 5}" y="${r1(y + 8 + h / 2 - 4)}" font-family="${MONO}" font-size="${r1(Math.min(h * 0.28, (w - 10) / (lines[0].length * 0.6)))}" font-weight="700" fill="${C.white}">${esc(lines[0])}</text>`
     + `<text x="${x + 5}" y="${r1(y + 8 + h - 4)}" font-family="${MONO}" font-size="${r1(h * 0.24)}" font-weight="700" fill="${C.ice}">${esc(lines[1])}</text>`
   return { bar, board }
 }
@@ -168,14 +168,20 @@ export const bandLane = (H: number, stage: BandStage): { x: number; y: number; w
   const holes = allHoles(stage)
   // Tall: the title row to the floor, right of the title and the chip (a wide band). Else LOW: under the title row (y 63 down),
   // right of the step count (900 px): the same size as the title rows gave, and the title never under the fight.
-  const l = laneIn([8, 34, Math.max(0, stage.x1 - 8), H - 37], holes, LANE_MIN) ?? laneIn([8, LOW_TOP, Math.max(0, stage.x1 - 8), H - 3 - LOW_TOP], holes, LOW_MIN)
+  // Else SHORT (wave 4 final, 750): under the title row and above the tip line, right of the step count, up to the step row's
+  // crew; the fighters drawn to its height. None narrower (600 and under): the band shows no fight rather than one over the title.
+  const l = laneIn([8, 34, Math.max(0, stage.x1 - 8), H - 37], holes, LANE_MIN) ?? laneIn([8, LOW_TOP, Math.max(0, stage.x1 - 8), H - 3 - LOW_TOP], holes, LOW_MIN) ?? laneIn([8, LOW_TOP, Math.max(0, (stage.wide?.x2 ?? stage.x1) - 8), SHORT_H], holes, SHORT_MIN)
   return l ? { x: l[0], y: l[1], w: Math.min(LANE_MAX, l[2]), h: l[3] } : undefined
 }
 /** The low lane's top (under the task title's row) and the narrowest one worth it. */
 export const LOW_TOP = 63
 export const LOW_MIN = 260
+/** The short lane's height (from under the title row to just above the tip line, y 110) and the narrowest one worth a fight. */
+export const SHORT_H = 45
+export const SHORT_MIN = 200
 /** Each fight's cast scale in a region `h` tall (D and the psycho are padded to 49 rows, the HUD pair to 44). */
-export const er2Sc = (kind: Er2Kind, h: number): number => r1(Math.min(2, Math.max(1.25, (h - 6) / (kind === 'cyberpsycho' ? D_H : 44))))
+// A lane under 60 px (the short lane) draws them to its height; taller ones at least as large as the title rows did (1.25x).
+export const er2Sc = (kind: Er2Kind, h: number): number => r1(Math.min(2, h < 60 ? (h - 6) / (kind === 'cyberpsycho' ? D_H : 44) : Math.max(1.25, (h - 6) / (kind === 'cyberpsycho' ? D_H : 44))))
 /** The tallest fighter's drawn height (band px) in a region `h` tall (the old title rows draw 1.25x and 1.3x). */
 export const er2FighterPx = (kind: Er2Kind, h: number, lane: boolean): number => r1((kind === 'cyberpsycho' ? D_H : 44) * (lane ? er2Sc(kind, h) : kind === 'cyberpsycho' ? 1.25 : 1.3))
 
@@ -235,7 +241,8 @@ export const psychoAct = (o: { at: number; w: number; h: number; id: string; sc?
   // His exit: an RGB-split flicker where he glitches out.
   body += act.win(3.0, 3.06, `<path d="M${Math.round(o.w * 0.62)} ${Math.round(gy - 40)}h56v3h-56zM${Math.round(o.w * 0.64)} ${Math.round(gy - 22)}h46v2h-46z" fill="${C.hot}"/>`)
   // 0.0-0.6: the slate snaps on a sheet of torn paper; at 0.3 the sheet tears in two and the halves fly apart.
-  const sw = Math.min(96, o.w * 0.3)
+  // The slate stands whole in a short lane too (its board is half its width, under an 8 px bar).
+  const sw = Math.min(96, o.w * 0.3, (o.h - 12) * 2)
   const sx = r1(o.w / 2 - sw / 2)
   const sy = r1(Math.max(2, o.h / 2 - sw * 0.33))
   const sl = slateParts(sx, sy, sw, ['SC.85  TAKE 1', 'ACTION'])
@@ -366,7 +373,8 @@ export const hudAct = (o: { at: number; w: number; h: number; id: string; sc?: n
   const line = 'my HUD, choom.'
   const lw = r1(line.length * 7.2 + 12)
   const lx = r1(Math.min(o.w - lw - 6, mid + 78 * sc))
-  const ly = r1(o.h * 0.45)
+  // Under the mode chip (y 2-15) in a short lane too.
+  const ly = r1(Math.max(o.h * 0.45, 29))
   const cover = kf(act, `<rect x="${r1(lx + 4)}" y="${r1(ly - 11)}" width="${r1(lw - 6)}" height="15" fill="#050305"/>`, [[0, 'transform:scaleX(1)'], [2.62, 'transform:scaleX(1)'], [3.2, 'transform:scaleX(0)'], [3.9, 'transform:scaleX(0)']], { origin: `${r1(lx + lw - 2)}px 0px`, ease: 'steps(14,end)' })
   body += act.on(`<rect x="${lx}" y="${r1(ly - 12)}" width="${lw}" height="17" fill="#050305" stroke="${C.hot}"/><text x="${r1(lx + 6)}" y="${ly}" font-family="${MONO}" font-size="12" font-weight="700" fill="${C.white}">${esc(line)}</text>${cover}`, 2.6, 3.75)
   const still = `<rect width="${o.w}" height="${o.h}" fill="#050305" opacity=".9"/>${right}${seamLine}${f.still()}<text x="${lx}" y="${ly}" font-family="${MONO}" font-size="12" font-weight="700" fill="${C.white}">${esc(line)}</text>`
@@ -378,9 +386,11 @@ export const er2FightBand = (W: number, H: number, at: number, working: boolean,
   const ft = er2Fight(at, working, sec)
   if (!ft || at >= ft.startAt + ACT_MS[ft.kind]) return ''
   // Wave 4: on a wide band the fight takes the widest full-height lane right of the task title and the Tasks chip (the title
-  // row down to the floor), its cast scaled to the lane's height (about 1.5x); at 900 a low lane under the title row; else the
-  // title rows as before (a narrow band has no room clear of the title).
+  // row down to the floor), its cast scaled to the lane's height (about 1.5x); at 900 a low lane under the title row; at 750 a
+  // short lane above the tip line; narrower, none: the fight never plays over the task title (the pane's echo still plays).
+  // With no stage (a unit test), the title rows as before.
   const lane = stage ? bandLane(H, stage) : undefined
+  if (stage && !lane) return ''
   const r = lane ?? bandRegion(W, H, stage)
   const sc = lane ? er2Sc(ft.kind, lane.h) : undefined
   const a = ft.kind === 'cyberpsycho' ? psychoAct({ at: ft.startAt, w: r.w, h: r.h, id: `er2-psy-band-${W}-${r.w}x${r.h}`, ...(sc ? { sc } : {}) }) : hudAct({ at: ft.startAt, w: r.w, h: r.h, id: `er2-hud-band-${W}-${r.w}x${r.h}`, ...(sc ? { sc } : {}) })

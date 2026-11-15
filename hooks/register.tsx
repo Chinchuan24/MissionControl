@@ -6888,6 +6888,8 @@ ${egg ? EGG_CSS : th ? th.css : ''}
     x1,
     keep: [[HUD_PAD + left + titleW + 8 - 3, rowY + 9 - 3, fullPill.w + 6, 21]],
     wide: { x2: Math.round(Math.min(x1, HUD_PAD + chips.left - 6)), keep: chips.more ? [[HUD_PAD + chips.more - 3, rowY + HUD_TOP + 8 + 2, 34, 16]] : [] },
+    // The task title's box (wave 4 final): no act ever crosses it, at every width.
+    title: [HUD_PAD + left - 3, rowY + 9 - 3, Math.round(titleW + 6), 21],
   }
   return svg(
     OW,

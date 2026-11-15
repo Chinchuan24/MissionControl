@@ -23,7 +23,7 @@ import { Fight, fightLane } from './stage/choreo'
 import { Director, localOffsetMs } from './stage/director'
 import { quantise } from './stage/frames'
 import * as fx from './stage/fx'
-import { holesIn, keepClip } from './stage/keep'
+import { allHoles, holesIn, keepClip } from './stage/keep'
 import type { BandStage, Rect } from './stage/keep'
 import { registerPlay } from './stage/replay'
 import { Act, r1, r3 } from './stage/timeline'
@@ -124,9 +124,29 @@ export const fightRegion = (OW: number, stage?: BandStage): { x: number; y: numb
 }
 /** Where the wide region starts: right of the row labels (CREW, STEPS) and the boss's box. */
 export const WIDE_X = 84
-/** The holes of a stage that fall in region `r`, in the region's own coordinates. */
-export const regionHoles = (r: { x: number; y: number; w: number; h: number }, stage?: BandStage): Rect[] =>
-  holesIn([r.x, r.y, r.w, r.h], [...(stage?.keep ?? []), ...(stage?.wide?.keep ?? [])]).map(([x, y, w, h]) => [r1(x - r.x), r1(y - r.y), r1(w), r1(h)] as Rect)
+/** The holes of a stage that fall in region `r`, in the region's own coordinates (`title`: the task title's box too). */
+export const regionHoles = (r: { x: number; y: number; w: number; h: number }, stage?: BandStage, title = false): Rect[] =>
+  holesIn([r.x, r.y, r.w, r.h], stage ? (title ? allHoles(stage) : [...stage.keep, ...(stage.wide?.keep ?? [])]) : []).map(([x, y, w, h]) => [r1(x - r.x), r1(y - r.y), r1(w), r1(h)] as Rect)
+/** A low lane's top (under the task title's row: the gauge and the crew rows) and the narrowest one worth a fight. */
+export const LOW_Y = 63
+export const LOW_MIN = 180
+/**
+ * Where a band act plays on the classic band (wave 4 final): NEVER over the task title, at every width. A wide band: the widest
+ * full-height lane of the region right of the title and the Tasks chip (as wave 4 drew it, 900 and up). Else a LOW lane under
+ * the title's row (the gauge and the crew rows), from the row labels to the wide stage's edge, at least `LOW_MIN` wide (750).
+ * Else none (600 and under: the title, its chip and the gauge's percent fill the span; the pane's echo plays alone).
+ * With no stage (a unit test) the region as before.
+ */
+export const actRegion = (OW: number, stage?: BandStage): { x: number; y: number; w: number; h: number } | undefined => {
+  const r0 = fightRegion(OW, stage)
+  if (!stage) return r0
+  const holes = regionHoles(r0, stage, true)
+  const L = laneOf(r0.w, r0.h, holes)
+  // Clear of every hole; or a stage with no title box (the old rule: its holes stay holes in the clip).
+  if (!stage.title || !holes.some(([x, , w]) => x < L.a + L.w && x + w > L.a)) return { ...r0, x: r1(r0.x + L.a), w: r1(L.w) }
+  const w = Math.round(Math.min(640, (stage.wide?.x2 ?? stage.x1) - WIDE_X))
+  return w >= LOW_MIN ? { x: WIDE_X, y: LOW_Y, w, h: 34 + WIDE_H - LOW_Y } : undefined
+}
 /**
  * The act's stage inside its region: the widest full-height lane free of every hole (the Tasks chip), so no fighter is ever cut
  * by a hole; the whole region when that lane is under 200 px (a narrow band: the fighters pass behind the chip, as before).
@@ -528,14 +548,14 @@ const ACTS: Record<FightKind, (o: ActArgs) => { layer: string; act: Act; fight: 
 export const cyberFightBand = (egg: CyberEgg, OW: number, at: number, working: boolean, stage?: BandStage): string => {
   const ft = fightAt(egg, at, working)
   if (!ft || at >= ft.startAt + FIGHT_MS[ft.kind]) return ''
-  const r0 = fightRegion(OW, stage)
   // The act takes the widest lane free of the band's holes, and only that: the task's title and the Tasks chip on its left stay
-  // in plain sight (no scrim over them), the fight plays whole on their right.
-  const L = laneOf(r0.w, r0.h, regionHoles(r0, stage))
-  const r = { ...r0, x: r1(r0.x + L.a), w: r1(L.w) }
+  // in plain sight (no scrim over them), the fight plays whole on their right, or under them (actRegion); none on a band with no
+  // room clear of the title.
+  const r = actRegion(OW, stage)
+  if (!r) return ''
   const holes = regionHoles(r, stage)
-  const a = ACTS[ft.kind]({ at: ft.startAt, w: r.w, h: r.h, id: `cyf-${ft.kind}-band-${OW}-${r.w}x${r.h}-${holes.map(q => q.join(':')).join(';')}`, holes })
-  return placed(a.layer, r, `${a.act.p}rg`, [...(stage?.keep ?? []), ...(stage?.wide?.keep ?? [])])
+  const a = ACTS[ft.kind]({ at: ft.startAt, w: r.w, h: r.h, id: `cyf-${ft.kind}-band-${OW}-${r.w}x${r.h}y${r.y}-${holes.map(q => q.join(':')).join(';')}`, holes })
+  return placed(a.layer, r, `${a.act.p}rg`, stage ? allHoles(stage) : [])
 }
 
 // ---------------------------------------------------------------- SAMURAI: the "2023" gig's finale (wave 4)
@@ -598,11 +618,11 @@ export const gigFinale = (OW: number, at: number, gig: number | undefined, stage
   if (gig === undefined) return ''
   const t0 = gig + FIN_AT * 1000
   if (at < t0 - 60_000 || at >= t0 + FIN_MS) return ''
-  const r0 = fightRegion(OW, stage)
-  const L = laneOf(r0.w, r0.h, regionHoles(r0, stage))
-  const r = { ...r0, x: r1(r0.x + L.a), w: r1(L.w) }
-  const a = finaleAct({ at: t0, w: r.w, h: r.h, id: `sm-fin-${OW}-${r.w}x${r.h}` })
-  return placed(a.layer, r, `${a.act.p}rg`, [...(stage?.keep ?? []), ...(stage?.wide?.keep ?? [])])
+  // In the fights' lane, never over the task title (actRegion): none on a band with no room clear of it (the gig plays on).
+  const r = actRegion(OW, stage)
+  if (!r) return ''
+  const a = finaleAct({ at: t0, w: r.w, h: r.h, id: `sm-fin-${OW}-${r.w}x${r.h}y${r.y}` })
+  return placed(a.layer, r, `${a.act.p}rg`, stage ? allHoles(stage) : [])
 }
 
 // ---------------------------------------------------------------- the pane's light echo (in BREACH PROTOCOL's matrix)

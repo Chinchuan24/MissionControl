@@ -112,6 +112,8 @@ for (const [agents, crew] of [[4, false], [6, true]] as const) test(`samurai fin
     t = at
     for (const W of [450, 600, 750, 900, 1250]) {
       const b = await band($, W)
+      // 450: no room clear of the task title, so no finale (the gig itself plays on).
+      if (W === 450) { expect(b, `${W} at ${at}: none`).not.toContain(FIN_MARK); expect(b).toContain('NEVER FADE AWAY · 2023'); continue }
       expect(b, `${W} at ${at}: the finale is drawn (pinned to the gig)`).toContain(FIN_MARK)
       // The whole gig stays on (the band never goes "lite", which drops the gig's set): 1 k under the 120 k line.
       expect(b, `${W} at ${at}: the gig's set is still drawn`).toContain('NEVER FADE AWAY · 2023')
@@ -121,6 +123,9 @@ for (const [agents, crew] of [[4, false], [6, true]] as const) test(`samurai fin
       const d = (clip as RegExpExecArray)[(clip as RegExpExecArray).length - 1] as string
       expect(overlaps(readouts(flat(calm[W] as string)), d), `${W}`).toEqual([])
       expect(Number(/^M[-\d.]+ ([-\d.]+)/.exec(d)?.[1])).toBeGreaterThanOrEqual(33)
+      // never over the task title: a lane right of it (its box ends by 287 at its widest), or under its row
+      const [wx, wy] = [1, 2].map(i => Number(/^M([-\d.]+) ([-\d.]+)/.exec(d)?.[i]))
+      expect((wy as number) >= 62 || (wx as number) >= 287, `${W}: clear of the title (${wx}, ${wy})`).toBe(true)
     }
   }
 })

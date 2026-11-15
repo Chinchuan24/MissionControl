@@ -44,8 +44,9 @@ const MIN = {
   // the lane at 1250 is 73 px tall (was 98) and a narrow band's window is the row under the title (46 px): wave 4a's 84/65/58 stood
   // in the status row.
   boys: { 450: 45, 600: 45, 750: 45, 900: 45, 1250: 69 },
-  psycho: { 450: 61, 600: 61, 750: 61, 900: 61, 1250: 88 },
-  hud: { 450: 57, 600: 57, 750: 57, 900: 57, 1250: 87 },
+  // Wave 4 final: never over the task title: the short lane at 750 (drawn to its height), none at 600 and 450.
+  psycho: { 450: 0, 600: 0, 750: 39, 900: 61, 1250: 88 },
+  hud: { 450: 0, 600: 0, 750: 39, 900: 57, 1250: 87 },
 } as const
 
 test('wide fights: the tallest fighter of each of the eight is drawn at least its minimum at every band-fit width', () => {
@@ -62,8 +63,11 @@ test('wide fights: the tallest fighter of each of the eight is drawn at least it
     expect(omni, `omni ${W}`).toBeGreaterThanOrEqual(MIN.omni[W])
     expect(cq, `conquest ${W}`).toBeGreaterThanOrEqual(MIN.conquest[W])
     expect(boys, `boys ${W}`).toBeGreaterThanOrEqual(MIN.boys[W])
-    expect(psy, `psycho ${W}`).toBeGreaterThanOrEqual(MIN.psycho[W])
-    expect(hud, `hud ${W}`).toBeGreaterThanOrEqual(MIN.hud[W])
+    if (!MIN.psycho[W]) expect(lane, `er2 ${W}: no lane, no band fight`).toBeUndefined()
+    else {
+      expect(psy, `psycho ${W}`).toBeGreaterThanOrEqual(MIN.psycho[W])
+      expect(hud, `hud ${W}`).toBeGreaterThanOrEqual(MIN.hud[W])
+    }
   }
 })
 
@@ -82,7 +86,10 @@ test('wide fights: a lane is full height, right of the task title and the Tasks 
     const el = bandLane(132, ER2[W] as BandStage)
     if (W === 1250) expect(el?.h).toBeGreaterThanOrEqual(90)
     else if (W === 900) { expect(el?.y).toBeGreaterThanOrEqual(62); expect(el?.w).toBeGreaterThanOrEqual(260) }
+    // 750: the short lane, under the title row and above the tip line (y 110)
+    else if (W === 750) { expect(el?.y).toBeGreaterThanOrEqual(62); expect((el?.y ?? 0) + (el?.h ?? 0)).toBeLessThanOrEqual(110); expect(el?.w).toBeGreaterThanOrEqual(200) }
     else expect(el).toBeUndefined()
+    if (el) expect(meets([el.x, el.y, el.w, el.h], (ER2[W] as BandStage).title as Rect), `${W}: ER2 lane off the title`).toBe(false)
     if (el) expect(allHoles(ER2[W] as BandStage).some(hl => meets([el.x, el.y, el.w, el.h], hl)), `${W}: ER2 lane clear`).toBe(false)
     // The Boys' window: the lane at 1250 (from the header rule), else right of the bust, its cast's heads under the title row.
     const w = winOf({ W: BW[W] as number, H: 148, m: 'brand', at: 0, on: 'band', stage: ST[W] as BandStage })

@@ -114,6 +114,16 @@ const flat = (svg: string): string => {
 }
 const CYBER: [string, string][] = [['cyberpunk-2077', 'maxtac'], ['arasaka', 'boardroom'], ['lucy-edgerunners', 'ice-duel'], ['edgerunners-2', 'cyberpsycho'], ['capricorn', 'capri-vs-d']]
 const WIDE = [450, 600, 750, 900, 1250]
+// Wave 4 final: a fight never plays over the task title. Where the band has no room clear of it (the classic band at 450,
+// the slim band at 450 and 600) the band draws no fight (the pane's echo plays).
+const NO_ROOM: Record<string, number[]> = { maxtac: [450], boardroom: [450], 'ice-duel': [450], cyberpsycho: [450, 600], 'capri-vs-d': [450, 600] }
+/** The task title's box on a flattened band (a generous width: 0.62 em a glyph). */
+const titleBox = (flatSvg: string): [number, number, number, number] => {
+  const m = new RegExp(`<text[^>]* x="([-\\d.]+)" y="([-\\d.]+)"[^>]* font-size="([\\d.]+)"[^>]*>${TITLE}</text>`).exec(flatSvg)
+  expect(m, 'the task title is on the band').not.toBeNull()
+  const fs = Number((m as RegExpExecArray)[3])
+  return [Number((m as RegExpExecArray)[1]), Number((m as RegExpExecArray)[2]) - fs * 0.8, TITLE.length * fs * 0.62, fs]
+}
 for (const [skin, play] of CYBER) {
   test(`keep-out: ${play} (${skin}) on the real band at ${WIDE.join(', ')} covers no readout`, { timeoutMs: 90_000 }, async ($, on) => {
     const clock = base(on, true)
@@ -129,7 +139,10 @@ for (const [skin, play] of CYBER) {
     for (const W of WIDE) {
       const b = await band($, W)
       const clip = /<clipPath id="[\w-]+"><path clip-rule="evenodd" d="([^"]+)"/.exec(b)
+      if (NO_ROOM[play]?.includes(W)) { expect(clip, `${play} ${W}: no room clear of the title, no fight on the band`).toBeNull(); continue }
       expect(clip, `${play} ${W}: the fight is drawn through a keep-out clip`).not.toBeNull()
+      // Never over the task title, at any moment (its window and holes are the whole act's).
+      expect(overlaps([titleBox(flat(calm[W] as string))], (clip as RegExpExecArray)[1] as string), `${play} ${W}: the task title`).toEqual([])
       const boxes = readouts(flat((calm[W] as string).replace(/<!--dl-->[\s\S]*?<!--\/dl-->/g, '')))
       expect((calm[W] as string).includes('40%'), `${W}: the percent is on the band`).toBe(true)
       expect(boxes.length, `${W}: readouts found`).toBeGreaterThanOrEqual(6)
