@@ -97,17 +97,19 @@ test('chat: a skin draws tool rows with its verb and status; Default leaves them
   const row = { tool_use_id: 't1', tool: 'Read', input: { file_path: '/repo/hooks/register.tsx' }, isRunning: false, isErrored: false, isInterrupted: false }
   const ui = await $.ui.mount({ plugin: 'crab-progress', surface: 'desktop', component: 'ToolUse', props: row as never })
   const texts = (await ui.findAll({ type: 'Text' })).map(t => String((t as { text?: string }).text ?? '')).join(' ')
+  const isSkinKept = await ui.keepsBeneath()
   await ui.unmount()
   expect(texts).toContain('Scan')
   expect(texts).toContain('register.tsx')
   expect(texts).toContain('✓')
+  // The skin's row stands in for the app's.
+  expect(isSkinKept).toBe(false)
   await run($, 'off')
-  // Default draws nothing of its own: the app's row stands.
-  const passed = await $.ui.mount({ plugin: 'crab-progress', surface: 'desktop', component: 'ToolUse', props: row as never }).then(
-    () => 'drew',
-    (err: unknown) => String(err),
-  )
-  expect(passed).toMatch(/engine drew its own|no implementation for ui.render/)
+  // Default draws nothing of its own: the hook hands the row on (`next(e)`), the app's row stands.
+  const plain = await $.ui.mount({ plugin: 'crab-progress', surface: 'desktop', component: 'ToolUse', props: row as never })
+  const isKept = await plain.keepsBeneath()
+  await plain.unmount()
+  expect(isKept).toBe(true)
 })
 
 test('backdrop: a dark skin paints the whole pane behind the cards', async ($, on) => {
