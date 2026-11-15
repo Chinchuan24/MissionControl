@@ -432,7 +432,8 @@ const curtainup = (a: Act, g: Geo): string => {
   // 3.0-3.7: the follow-up slash goes low; she leaps it on a real arc and lands behind him.
   f.at(3.0).pose('n', 'nR')
   const land = r1(mid + 40 * sc)
-  f.at(3.05).throw('k', land, y, { d: 0.6, arc: 26 * sc, turns: 0, pose: 'kL' })
+  // The arc's top stays in the window (a tall lane's 1.8x cast would leap out of it).
+  f.at(3.05).throw('k', land, y, { d: 0.6, arc: Math.min(26 * sc, 30), turns: 0, pose: 'kL' })
   f.at(3.15).pose('n', 'nS')
   f.at(3.65).pose('k', 'kS', -1)
   // 3.9: her kick lands from behind: he staggers (mosaic), turns.
