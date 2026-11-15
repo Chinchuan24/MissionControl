@@ -1,19 +1,26 @@
-// The Better Call Saul skins' rare scheduled eggs. Every one is a pure function of the clock (a seeded slot, like the
-// roamer's takeover), drawn only inside its window and pinned to the wall clock with `pin()`, so an idle redraw still
-// shows it and resumes where it was. Pixel art and props only; no sound; nothing above 3 Hz; reduced motion in BCS_CSS.
+// The Better Call Saul skins' rare scheduled eggs. One director (stage/director.ts) schedules them, so two never meet and a
+// typed egg owns the band while it plays; each is a pure function of the clock, drawn only inside its window and pinned to
+// the wall clock with `pin()`, so an idle redraw still shows it and resumes where it was. Pixel art and props only; no sound;
+// nothing above 3 Hz; reduced motion in BCS_CSS. Band acts stay inside the band's clear span (stage/keep.ts).
 //
-//   car     Jimmy's beat-up yellow two-door hatchback putters across the foot of the band, ~once per 10-20 min
-//   gus     Gus walks onto the band, straightens his tie in two frames and walks out, ~once per 30-45 min (never with Mike's cameo)
-//   lalo    Lalo rises through the floorboards at the bottom edge of THE DOCKET or the LEGAL PAD, rarely
+//   car     Jimmy's beat-up yellow two-door hatchback putters across the foot of the band, about once per 10-15 min
+//   gus     Gus walks onto the band (Nacho a step behind him), straightens his tie in two frames while he stands, and walks
+//           out: about once per 30-45 min (the director's "rare"), never in the same breath as Mike's cameo
+//   lalo    Lalo rises through the floorboards at the bottom edge of THE DOCKET or the LEGAL PAD, about once per 20-40 min
 //   unplug  Chuck "unplugs": 4+ tool calls in 10 s (or 4+ running agents) dim the band and the LEGAL PAD to lantern light for 4 s
-import { BCS_CHUCK, BCS_GUS, BCS_LALO } from './cast'
+import { BCS_CHUCK, BCS_GUS, BCS_LALO, BCS_NACHO } from './cast'
 import type { Sprite } from './cast'
 import { PROPS, clamp, px, r1, sid, spW, prop } from './bettercallsaul'
 import { ROAM_WINDOW_MS, roamPlan, unit } from './roamer'
 import { pin } from './smooth'
+import { Director, MIN } from './stage/director'
+import { keepClip } from './stage/keep'
+import type { BandStage } from './stage/keep'
 
 import type { ExtraArgs } from './themes'
-import { fxLayer } from './bettercallsaul-fx'
+import { EGG_MS } from './bettercallsaul-motion'
+import { fxLayer, fxLive } from './bettercallsaul-fx'
+import type { Fx } from './bettercallsaul-fx'
 export type Surface = 'band' | 'pane'
 
 export type Slot = { on: boolean; startAt: number; endAt: number; bucket: number }
@@ -40,14 +47,46 @@ export const carSeed = (gene: boolean): string => (gene ? 'bcs-gene-car' : 'bcs-
 export const gusSeed = (gene: boolean): string => (gene ? 'bcs-gene-gus' : 'bcs-gus')
 export const laloSeed = (gene: boolean): string => (gene ? 'bcs-gene-lalo' : 'bcs-lalo')
 const mikeSeed = (gene: boolean): string => (gene ? 'bcs-gene-mike' : 'bcs-mike')
-export const carPlan = (at: number, gene: boolean): Slot => slotPlan(carSeed(gene), at, 5, 0.7, CAR_MS)
+
+/** The skin's director: Gus (rare, 30-45 min), the car (8-14 min) and Lalo (20-40 min) in priority order, each with a replay name. */
+const DIRS = new Map<boolean, Director>()
+export const bcsDirector = (gene: boolean): Director => {
+  const had = DIRS.get(gene)
+  if (had) return had
+  const d = new Director(gene ? 'bcs-gene' : 'bcs')
+    .lane('gus', { gap: 'rare', chance: 0.95 }).add('gus', { id: 'gus', ms: GUS_MS, replay: 'gus' })
+    .lane('car', { gap: [8, 14], chance: 0.8 }).add('car', { id: 'car', ms: CAR_MS, replay: 'car' })
+    .lane('lalo', { gap: [20, 40], chance: 0.7 }).add('lalo', { id: 'lalo', ms: LALO_MS, replay: 'lalo' })
+  DIRS.set(gene, d)
+  return d
+}
+const SPAN: Record<string, number> = { gus: 46 * MIN, car: 15 * MIN, lalo: 41 * MIN }
+const PAGES = new Map<string, { startAt: number; endAt: number }[]>()
+/** One lane's act around `at`: the one under way, else the next, else the last (`on` false when the lane has none near). */
+const laneSlot = (gene: boolean, lane: 'gus' | 'car' | 'lalo', at: number): Slot => {
+  const span = SPAN[lane] as number
+  // Plans come in span-long pages (each with a span either side), cached: a redraw or a test asking every few seconds is cheap.
+  const page = Math.floor(at / span)
+  const key = `${gene ? 'g' : 's'}|${lane}|${page}`
+  let list = PAGES.get(key)
+  if (!list) {
+    list = bcsDirector(gene).plan((page - 1) * span, (page + 2) * span).filter(x => x.lane === lane)
+    PAGES.set(key, list)
+    if (PAGES.size > 96) PAGES.delete(PAGES.keys().next().value as string)
+  }
+  const cur = list.find(x => x.startAt <= at && at < x.endAt) ?? list.find(x => x.startAt > at) ?? list[list.length - 1]
+  return cur ? { on: true, startAt: cur.startAt, endAt: cur.endAt, bucket: Math.floor(cur.startAt / 1000) } : { on: false, startAt: 0, endAt: 0, bucket: -1 }
+}
+/** A replayed act as a slot from `at`. */
+const replaySlot = (at: number, ms: number): Slot => ({ on: true, startAt: at, endAt: at + ms, bucket: Math.floor(at / 1000) })
+export const carPlan = (at: number, gene: boolean): Slot => laneSlot(gene, 'car', at)
 export const lalooPlan = (at: number, gene: boolean): Slot & { card: 'task' | 'log' } => {
-  const p = slotPlan(laloSeed(gene), at, 15, 0.6, LALO_MS)
+  const p = laneSlot(gene, 'lalo', at)
   return { ...p, card: unit(`${laloSeed(gene)}|card|${p.bucket}`) < 0.5 ? 'task' : 'log' }
 }
 /** Gus never comes in the same breath as Mike's cameo: a plan whose window meets a takeover of Mike's is off. */
 export const gusPlan = (at: number, gene: boolean): Slot => {
-  const p = slotPlan(gusSeed(gene), at, 20, 0.95, GUS_MS)
+  const p = laneSlot(gene, 'gus', at)
   if (!p.on) return p
   for (let b = Math.floor((p.startAt - 3_000) / ROAM_WINDOW_MS); b <= Math.floor((p.endAt + 3_000) / ROAM_WINDOW_MS); b++) {
     if (roamPlan(mikeSeed(gene), b * ROAM_WINDOW_MS, { chance: 0, takeoverEveryMin: 30 }).kind === 'takeover') return { ...p, on: false }
@@ -63,12 +102,20 @@ const CAR: Sprite = {
   rows: ['................', '....yyyyyyy.....', '...ywwwywwwy....', '..yywwwywwwyy...', '.yyyyyyyyyyyyy..', 'yyyyyyyyyyyyyyyd', 'dyyyyyydyyyyyyyd', '.kkk.dddddd.kkk.'],
   pal: { y: PROPS.car, w: '#33414F', d: PROPS.carDark, k: '#15161A' },
 }
-export const car = (W: number, H: number, p: Slot, gene: boolean): string => {
+/** The band act's window: under the header rule, left of the readouts, minus the readouts inside (stage/keep.ts). */
+const keepOf = (W: number, H: number, stage: BandStage | undefined, id: string): { defs: string; open: string } => {
+  const x1 = Math.round(Math.max(140, Math.min(W - 14, stage?.x1 ?? W * 0.6)))
+  return { defs: `<defs>${keepClip(id, [0, 34, x1, H - 34], stage?.keep ?? [])}</defs>`, open: `<g clip-path="url(#${id})">` }
+}
+export const car = (W: number, H: number, p: Slot, gene: boolean, stage?: BandStage): string => {
   const s = 1.3
-  return `<g transform="translate(0 ${r1(H - 9.5 - 0)})" pointer-events="none"><g class="bcs-go" style="--a:-30px;--b:${W + 30}px;animation-duration:${CAR_MS / 1000}s;animation-delay:calc(${pin(p.startAt)} + 0s)"><g class="bcs-putt">${px(CAR, 0, -8 * s + 8, s, { grey: gene })}</g></g></g>`
+  const k = keepOf(W, H, stage, sid('bcscark', W, H, p.bucket))
+  return `${k.defs}${k.open}<g transform="translate(0 ${r1(H - 9.5 - 0)})" pointer-events="none"><g class="bcs-go" style="--a:-30px;--b:${W + 30}px;animation-duration:${CAR_MS / 1000}s;animation-timing-function:cubic-bezier(.35,.1,.65,.9);animation-delay:calc(${pin(p.startAt)} + 0s)"><g class="bcs-putt">${px(CAR, 0, -8 * s + 8, s, { grey: gene })}</g></g></g></g>`
 }
 
-// --- Gus: walks in, straightens his tie (two frames), walks out. His tie is the dark column on his chest; frame two shifts it a pixel.
+// --- Gus: walks in (eased, a step bob), stands and straightens his tie in two frames, walks out. Nacho walks a step behind him.
+// His tie is the dark column on his chest; frame two shifts it a pixel. The tie frames run only while he stands (2.45 cycles from
+// 4.6 s, ending on frame one), the bob only while he walks.
 const tieShifted = (rows: string[]): string[] =>
   rows.map((row, i) => {
     if (i < 10 || i > 18) return row
@@ -79,16 +126,22 @@ const tieShifted = (rows: string[]): string[] =>
     at.forEach(j => { if (j + 1 <= 9) a[j + 1] = 'd' })
     return a.join('')
   })
-export const gus = (W: number, H: number, at: number, p: Slot, gene: boolean): string => {
+export const GUS = { walkIn: 4, tieFrom: 4.6, tieCycles: 2.45, walkOut: 8.6 } as const
+export const gus = (W: number, H: number, p: Slot, gene: boolean, stage?: BandStage): string => {
   const s = 1.7
   const w = spW(BCS_GUS) * s
   const h = BCS_GUS.rows.length * s
-  const stand = Math.round(W * (0.3 + 0.35 * unit(`gusx|${p.bucket}`)))
-  const d0 = `calc(${pin(p.startAt)} + 0s)`
-  const d1 = `calc(${pin(p.startAt)} + 8.6s)`
-  const frames = `<g class="bcs-tie1">${px(BCS_GUS, -w / 2, -h, s, { grey: gene })}</g><g class="bcs-tie2">${px(BCS_GUS, -w / 2, -h, s, { grey: gene, rowsOverride: tieShifted(BCS_GUS.rows) })}</g>`
-  void at
-  return `<g transform="translate(${stand} ${H - 5})" pointer-events="none"><g class="bcs-go" style="--a:${-(stand + 60)}px;--b:0px;animation-duration:4s;animation-delay:${d0}"><g class="bcs-go" style="--a:0px;--b:${W - stand + 60}px;animation-duration:4s;animation-delay:${d1}"><ellipse cx="0" cy="0" rx="${r1(w * 0.55)}" ry="2" fill="#000" opacity=".35"/><g class="bcs-walk">${frames}</g></g></g></g>`
+  const x1 = Math.round(Math.max(140, Math.min(W - 14, stage?.x1 ?? W * 0.6)))
+  const stand = Math.round(x1 * (0.35 + 0.4 * unit(`gusx|${p.bucket}`)))
+  const P = pin(p.startAt)
+  const tie = `animation-iteration-count:${GUS.tieCycles};animation-fill-mode:both;animation-delay:calc(${P} + ${GUS.tieFrom}s)`
+  const frames = `<g class="bcs-tie1" style="${tie}">${px(BCS_GUS, -w / 2, -h, s, { grey: gene })}</g><g class="bcs-tie2" style="${tie}">${px(BCS_GUS, -w / 2, -h, s, { grey: gene, rowsOverride: tieShifted(BCS_GUS.rows) })}</g>`
+  const nw = spW(BCS_NACHO) * s
+  const nacho = `<g transform="translate(-30 0)"><ellipse cx="0" cy="0" rx="${r1(nw * 0.5)}" ry="2" fill="#000" opacity=".3"/>${px(BCS_NACHO, -nw / 2, -BCS_NACHO.rows.length * s, s, { grey: gene })}</g>`
+  const bob = (n: number, from: number, inner: string): string => `<g class="bcs-walk" style="animation-iteration-count:${n};animation-fill-mode:both;animation-delay:calc(${P} + ${from}s)">${inner}</g>`
+  const body = `${nacho}<ellipse cx="0" cy="0" rx="${r1(w * 0.55)}" ry="2" fill="#000" opacity=".35"/>${frames}`
+  const k = keepOf(W, H, stage, sid('bcsgusk', W, H, p.bucket))
+  return `${k.defs}${k.open}<g transform="translate(${stand} ${H - 5})" pointer-events="none"><g class="bcs-go" style="--a:${-(stand + 70)}px;--b:0px;animation-duration:${GUS.walkIn}s;animation-timing-function:cubic-bezier(.3,.55,.4,1);animation-delay:calc(${P} + 0s)"><g class="bcs-go" style="--a:0px;--b:${x1 - stand + 70}px;animation-duration:4s;animation-timing-function:cubic-bezier(.55,0,.75,.45);animation-delay:calc(${P} + ${GUS.walkOut}s)">${bob(6, 0, bob(6, GUS.walkOut, body))}</g></g></g></g>`
 }
 
 // --- Lalo rises through the floorboards at a card's bottom edge: head and shoulders, then sinks back.
@@ -117,24 +170,34 @@ export const unplug = (W: number, H: number, unplugAt: number, gene: boolean, su
   const top = H - h + 2
   const lamp = prop('lamp', gene)
   const bl = `<path d="M${r1(x - w * 0.62)} ${r1(top + h * 0.5)}L${r1(x - w * 0.2)} ${r1(top + h * 0.34)}L${r1(x + w * 0.2)} ${r1(top + h * 0.34)}L${r1(x + w * 0.62)} ${r1(top + h * 0.5)}L${r1(x + w * 0.7)} ${H}L${r1(x - w * 0.7)} ${H}Z" fill="${blanket}" opacity=".92"/><path d="M${r1(x - w * 0.3)} ${r1(top + h * 0.56)}l3 6l3 -5l3 7M${r1(x + w * 0.1)} ${r1(top + h * 0.58)}l3 7l3 -6l3 6" stroke="#8D949C" stroke-width="1" fill="none"/>`
-  return `<g pointer-events="none"><g class="bcs-dim" style="${dly}"><rect width="${W}" height="${H}" fill="#120A03" opacity=".5"/><rect class="bcs-lamp" width="${W}" height="${H}" fill="${lamp}" opacity=".16"/></g><defs><clipPath id="${id}"><rect x="${r1(x - w)}" y="${r1(H - h - 2)}" width="${r1(w * 2)}" height="${r1(h + 2)}"/></clipPath></defs><g clip-path="url(#${id})"><g class="bcs-up" style="--d:${UNPLUG_MS / 1000}s;${dly}">${px(BCS_CHUCK, x - w / 2, top, s, { grey: gene, rows })}${bl}</g></g></g>`
+  return `<g pointer-events="none"><g class="bcs-dim" style="${dly}"><rect width="${W}" height="${H}" fill="#120A03" opacity=".5"/><g opacity=".16"><rect class="bcs-lamp" width="${W}" height="${H}" fill="${lamp}"/></g></g><defs><clipPath id="${id}"><rect x="${r1(x - w)}" y="${r1(H - h - 2)}" width="${r1(w * 2)}" height="${r1(h + 2)}"/></clipPath></defs><g clip-path="url(#${id})"><g class="bcs-up" style="--d:${UNPLUG_MS / 1000}s;${dly}">${px(BCS_CHUCK, x - w / 2, top, s, { grey: gene, rows })}${bl}</g></g></g>`
 }
 
-/** The theme's extras for a panel: the car and Gus on the band; Lalo on THE DOCKET or the LEGAL PAD; Chuck's dim on the band and the LEGAL PAD. */
+/** The theme's extras for a panel: a typed egg's act, else the car and Gus on the band; Lalo on THE DOCKET or the LEGAL PAD;
+ *  Chuck's dim on the band and the LEGAL PAD. A typed egg (or a replay) owns the band while it plays: one act at a time. */
 export const bcsExtras = (gene: boolean) => (o: ExtraArgs): string => {
   if (o.party) return ''
   const out: string[] = []
+  const typed = o.fx && fxLive(o.fx as Fx, o.at) ? (o.fx as Fx) : undefined
   if (o.surface === 'band') {
-    const c = carPlan(o.at, gene)
-    if (live(c, o.at)) out.push(car(o.W, o.H, c, gene))
-    const g = gusPlan(o.at, gene)
-    if (live(g, o.at)) out.push(gus(o.W, o.H, o.at, g, gene))
-    if (o.fx) out.push(fxLayer(o.W, o.H, { kind: o.fx.kind as never, at: o.fx.at }, o.at, gene))
+    if (typed && Object.hasOwn(EGG_MS, typed.kind)) out.push(fxLayer(o.W, o.H, typed, o.at, gene, o.stage))
+    else if (typed?.kind === 'car') out.push(car(o.W, o.H, replaySlot(typed.at, CAR_MS), gene, o.stage))
+    else if (typed?.kind === 'gus') out.push(gus(o.W, o.H, replaySlot(typed.at, GUS_MS), gene, o.stage))
+    else if (!typed) {
+      const c = carPlan(o.at, gene)
+      if (live(c, o.at)) out.push(car(o.W, o.H, c, gene, o.stage))
+      const g = gusPlan(o.at, gene)
+      if (live(g, o.at)) out.push(gus(o.W, o.H, g, gene, o.stage))
+    }
+  } else if (typed?.kind === 'lalo') {
+    const r = replaySlot(typed.at, LALO_MS)
+    if (o.card === (unit(`${laloSeed(gene)}|card|${r.bucket}`) < 0.5 ? 'task' : 'log')) out.push(lalo(o.W, o.H, r, gene))
   } else {
     const l = lalooPlan(o.at, gene)
     if (live(l, o.at) && o.card === l.card) out.push(lalo(o.W, o.H, l, gene))
   }
   if (o.unplugAt !== undefined && o.at >= o.unplugAt - 1000 && o.at < o.unplugAt + UNPLUG_MS && (o.surface === 'band' || o.card === 'log')) out.push(unplug(o.W, o.H, o.unplugAt, gene, o.surface))
   void clamp
+  void PROPS
   return out.join('')
 }

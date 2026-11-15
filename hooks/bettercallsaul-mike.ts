@@ -30,6 +30,11 @@ export const mikeWalk = (s: number, dir: 1 | -1, gene: boolean): string => {
   const h = BCS_MIKE.rows.length * s
   return `<g pointer-events="none"><ellipse cx="0" cy="0" rx="${r1(w * 0.55)}" ry="${r1(s * 1.2)}" fill="#000" opacity=".35"/><g class="bcs-walk">${px(BCS_MIKE, -w / 2, -h, s, { grey: gene, flip: dir < 0 })}</g></g>`
 }
+/** Is this drawing for the band (the roamer passes its timing, with the surface, after the pose arguments)? */
+const bandOf = (rest: unknown[]): boolean => (rest[1] as { surface?: string } | undefined)?.surface === 'band'
+/** His band walk: on the strip-mall roof ledge (the roamer puts the feet at H - 5; the ledge is 2.5 px higher), 25 px tall, 38% opaque. */
+export const MIKE_LEDGE = { s: 0.56, op: 0.38, lift: 2.5 } as const
+export const mikeLedge = (dir: 1 | -1, gene: boolean): string => `<g transform="translate(0 ${-MIKE_LEDGE.lift})" opacity="${MIKE_LEDGE.op}">${mikeWalk(MIKE_LEDGE.s, dir, gene)}</g>`
 /** The lawn-chair sit (his feet on the floor at floorY), centred on x. */
 export const mikeSit = (x: number, floorY: number, s: number, dir: 1 | -1, gene: boolean): string => {
   const w = spW(BCS_MIKE_CHAIR) * s
@@ -93,8 +98,10 @@ export const mikeRoamer = (gene: boolean): ThemeRoamer => ({
   peek: (x, y, plan, tm) => mikePeek(x, y, plan, tm, gene),
   spots: mikePaneSpots,
   bandSpots: mikeBandSpots,
-  walk: (s, dir) => mikeWalk(s, dir, gene),
-  sit: (x, floorY, s, dir) => mikeSit(x, floorY, s, dir, gene),
+  // On the band he keeps off the text: a small figure on the roof ledge under 40% opacity, and no lawn chair (the band has no
+  // free floor for one; his band peek stays at the bottom-right corner). On the pane he walks and sits as before.
+  walk: (s, dir, ...rest: unknown[]) => (bandOf(rest) ? mikeLedge(dir, gene) : mikeWalk(s, dir, gene)),
+  sit: (x, floorY, s, dir, ...rest: unknown[]) => (bandOf(rest) ? '' : mikeSit(x, floorY, s, dir, gene)),
   creep: (W, H, ctxPct, card) => (card === 'task' ? hectorCreep(W, H, ctxPct, gene) : ''),
   cardOf: kind => (kind === 'peek' ? 'log' : kind === 'sit' ? 'task' : 'cred'),
   sitBar: false,
