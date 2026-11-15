@@ -52,7 +52,7 @@ import { LIVE_N, glide, isNewReading, isSame, liveText, liveWidth, pin, sentLeng
 import { COLOR_RE, FONT_BAD_RE, ID_RE, TOOL_KEY_RE, contrast, skinCheck, skinNew } from './skinkit'
 import { WARM_PROMPT, WARM_TAG, isWarmDue, isWarmed, warmCall, warmLimitHit } from './warm'
 import type { BandStage } from './stage/keep'
-import { FIGHT_LEVELS, cleanFightLevel, fightLevel, setFightLevel, setJobStart } from './stage/director'
+import { FIGHT_LEVELS, cleanFightLevel, fightLevel, setFightLevel, setJobStart, setSwitchHold } from './stage/director'
 import type { FightLevel } from './stage/director'
 import { switchFlavour } from './switch-flavours'
 import { BLANK_PICK, BLANK_SPEND, SPEND_KINDS, TODAY_PERIOD, exportSpend, isRescanDue, loadSpend, logSpendDay, monthLabel, monthOf, cleanDays, combineDays, monthsWithData, parseSpendArgs, pickSpendKind, pickSpendMonth, readSpend, setSpendPeriod, shiftMonth, spendCard, typeSpendDay } from './spend'
@@ -2217,6 +2217,8 @@ async function noteSwitch($: EngineInterface, from: Skin): Promise<void> {
   if (from.id === SKIN.id && from.cast === SKIN.cast) return
   const at = await $.clock.now().catch(() => Date.now())
   SKIN_SWAP = { at, from: switchLookOf(from), to: switchLookOf(SKIN), id: SKIN.id }
+  // The wipe's time is the switch's own: no fight starts in it, none is under way through it (stage/director.ts).
+  setSwitchHold(at - 1000, SWITCH_MS + 1600)
   await update($, bandTick, () => at)
   await update($, paneTick, () => at)
 }
